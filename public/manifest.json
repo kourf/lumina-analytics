@@ -1,0 +1,21 @@
+{
+  "name": "Lumina Analytics",
+  "short_name": "Lumina",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#13131A",
+  "theme_color": "#13131A",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml"
+    },
+    {
+      "src": "/vite.svg",
+      "sizes": "512x512",
+      "type": "image/svg+xml"
+    }
+  ]
+}

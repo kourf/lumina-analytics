@@ -1,0 +1,100 @@
+100:           <div className="absolute top-0 right-0 w-32 h-32 bg-[#FE2C55]/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#FE2C55]/20 transition-all duration-500"></div>
+101:           
+102:           <div className="flex items-center gap-3 mb-6 relative z-10">
+103:             <div className="w-10 h-10 rounded-xl bg-[#FE2C55]/10 flex items-center justify-center border border-[#FE2C55]/20">
+104:               <Users className="text-[#FE2C55] w-5 h-5" />
+105:             </div>
+106:             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Audience</h3>
+107:           </div>
+108: 
+109:           <div className="flex flex-col gap-4 relative z-10">
+110:             <div className="flex justify-between items-center bg-slate-50 dark:bg-black/30 p-4 rounded-xl border border-slate-100 dark:border-white/5">
+111:               <div className="flex items-center gap-3">
+112:                 <TrendingUp className="text-[#FE2C55] w-4 h-4" />
+113:                 <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Pic d'Audience</span>
+114:               </div>
+115:               <span className="text-xl font-bold text-slate-900 dark:text-white font-mono">{formatNumber(peakViewers)}</span>
+116:             </div>
+117:             
+118:             <div className="flex justify-between items-center bg-slate-50 dark:bg-black/30 p-4 rounded-xl border border-slate-100 dark:border-white/5">
+119:               <div className="flex items-center gap-3">
+120:                 <Activity className="text-[#FE2C55] w-4 h-4" />
+121:                 <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Viewers Moyens</span>
+122:               </div>
+123:               <span className="text-xl font-bold text-slate-900 dark:text-white font-mono">{formatNumber(avgViewers)}</span>
+124:             </div>
+125: 
+126:             <div className="flex justify-between items-center bg-slate-50 dark:bg-black/30 p-4 rounded-xl border border-slate-100 dark:border-white/5">
+127:               <div className="flex items-center gap-3">
+128:                 <Clock className="text-[#FE2C55] w-4 h-4" />
+129:                 <span className="text-sm font-semibold text-slate-700 dark:text-gray-300">Watch Time</span>
+130:               </div>
+131:               <LiveDurationClock startedAt={liveData.started_at} />
+132:             </div>
+133:           </div>
+134:         </div>
+135: 
+136:       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+137:         <div className="bg-white dark:bg-[#111827]/80 backdrop-blur-xl border border-slate-200 dark:border-[#25F4EE]/20 rounded-[24px] p-6 relative overflow-hidden group shadow-sm dark:shadow-[0_8px_30px_rgba(37,244,238,0.05)] flex flex-col justify-center">
+138:           <div className="absolute top-0 right-0 w-32 h-32 bg-[#25F4EE]/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#25F4EE]/20 transition-all duration-500"></div>
+139:           
+140:           <div className="flex items-center gap-3 mb-6 relative z-10">
+141:             <div className="w-10 h-10 rounded-xl bg-[#25F4EE]/10 flex items-center justify-center border border-[#25F4EE]/20">
+142:               <Flame className="text-teal-600 dark:text-[#25F4EE] w-5 h-5" />
+143:             </div>
+144:             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Engagement</h3>
+145:           </div>
+146:             </div>
+147:             <div className="flex items-end gap-2">
+148:               <span className="text-3xl font-bold text-slate-900 dark:text-white font-mono">{formatNumber(peakViewers)}</span>
+149:             </div>
+150:           </div>
+151:         </div>
+152:       </div>
+153: 
+154:       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 flex-1 min-h-0">
+155:         <div className="bg-white dark:bg-[#111827]/80 backdrop-blur-xl border border-slate-200 dark:border-[#25F4EE]/20 rounded-[24px] p-6 relative overflow-hidden group shadow-sm dark:shadow-[0_8px_30px_rgba(37,244,238,0.05)] flex flex-col justify-center">
+156:           <div className="absolute top-0 right-0 w-32 h-32 bg-[#25F4EE]/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#25F4EE]/20 transition-all duration-500"></div>
+157:           
+158:           <div className="flex items-center gap-3 mb-6 relative z-10">
+159:             <div className="w-10 h-10 rounded-xl bg-[#25F4EE]/10 flex items-center justify-center border border-[#25F4EE]/20">
+160:               <Flame className="text-teal-600 dark:text-[#25F4EE] w-5 h-5" />
+161:             </div>
+162:             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Engagement</h3>
+163:           </div>
+164: 
+165:           <div className="grid grid-cols-2 gap-4 relative z-10">
+166:             <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-xl border border-slate-100 dark:border-white/5 flex flex-col justify-center items-center text-center">
+167:               <Heart className="text-teal-600 dark:text-[#25F4EE] w-5 h-5 mb-2" />
+168:               <span className="text-2xl font-bold text-slate-900 dark:text-white font-mono">{formatNumber(likes)}</span>
+169:               <span className="text-xs font-medium text-slate-500 dark:text-gray-400 uppercase tracking-wider mt-1">Likes</span>
+170:             </div>
+171:             <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-xl border border-slate-100 dark:border-white/5 flex flex-col justify-center items-center text-center">
+172:               <UserPlus className="text-teal-600 dark:text-[#25F4EE] w-5 h-5 mb-2" />
+173:               <span className="text-2xl font-bold text-slate-900 dark:text-white font-mono">+{formatNumber(followers)}</span>
+174:               <span className="text-xs font-medium text-slate-500 dark:text-gray-400 uppercase tracking-wider mt-1">Abonnés</span>
+175:             </div>
+176:             <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-xl border border-slate-100 dark:border-white/5 flex flex-col justify-center items-center text-center">
+177:               <Share2 className="text-teal-600 dark:text-[#25F4EE] w-5 h-5 mb-2" />
+178:               <span className="text-2xl font-bold text-slate-900 dark:text-white font-mono">{formatNumber(shares)}</span>
+179:               <span className="text-xs font-medium text-slate-500 dark:text-gray-400 uppercase tracking-wider mt-1">Partages</span>
+180:             </div>
+181:             <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-xl border border-slate-100 dark:border-white/5 flex flex-col justify-center items-center text-center">
+182:               <MessageSquare className="text-teal-600 dark:text-[#25F4EE] w-5 h-5 mb-2" />
+183:               <span className="text-2xl font-bold text-slate-900 dark:text-white font-mono">{formatNumber(comments)}</span>
+184:               <span className="text-xs font-medium text-slate-500 dark:text-gray-400 uppercase tracking-wider mt-1">Commentaires</span>
+185:             </div>
+186:           </div>
+187:         </div>
+188: 
+189:         <div className="bg-white dark:bg-[#111827]/80 backdrop-blur-xl border border-slate-200 dark:border-purple-500/20 rounded-[24px] p-6 relative overflow-hidden group shadow-sm dark:shadow-[0_8px_30px_rgba(168,85,247,0.05)] flex flex-col">
+190:           <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500/10 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-purple-500/20 transition-all duration-500"></div>
+191:           
+192:           <div className="flex items-center gap-3 mb-6 relative z-10">
+193:             <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+194:               <Sparkles className="text-purple-600 dark:text-purple-400 w-5 h-5" />
+195:             </div>
+196:             <h3 className="text-lg font-bold text-slate-900 dark:text-white">Analyse du Tchat (IA)</h3>
+197:           </div>
+198: 
+199:           <div className="flex flex-col gap-4 relative z-10 flex-1">

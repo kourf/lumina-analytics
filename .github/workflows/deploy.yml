@@ -1,0 +1,93 @@
+name: CI/CD Pipeline - Lumina Analytics
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+env:
+  PROJECT_ID: lumina-analytics-kd-2026
+  REGION: europe-west1
+  REPOSITORY: lumina-analytics
+  SERVICE: live-metrics-runner
+
+jobs:
+  lint-and-test:
+    name: Lint & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Frontend Dependencies
+        run: npm ci || npm install
+
+      - name: Build Web App
+        run: npm run build
+
+      - name: Syntax Check Functions
+        run: |
+          cd functions
+          npm ci || npm install
+          node -c index.js
+          node -c secrets.js
+          node -c tiktokLiveWebhook.js
+          node -c youtubeLivePush.js
+
+      - name: Syntax Check Worker
+        run: |
+          cd worker
+          npm ci || npm install
+          node -c index.js
+
+  deploy:
+    name: Deploy to GCP & Firebase
+    needs: lint-and-test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Configure Docker for GCP
+        run: gcloud auth configure-docker --quiet
+
+      - name: Build & Push Cloud Run Worker Image
+        run: |
+          IMAGE_TAG="gcr.io/$PROJECT_ID/$REPOSITORY/worker:$GITHUB_SHA"
+          docker build -t $IMAGE_TAG ./worker
+          docker push $IMAGE_TAG
+        env:
+          PROJECT_ID: lumina-analytics-kd-2026
+          REPOSITORY: lumina-analytics
+
+      - name: Deploy to Cloud Run
+        run: |
+          IMAGE_TAG=gcr.io/$PROJECT_ID/$REPOSITORY/worker:$GITHUB_SHA
+          gcloud run deploy live-metrics-runner \
+            --image $IMAGE_TAG \
+            --region europe-west1 \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars PROJECT_ID=$PROJECT_ID \
+            --set-secrets YOUTUBE_API_KEY=YOUTUBE_API_KEY:latest,TIKTOK_CLIENT_KEY=TIKTOK_CLIENT_KEY:latest,TIKTOK_CLIENT_SECRET=TIKTOK_CLIENT_SECRET:latest
+        env:
+          PROJECT_ID: lumina-analytics-kd-2026
+          REPOSITORY: lumina-analytics
