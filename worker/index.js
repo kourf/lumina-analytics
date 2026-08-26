@@ -6,10 +6,12 @@ const cors = require('cors');
 const Redis = require('ioredis');
 
 // Initialisation de Firebase Admin
-admin.initializeApp();
+if (!admin.apps.length) {
+    admin.initializeApp();
+}
 const db = getFirestore();
 
-// Initialisation optionnelle de Redis (si REDIS_HOST est configuré)
+// Initialisation optionnelle de Redis (avec gestion gracieuse du mode dégradé)
 let redis = null;
 if (process.env.REDIS_HOST) {
     try {
@@ -18,9 +20,24 @@ if (process.env.REDIS_HOST) {
             port: process.env.REDIS_PORT ? parseInt(process.env.REDIS_PORT) : 6379,
             password: process.env.REDIS_PASSWORD || undefined,
             connectTimeout: 5000,
-            lazyConnect: true
+            lazyConnect: true,
+            maxRetriesPerRequest: 3,
+            retryStrategy(times) {
+                if (times > 5) {
+                    console.warn('[Redis] Max retries reached. Operating in fallback memory mode.');
+                    return null; // Stop retrying
+                }
+                return Math.min(times * 200, 2000);
+            }
         });
-        redis.connect().then(() => console.log('Connecté au cache Memorystore Redis')).catch(err => console.warn('Redis Memorystore non disponible:', err.message));
+
+        redis.on('error', (err) => {
+            console.warn('[Redis Error] Connection failure, operating without cache:', err.message);
+        });
+
+        redis.connect()
+            .then(() => console.log('Connecté au cache Memorystore Redis'))
+            .catch(err => console.warn('Redis Memorystore non disponible:', err.message));
     } catch (e) {
         console.warn('Initialisation Redis échouée:', e.message);
     }
@@ -33,6 +50,8 @@ app.use(express.json());
 let currentConnection = null;
 let isConnected = false;
 let sessionRef = null;
+let reconnectAttempts = 0;
+const MAX_RECONNECT_ATTEMPTS = 5;
 
 // Compteurs et statistiques en mémoire
 let viewersCount = 0;
@@ -59,23 +78,31 @@ const TIKTOK_USERNAME = process.env.TIKTOK_USERNAME || 'karam.drame';
 
 // Fonction basique de similarité de Jaccard (pour clustering IA)
 const getJaccardSimilarity = (str1, str2) => {
-    const set1 = new Set(str1.toLowerCase().split(' '));
-    const set2 = new Set(str2.toLowerCase().split(' '));
+    if (!str1 || !str2) return 0;
+    const set1 = new Set(str1.toLowerCase().split(/\s+/));
+    const set2 = new Set(str2.toLowerCase().split(/\s+/));
     const intersection = new Set([...set1].filter(x => set2.has(x)));
     const union = new Set([...set1, ...set2]);
-    return intersection.size / union.size;
+    return union.size === 0 ? 0 : intersection.size / union.size;
 };
 
 const startLiveTracker = async () => {
     if (isConnected) return { status: 'already_connected' };
 
-    console.log(`Tentative de connexion au Live de @${TIKTOK_USERNAME}...`);
+    console.log(`Tentative de connexion au Live de @${TIKTOK_USERNAME}... (Essai ${reconnectAttempts + 1})`);
 
-    currentConnection = new WebcastPushConnection(TIKTOK_USERNAME);
+    currentConnection = new WebcastPushConnection(TIKTOK_USERNAME, {
+        processInitialData: true,
+        enableExtendedGiftInfo: true,
+        requestOptions: {
+            timeout: 10000
+        }
+    });
 
     try {
         const state = await currentConnection.connect();
         isConnected = true;
+        reconnectAttempts = 0;
         console.log(`Connecté avec succès à Room ID: ${state.roomId}`);
         
         liveStartTime = new Date();
@@ -128,40 +155,40 @@ const startLiveTracker = async () => {
 
         // VIEWERS
         currentConnection.on('roomUser', (data) => {
-            viewersCount = data.viewerCount;
+            viewersCount = data?.viewerCount || 0;
             if (viewersCount > peakViewers) peakViewers = viewersCount;
         });
 
         // LIKES
         currentConnection.on('like', (data) => {
-            totalLikes += data.likeCount;
+            totalLikes += data?.likeCount || 0;
         });
 
         // PARTAGES & ABONNEMENTS
         currentConnection.on('social', (data) => {
-            // Un événement social peut être un follow ou un share
-            if (data.displayType === 'pm_mt_guidance_share') {
+            if (data?.displayType === 'pm_mt_guidance_share') {
                 totalShares++;
-            } else if (data.displayType === 'pm_main_follow_message_viewer_2') {
+            } else if (data?.displayType === 'pm_main_follow_message_viewer_2') {
                 newFollowers++;
             }
         });
 
         // CADEAUX (Gifts)
         currentConnection.on('gift', (data) => {
-            if (data.giftType === 1 && !data.repeatEnd) {
-                // Streak gift in progress, ignore until it ends
+            if (data?.giftType === 1 && !data?.repeatEnd) {
                 return;
             }
-            const diamonds = data.diamondCount * data.repeatCount;
+            const diamonds = (data?.diamondCount || 0) * (data?.repeatCount || 1);
             totalDiamonds += diamonds;
 
-            const uid = data.userId;
-            if (!userGiftsTotal[uid]) userGiftsTotal[uid] = { nickname: data.nickname, diamonds: 0 };
-            userGiftsTotal[uid].diamonds += diamonds;
+            const uid = data?.userId;
+            if (uid) {
+                if (!userGiftsTotal[uid]) userGiftsTotal[uid] = { nickname: data.nickname || 'Anonyme', diamonds: 0 };
+                userGiftsTotal[uid].diamonds += diamonds;
 
-            if (userGiftsTotal[uid].diamonds > topDonator.diamonds) {
-                topDonator = { nickname: data.nickname, diamonds: userGiftsTotal[uid].diamonds };
+                if (userGiftsTotal[uid].diamonds > topDonator.diamonds) {
+                    topDonator = { nickname: data.nickname || 'Anonyme', diamonds: userGiftsTotal[uid].diamonds };
+                }
             }
         });
 
@@ -169,17 +196,17 @@ const startLiveTracker = async () => {
         currentConnection.on('chat', async (data) => {
             totalComments++;
             
-            // Top Contributor logic
-            const uid = data.userId;
-            if (!userMessagesCount[uid]) userMessagesCount[uid] = { nickname: data.nickname, count: 0 };
-            userMessagesCount[uid].count++;
-            
-            if (userMessagesCount[uid].count > topContributor.count) {
-                topContributor = { nickname: data.nickname, count: userMessagesCount[uid].count };
+            const uid = data?.userId;
+            if (uid) {
+                if (!userMessagesCount[uid]) userMessagesCount[uid] = { nickname: data.nickname || 'Anonyme', count: 0 };
+                userMessagesCount[uid].count++;
+
+                if (userMessagesCount[uid].count > topContributor.count) {
+                    topContributor = { nickname: data.nickname || 'Anonyme', count: userMessagesCount[uid].count };
+                }
             }
 
-            // IA Clustering logic pour les questions
-            const msg = data.comment.trim();
+            const msg = (data?.comment || '').trim();
             if (msg.includes('?') || msg.toLowerCase().startsWith('comment') || msg.toLowerCase().startsWith('pourquoi')) {
                 let foundCluster = false;
                 for (let cluster of questionClusters) {
@@ -192,78 +219,104 @@ const startLiveTracker = async () => {
                 if (!foundCluster) {
                     questionClusters.push({ original: msg, count: 1 });
                 }
-                // Sort by count and keep top 20
                 questionClusters.sort((a, b) => b.count - a.count);
                 if (questionClusters.length > 20) questionClusters.pop();
             }
 
-            try {
-                await sessionRef.collection('messages').add({
-                    userId: data.userId,
-                    uniqueId: data.uniqueId,
-                    nickname: data.nickname,
-                    comment: data.comment,
+            if (sessionRef) {
+                sessionRef.collection('messages').add({
+                    userId: data?.userId || 'unknown',
+                    uniqueId: data?.uniqueId || 'unknown',
+                    nickname: data?.nickname || 'Anonyme',
+                    comment: msg,
                     timestamp: FieldValue.serverTimestamp()
-                });
-            } catch (err) { }
+                }).catch(() => {});
+            }
         });
 
         currentConnection.on('streamEnd', async () => {
-            console.log("Le Live est terminé.");
+            console.log("Le Live TikTok est terminé.");
             await stopLiveTracker();
         });
 
         currentConnection.on('disconnected', async () => {
-            console.log("Déconnecté de TikTok.");
-            await stopLiveTracker();
+            console.warn("Déconnecté de TikTok Live. Tentative de reconnexion...");
+            isConnected = false;
+            handleAutoReconnect();
+        });
+
+        currentConnection.on('error', (err) => {
+            console.error('Erreur TikTok Live connection:', err?.message || err);
         });
 
     } catch (err) {
-        console.error("Échec de la connexion", err);
+        console.error("Échec de la connexion TikTok Live:", err.message);
         isConnected = false;
+        handleAutoReconnect();
         return { status: 'failed', error: err.message };
     }
 
     return { status: 'connected' };
 };
 
+const handleAutoReconnect = () => {
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+        reconnectAttempts++;
+        const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
+        console.log(`Reconnexion programmée dans ${backoffDelay / 1000}s (Tentative ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
+        setTimeout(() => {
+            if (!isConnected) {
+                startLiveTracker();
+            }
+        }, backoffDelay);
+    } else {
+        console.error("Nombre maximal de tentatives de reconnexion atteint. Arrêt du tracker.");
+    }
+};
+
 const stopLiveTracker = async () => {
     if (currentConnection) {
-        currentConnection.disconnect();
+        try {
+            currentConnection.disconnect();
+        } catch (e) {
+            console.warn('Erreur lors de la déconnexion TikTok:', e.message);
+        }
         currentConnection = null;
     }
     
     if (isConnected && sessionRef) {
-        // Enregistrer le bilan
-        await sessionRef.set({
-            status: 'ended',
-            endTime: FieldValue.serverTimestamp(),
-            viewers: viewersCount,
-            peakViewers: peakViewers,
-            totalLikes: totalLikes,
-            totalComments: totalComments,
-            totalShares: totalShares,
-            newFollowers: newFollowers,
-            totalDiamonds: totalDiamonds,
-            topQuestions: questionClusters.slice(0, 3)
-        }, { merge: true });
-        
-        // Mettre à jour l'UI globale avec RAZ des compteurs pour le front
-        await db.collection('users').doc('karamokho').set({
-            tiktokLiveAPI: {
-                isLive: false,
-                currentViewers: 0,
-                peakViewers: 0,
-                likes: 0,
-                shares: 0,
-                followers: 0,
-                diamonds: 0,
-                topContributor: { nickname: '', count: 0 },
-                topDonator: { nickname: '', diamonds: 0 },
-                topQuestions: [],
-                lastUpdated: FieldValue.serverTimestamp()
-            }
-        }, { merge: true });
+        try {
+            await sessionRef.set({
+                status: 'ended',
+                endTime: FieldValue.serverTimestamp(),
+                viewers: viewersCount,
+                peakViewers: peakViewers,
+                totalLikes: totalLikes,
+                totalComments: totalComments,
+                totalShares: totalShares,
+                newFollowers: newFollowers,
+                totalDiamonds: totalDiamonds,
+                topQuestions: questionClusters.slice(0, 3)
+            }, { merge: true });
+
+            await db.collection('users').doc('karamokho').set({
+                tiktokLiveAPI: {
+                    isLive: false,
+                    currentViewers: 0,
+                    peakViewers: 0,
+                    likes: 0,
+                    shares: 0,
+                    followers: 0,
+                    diamonds: 0,
+                    topContributor: { nickname: '', count: 0 },
+                    topDonator: { nickname: '', diamonds: 0 },
+                    topQuestions: [],
+                    lastUpdated: FieldValue.serverTimestamp()
+                }
+            }, { merge: true });
+        } catch (err) {
+            console.error('Erreur mise à jour Firestore à l\'arrêt du Live:', err.message);
+        }
     }
     
     isConnected = false;
@@ -274,6 +327,7 @@ app.get('/status', (req, res) => {
         service: 'Lumina TikTok Live Worker', 
         status: 'running',
         isConnected: isConnected,
+        reconnectAttempts: reconnectAttempts,
         viewers: viewersCount,
         likes: totalLikes,
         comments: totalComments
@@ -281,6 +335,7 @@ app.get('/status', (req, res) => {
 });
 
 app.post('/start', async (req, res) => {
+    reconnectAttempts = 0;
     const result = await startLiveTracker();
     res.json(result);
 });
@@ -297,13 +352,12 @@ app.listen(port, () => {
     startLiveTracker();
     
     setInterval(() => {
-        if (!isConnected) {
-            console.log("Worker inactif, tentative de reconnexion...");
-            startLiveTracker();
-        } else {
+        if (!isConnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+            console.log("Worker inactif, vérification reconnexion...");
+            handleAutoReconnect();
+        } else if (isConnected) {
             const top3Questions = questionClusters.slice(0, 3);
             
-            // Heartbeat session
             if (sessionRef) {
                 sessionRef.set({
                     viewers: viewersCount,
@@ -314,10 +368,9 @@ app.listen(port, () => {
                     newFollowers: newFollowers,
                     totalDiamonds: totalDiamonds,
                     lastUpdate: FieldValue.serverTimestamp()
-                }, { merge: true }).catch(e => console.error("Heartbeat error", e));
+                }, { merge: true }).catch(e => console.error("Heartbeat error", e.message));
             }
 
-            // Heartbeat UI Dashboard
             db.collection('users').doc('karamokho').set({
                 tiktokLiveAPI: {
                     currentViewers: viewersCount,
@@ -331,7 +384,7 @@ app.listen(port, () => {
                     topQuestions: top3Questions,
                     lastUpdated: FieldValue.serverTimestamp()
                 }
-            }, { merge: true }).catch(e => console.error("UI Heartbeat error", e));
+            }, { merge: true }).catch(e => console.error("UI Heartbeat error", e.message));
         }
     }, 15000);
 });
