@@ -19,6 +19,14 @@ build_dist
 functions/.env
 worker/.env
 
+# Temporary dump files & logs
+*.txt
+*.html
+dump.txt
+file_dump.txt
+temp.txt
+functions/out.txt
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

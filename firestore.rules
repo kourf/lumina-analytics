@@ -1,8 +1,32 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Les utilisateurs authentifiés peuvent lire leurs propres données et la configuration globale
+    match /users/{userId} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Collection des métriques en direct mises à jour exclusivement par les Cloud Functions / Cloud Run Workers via Admin SDK (qui contourne les règles)
+    match /liveMetrics/{metricId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Verrouillé pour les clients webs/mobiles directs
+    }
+
+    // Collection des sessions TikTok Live
+    match /tiktokLiveSessions/{sessionId} {
+      allow read: if request.auth != null;
+      allow write: if false; // Réservé au Worker Backend
+
+      match /messages/{messageId} {
+        allow read: if request.auth != null;
+        allow write: if false;
+      }
+    }
+
+    // Règle par défaut : accès refusé aux documents non spécifiés
     match /{document=**} {
-      allow read, write: if true;
+      allow read, write: if false;
     }
   }
 }
