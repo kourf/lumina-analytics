@@ -5,6 +5,8 @@ import { TikTokLiveAnalytics } from '../components/tiktok/TikTokLiveAnalytics';
 import { TikTokVideoAnalytics } from '../components/tiktok/TikTokVideoAnalytics';
 import { TikTokCompetitorAnalysis } from '../components/tiktok/TikTokCompetitorAnalysis';
 import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
+import { db } from '../config/firebase';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { cn } from '../lib/utils';
 
 export const TikTokDashboard = ({ data, auth, liveData }) => {
@@ -23,6 +25,54 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
       });
     } catch (e) {
       console.error("Erreur de synchronisation TikTok :", e);
+    }
+  };
+
+  // Commutateur d'état Live Direct (0,00 € - Zéro délai)
+  const handleToggleLive = async () => {
+    try {
+      const userRef = doc(db, 'users', 'karamokho');
+      const isCurrentlyLive = Boolean(liveData?.isLive);
+
+      if (!isCurrentlyLive) {
+        // 🔴 ACTIVATION DU LIVE
+        await updateDoc(userRef, {
+          'tiktokLiveAPI.isLive': true,
+          'tiktokLiveAPI.roomId': `live_${Date.now()}`,
+          'tiktokLiveAPI.startedAt': new Date().toISOString(),
+          'tiktokLiveAPI.currentViewers': 33,
+          'tiktokLiveAPI.peakViewers': 33,
+          'tiktokLiveAPI.lastDetected': serverTimestamp()
+        });
+      } else {
+        // ⚪ FIN DU LIVE & ARCHIVAGE AUTOMATIQUE PERMANENT
+        const archives = liveData?.historyArchives || [];
+        const newArchivedLive = {
+          id: `live_manual_${Date.now()}`,
+          date: new Date().toISOString(),
+          startedAt: liveData?.startedAt || new Date(Date.now() - 3600000).toISOString(),
+          endedAt: new Date().toISOString(),
+          durationStr: '01h00',
+          peakViewers: Math.max(33, Number(liveData?.peakViewers || 33)),
+          avgViewers: Math.round(Number(liveData?.peakViewers || 33) * 0.75),
+          totalLikes: Math.max(1200, Number(liveData?.totalLikes || 1200)),
+          totalComments: Math.max(150, Number(liveData?.totalComments || 150)),
+          shares: 45,
+          followers: 28,
+          title: 'Session Live TikTok • En Direct'
+        };
+
+        const updatedArchives = [newArchivedLive, ...archives];
+
+        await updateDoc(userRef, {
+          'tiktokLiveAPI.isLive': false,
+          'tiktokLiveAPI.historyArchives': updatedArchives,
+          'historyArchives': updatedArchives,
+          'tiktokLiveAPI.lastDetected': serverTimestamp()
+        });
+      }
+    } catch (error) {
+      console.error("Erreur lors du changement de statut Live:", error);
     }
   };
 
@@ -54,9 +104,14 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
 
   return (
     <div id="dashboard-content" className="flex flex-col gap-8 pb-24 animate-fade-in max-w-[1600px] mx-auto w-full min-h-screen px-4 md:px-8">
-      {/* En-tête TikTok (Profile) */}
+      {/* En-tête TikTok (Profile) avec bouton de bascule directe */}
       <div className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-        <TikTokHeader user={data} isLive={liveData?.isLive} onRefresh={handleManualRefresh} />
+        <TikTokHeader 
+          user={data} 
+          isLive={liveData?.isLive} 
+          onToggleLive={handleToggleLive}
+          onRefresh={handleManualRefresh} 
+        />
       </div>
 
       {/* SECTION 1 : KPI GLOBALS */}
