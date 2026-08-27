@@ -128,7 +128,7 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
 
               <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
                 <TrendingUp size={13} className="text-emerald-400" />
-                <span className="font-bold text-emerald-400 font-mono">5.8%</span>
+                <span className="font-bold text-emerald-400 font-mono">{user?.engagementRate || "5.8%"}</span>
                 <span className="text-gray-400 text-[11px]">Engagement</span>
               </div>
             </div>

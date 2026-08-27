@@ -5,10 +5,14 @@ import { TikTokLiveAnalytics } from '../components/tiktok/TikTokLiveAnalytics';
 import { TikTokVideoAnalytics } from '../components/tiktok/TikTokVideoAnalytics';
 import { TikTokCompetitorAnalysis } from '../components/tiktok/TikTokCompetitorAnalysis';
 import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
+import { useTikTokUnifiedData } from '../hooks/useTikTokUnifiedData';
 import { cn } from '../lib/utils';
 
 export const TikTokDashboard = ({ data, auth, liveData }) => {
   const [loading, setLoading] = useState(false);
+
+  // Source unique de vérité unifiée
+  const unifiedData = useTikTokUnifiedData(data, liveData);
 
   // Forcer le Dark Mode absolu pour le Dashboard TikTok Cyber Neon (Toujours en haut !)
   useEffect(() => {
@@ -57,15 +61,15 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
       {/* En-tête TikTok (Profile) 100% automatique */}
       <div className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         <TikTokHeader 
-          user={data || { followers: 6084, likes: 15779, username: 'karam.drame' }} 
-          isLive={Boolean(liveData?.isLive)} 
+          user={unifiedData} 
+          isLive={unifiedData.isLive} 
           onRefresh={handleManualRefresh} 
         />
       </div>
 
       {/* SECTION 1 : KPI GLOBALS */}
       <section className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
-        <TikTokKpiCards tiktokData={data || { followers: 6084, likes: 15779 }} />
+        <TikTokKpiCards tiktokData={unifiedData} />
       </section>
 
       {/* SECTION 2 : MONITORING LIVE */}
@@ -77,21 +81,21 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.3s' }}>
         <div className="bg-white dark:bg-[#111827]/80 border border-slate-200 dark:border-[#1F2937] backdrop-blur-xl rounded-[24px] p-6 shadow-sm dark:shadow-none">
           <TikTokVideoAnalytics 
-            videoAnalytics={data?.videoAnalytics || {}} 
-            recentVideos={data?.recentVideos || []} 
-            followers={data?.followers || 6084} 
+            videoAnalytics={unifiedData.videoAnalytics} 
+            recentVideos={unifiedData.recentVideos} 
+            followers={unifiedData.followers} 
           />
         </div>
       </section>
 
       {/* SECTION 5 : VEILLE CONCURRENTIELLE */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.35s' }}>
-        <TikTokCompetitorAnalysis myData={data || { followers: 6084, likes: 15779 }} />
+        <TikTokCompetitorAnalysis myData={unifiedData} />
       </section>
 
       {/* SECTION 3 : CATALOGUE VIDEO */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.4s' }}>
-        <TikTokRecentVideos recentVideos={data?.recentVideos || []} />
+        <TikTokRecentVideos recentVideos={unifiedData.recentVideos} />
       </section>
 
     </div>
