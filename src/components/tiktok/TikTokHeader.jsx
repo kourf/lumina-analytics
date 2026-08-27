@@ -64,12 +64,6 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           ) : (
             <div className="flex items-center gap-2 bg-black/40 border border-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="text-gray-300 text-xs font-medium">Flux Connecté</span>
-            </div>
-          )}
-        </div>
-
-        {/* Equalizer audio animé en mode Live */}
         {isLive && (
           <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#FE2C55]/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
         )}
@@ -84,11 +78,11 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           )}>
             <span className={cn(
               "w-2.5 h-2.5 rounded-full relative",
-              isLive ? "bg-[#FE2C55]" : "bg-gray-400"
+              isLive ? "bg-[#FE2C55]" : "bg-emerald-400"
             )}>
               {isLive && <span className="absolute inset-0 rounded-full bg-[#FE2C55] animate-ping" />}
             </span>
-            <span>{isLive ? "🔴 EN DIRECT SUR TIKTOK" : "⚪ HORS LIGNE"}</span>
+            <span>{isLive ? "🔴 EN DIRECT SUR TIKTOK" : "⚪ FLUX CONNECTÉ"}</span>
           </div>
         </div>
       </div>
@@ -99,7 +93,6 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
         {/* Avatar + Infos créateur */}
         <div className="flex flex-col md:flex-row items-center md:items-end gap-5 md:gap-7 text-center md:text-left z-10">
           
-          {/* Avatar avec Bague Cyber Neon si Live */}
           <div className="relative group shrink-0">
             <div className={cn(
               "w-28 h-28 md:w-36 md:h-36 rounded-full p-1.5 transition-all duration-500 shadow-2xl relative",
@@ -114,13 +107,11 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
               />
             </div>
 
-            {/* Badge TikTok Icon Over Avatar */}
             <div className="absolute -bottom-1 -right-1 bg-black text-white p-2 rounded-full border-2 border-slate-800 shadow-lg group-hover:scale-110 transition-transform">
               <TikTokIcon className="w-4 h-4 fill-current" />
             </div>
           </div>
 
-          {/* Noms & Badges */}
           <div className="flex flex-col gap-1.5 pb-2">
             <div className="flex items-center justify-center md:justify-start gap-2.5 flex-wrap">
               <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
@@ -138,7 +129,6 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
               <span className="text-gray-400">TikTok Live Creator</span>
             </p>
 
-            {/* Mini métriques rapides */}
             <div className="flex items-center justify-center md:justify-start gap-3 pt-2 text-xs font-semibold">
               <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
                 <Users size={13} className="text-cyan-400" />
@@ -151,14 +141,17 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
                 <span className="font-bold text-[#FE2C55] font-mono">{new Intl.NumberFormat('fr-FR').format(likesCount)}</span>
                 <span className="text-gray-400 text-[11px]">Likes</span>
               </div>
+
+              <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
+                <TrendingUp size={13} className="text-emerald-400" />
+                <span className="font-bold text-emerald-400 font-mono">5.8%</span>
+                <span className="text-gray-400 text-[11px]">Engagement</span>
+              </div>
             </div>
           </div>
         </div>
 
-        {/* Actions Droite : Bouton Suppression Libre-Service + Bouton TikTok */}
         <div className="shrink-0 flex flex-wrap items-center justify-center md:justify-end gap-3 pt-2 lg:pt-0">
-          
-          {/* Bouton Libre-Service : Suppression des Données */}
           <button
             onClick={() => setShowDeleteModal(true)}
             className="flex items-center gap-2 px-3.5 py-3 rounded-2xl text-xs font-semibold bg-white/5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 border border-white/10 hover:border-red-500/30 transition-all duration-300 active:scale-95 shadow-sm"
@@ -195,7 +188,6 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           </a>
         </div>
       </div>
-      
     </div>
   );
 };
