@@ -64,27 +64,11 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           ) : (
             <div className="flex items-center gap-2 bg-black/40 border border-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full">
               <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-        {isLive && (
-          <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#FE2C55]/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
-        )}
-
-        {/* Badge Live / Offline Flottant Top-Right */}
-        <div className="absolute top-4 right-4 md:top-6 md:right-6 z-10">
-          <div className={cn(
-            "flex items-center gap-2.5 px-4 py-2 rounded-full border shadow-xl backdrop-blur-xl transition-all duration-300 font-mono text-xs font-black uppercase tracking-wider",
-            isLive
-              ? "bg-[#FE2C55]/20 border-[#FE2C55]/50 text-white shadow-[0_0_20px_rgba(254,44,85,0.4)] animate-pulse"
-              : "bg-black/40 border-white/10 text-gray-300 shadow-lg"
-          )}>
-            <span className={cn(
-              "w-2.5 h-2.5 rounded-full relative",
-              isLive ? "bg-[#FE2C55]" : "bg-emerald-400"
-            )}>
-              {isLive && <span className="absolute inset-0 rounded-full bg-[#FE2C55] animate-ping" />}
-            </span>
-            <span>{isLive ? "🔴 EN DIRECT SUR TIKTOK" : "⚪ FLUX CONNECTÉ"}</span>
-          </div>
+              <span className="text-gray-300 text-xs font-medium">Flux Connecté</span>
+            </div>
+          )}
         </div>
+
       </div>
 
       {/* Contenu Profil Inférieur */}
