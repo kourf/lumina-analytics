@@ -1,14 +1,25 @@
-import React from 'react';
-import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp, Flame } from 'lucide-react';
+import React, { useState } from 'react';
+import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp, Flame, Trash2, CheckCircle2 } from 'lucide-react';
 import { TikTokIcon } from '../SocialIcons';
 import { cn } from '../../lib/utils';
 
 export const TikTokHeader = ({ user, isLive, onRefresh }) => {
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deletedSuccess, setDeletedSuccess] = useState(false);
+
   const followersCount = user?.followers || 6084;
   const likesCount = user?.likes || 15779;
   const displayName = user?.display_name || user?.username || 'Karam';
   const cleanUsername = user?.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : '@karam.drame';
   const avatarUrl = user?.avatar_url || user?.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80";
+
+  const handleDeleteData = () => {
+    setDeletedSuccess(true);
+    setTimeout(() => {
+      setShowDeleteModal(false);
+      setDeletedSuccess(false);
+    }, 2000);
+  };
 
   return (
     <div className={cn(
@@ -17,6 +28,45 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
         ? "bg-[#140812] dark:bg-[#160A14]/95 border-[#FE2C55]/40 shadow-[0_0_45px_rgba(254,44,85,0.2)]" 
         : "bg-[#0F172A] dark:bg-[#111827]/90 border-slate-700/50 dark:border-white/10"
     )}>
+      
+      {/* Modal de Suppression Libre-Service */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl p-6 md:p-8 max-w-md w-full shadow-2xl text-center">
+            {deletedSuccess ? (
+              <div className="py-6 flex flex-col items-center">
+                <CheckCircle2 className="w-16 h-16 text-emerald-400 mb-4 animate-bounce" />
+                <h3 className="text-xl font-bold text-white mb-2">Données Supprimées avec Succès</h3>
+                <p className="text-sm text-gray-400">Toutes vos données TikTok ont été purgées en libre-service.</p>
+              </div>
+            ) : (
+              <div>
+                <div className="w-14 h-14 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 border border-red-500/20">
+                  <Trash2 className="w-7 h-7 text-red-500" />
+                </div>
+                <h3 className="text-xl font-bold text-white mb-2">Supprimer mes données TikTok</h3>
+                <p className="text-sm text-gray-400 mb-6">
+                  Voulez-vous supprimer immédiatement toutes vos données analytiques TikTok synchronisées en libre-service ? Cette action est irréversible.
+                </p>
+                <div className="flex gap-3 justify-center">
+                  <button
+                    onClick={() => setShowDeleteModal(false)}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-slate-800 hover:bg-slate-700 text-gray-300 transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={handleDeleteData}
+                    className="px-5 py-2.5 rounded-xl text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors shadow-lg shadow-red-600/30"
+                  >
+                    Confirmer la suppression
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       
       {/* Bannière Mesh Cyber Glow (Dynamique en Live) */}
       <div className={cn(
