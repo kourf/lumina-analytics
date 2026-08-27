@@ -3,7 +3,7 @@ import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp, Flame } fro
 import { TikTokIcon } from '../SocialIcons';
 import { cn } from '../../lib/utils';
 
-export const TikTokHeader = ({ user, isLive, onToggleLive, onRefresh }) => {
+export const TikTokHeader = ({ user, isLive, onRefresh }) => {
   const followersCount = user?.followers || 6084;
   const likesCount = user?.likes || 15779;
   const displayName = user?.display_name || user?.username || 'Karam';
@@ -166,27 +166,8 @@ export const TikTokHeader = ({ user, isLive, onToggleLive, onRefresh }) => {
           </div>
         </div>
 
-        {/* Actions Droite : Commutateur Live Créateur + Bouton TikTok */}
-        <div className="shrink-0 flex flex-wrap items-center justify-center md:justify-end gap-3 pt-2 lg:pt-0">
-          
-          {/* Bouton Commutateur Direct Créateur */}
-          <button
-            onClick={onToggleLive}
-            className={cn(
-              "flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shadow-lg border",
-              isLive
-                ? "bg-slate-900/90 hover:bg-slate-800 text-white border-white/20 shadow-[0_0_20px_rgba(0,0,0,0.5)]"
-                : "bg-[#FE2C55]/15 hover:bg-[#FE2C55]/25 text-[#FE2C55] border-[#FE2C55]/40 shadow-[0_0_20px_rgba(254,44,85,0.2)]"
-            )}
-            title={isLive ? "Cliquez pour terminer et archiver la session live" : "Cliquez pour activer immédiatement le live sur le dashboard"}
-          >
-            <span className={cn(
-              "w-2.5 h-2.5 rounded-full",
-              isLive ? "bg-white animate-ping" : "bg-[#FE2C55] animate-pulse"
-            )}></span>
-            <span>{isLive ? "⚪ Terminer le Live" : "🔴 Activer le Live"}</span>
-          </button>
-
+        {/* Action Unique Droite : Épurée & Minimaliste */}
+        <div className="shrink-0 flex items-center justify-center md:justify-end pt-2 lg:pt-0">
           <a 
             href={isLive ? `https://tiktok.com/@${cleanUsername.replace('@', '')}/live` : (user?.links?.tiktok || `https://tiktok.com/@${cleanUsername.replace('@', '')}`)}
             target="_blank"
@@ -212,7 +193,6 @@ export const TikTokHeader = ({ user, isLive, onToggleLive, onRefresh }) => {
               </>
             )}
           </a>
-
         </div>
       </div>
       
