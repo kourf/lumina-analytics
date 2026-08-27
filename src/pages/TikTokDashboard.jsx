@@ -14,19 +14,25 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   // Source unique de vérité unifiée
   const unifiedData = useTikTokUnifiedData(data, liveData);
 
-  // Forcer le Dark Mode absolu pour le Dashboard TikTok Cyber Neon (Toujours en haut !)
+  // Forcer le Dark Mode absolu pour le Dashboard TikTok Cyber Neon & Synchronisation Réactive à l'Ouverture
   useEffect(() => {
     document.documentElement.classList.add('dark');
     localStorage.theme = 'dark';
+
+    // Option 3 : Synchronisation Réactive automatique à l'ouverture du Dashboard
+    handleManualRefresh();
   }, []);
 
   const handleManualRefresh = async () => {
     try {
+      setLoading(true);
       await fetch('https://us-central1-lumina-analytics-kd-2026.cloudfunctions.net/forceSyncTikTok', {
         method: 'POST'
       });
     } catch (e) {
       console.error("Erreur de synchronisation TikTok :", e);
+    } finally {
+      setLoading(false);
     }
   };
 

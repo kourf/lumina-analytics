@@ -137,6 +137,17 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
         </div>
 
         <div className="shrink-0 flex flex-wrap items-center justify-center md:justify-end gap-3 pt-2 lg:pt-0">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/15 active:scale-95 text-gray-200 border border-white/10 transition-all shadow-md backdrop-blur-md"
+              title="Actualiser les métriques en direct depuis TikTok"
+            >
+              <TrendingUp size={14} className="text-[#25F4EE]" />
+              <span>Actualiser</span>
+            </button>
+          )}
+
           <a 
             href={isLive ? `https://tiktok.com/@${cleanUsername.replace('@', '')}/live` : (user?.links?.tiktok || `https://tiktok.com/@${cleanUsername.replace('@', '')}`)}
             target="_blank"

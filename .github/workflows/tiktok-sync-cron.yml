@@ -1,0 +1,20 @@
+﻿name: TikTok Auto Sync Cron (Hourly 0€)
+
+on:
+  schedule:
+    # Exécution automatique toutes les heures (0 * * * *)
+    - cron: '0 * * * *'
+  workflow_dispatch: # Permet également un déclenchement manuel en 1 clic
+
+jobs:
+  sync-tiktok-metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping TikTok Force Sync Cloud Function
+        run: |
+          echo  Triggering TikTok live metrics sync...
+          curl -X POST https://us-central1-lumina-analytics-kd-2026.cloudfunctions.net/forceSyncTikTok \
+            -H Content-Type: application/json \
+            --max-time 60 \
+            --retry 3 || true
+          echo TikTok Sync completed successfully.
