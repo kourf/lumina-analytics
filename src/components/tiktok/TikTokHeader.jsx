@@ -4,8 +4,8 @@ import { TikTokIcon } from '../SocialIcons';
 import { cn } from '../../lib/utils';
 
 export const TikTokHeader = ({ user, isLive, onRefresh }) => {
-  const followersCount = user?.followers || 6084;
-  const likesCount = user?.likes || 15779;
+  const followersCount = user?.followers || 0;
+  const likesCount = user?.likes || user?.totalLikes || 0;
   const displayName = user?.display_name || user?.username || 'Karam';
   const cleanUsername = user?.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : '@karam.drame';
   const avatarUrl = user?.avatar_large_url 

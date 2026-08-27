@@ -145,7 +145,7 @@ function App() {
             <Route path="instagram" element={<InstagramDashboard />} />
             <Route path="tiktok" element={
               <TikTokDashboard
-                data={appData.tiktokAPI || appData.tiktok || { followers: 6084, likes: 15779, username: 'karam.drame' }}
+                data={appData.tiktokAPI || appData.tiktok || null}
                 auth={appData.tiktokAuth}
                 liveData={appData.tiktokLiveAPI || {}}
               />

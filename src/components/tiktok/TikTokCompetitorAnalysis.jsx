@@ -27,12 +27,12 @@ export const TikTokCompetitorAnalysis = ({ myData }) => {
     return () => unsubscribe();
   }, []);
 
-  // Valeurs par défaut si myData n'est pas dispo
-  const myFollowers = myData?.followers || 6000;
-  const myViews = myData?.views || 273200;
-  const myLikes = myData?.likes || 15600;
-  const myComments = myData?.comments || 1200;
-  const myShares = myData?.shares || 850;
+  // Valeurs strictement dynamiques dérivées de myData
+  const myFollowers = myData?.followers || 0;
+  const myViews = myData?.views || myData?.totalViews || 0;
+  const myLikes = myData?.likes || myData?.totalLikes || 0;
+  const myComments = myData?.comments || myData?.totalComments || 0;
+  const myShares = myData?.shares || myData?.totalShares || 0;
   const handleAnalyze = async (e) => {
     e.preventDefault();
     if (!competitorUrl || competitors.length >= 4) return;
