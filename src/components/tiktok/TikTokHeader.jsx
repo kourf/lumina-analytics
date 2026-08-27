@@ -8,7 +8,12 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
   const likesCount = user?.likes || 15779;
   const displayName = user?.display_name || user?.username || 'Karam';
   const cleanUsername = user?.username ? (user.username.startsWith('@') ? user.username : `@${user.username}`) : '@karam.drame';
-  const avatarUrl = user?.avatar_url || user?.profilePic || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80";
+  const avatarUrl = user?.avatar_large_url 
+    || user?.avatar_url_100 
+    || user?.avatar_url 
+    || user?.avatarUrl 
+    || user?.profilePic 
+    || "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80";
 
   return (
     <div className={cn(
@@ -27,16 +32,8 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
       )}>
         
         {/* Glows d'ambiance */}
-        {isLive ? (
-          <>
-            <div className="absolute top-0 left-1/4 w-[500px] h-[500px] bg-[#FE2C55]/25 rounded-full blur-3xl pointer-events-none -translate-y-1/2 animate-pulse"></div>
-            <div className="absolute top-0 right-10 w-[500px] h-[500px] bg-[#25F4EE]/20 rounded-full blur-3xl pointer-events-none -translate-y-1/2"></div>
-          </>
-        ) : (
-          <>
-            <div className="absolute top-0 left-1/4 w-96 h-96 bg-[#25F4EE]/15 rounded-full blur-3xl pointer-events-none -translate-y-1/2"></div>
-            <div className="absolute top-0 right-10 w-96 h-96 bg-[#FE2C55]/15 rounded-full blur-3xl pointer-events-none -translate-y-1/2"></div>
-          </>
+        {isLive && (
+          <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#FE2C55]/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
         )}
         
         {/* Motif de grille high-tech subtil */}
@@ -88,6 +85,10 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
                 src={avatarUrl} 
                 alt={displayName} 
                 className="w-full h-full object-cover rounded-full bg-slate-900 border-2 border-black/40"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = "https://ui-avatars.com/api/?name=Karamokho+Drame&background=FE2C55&color=fff&size=256";
+                }}
               />
             </div>
 

@@ -23,10 +23,17 @@ export function useTikTokUnifiedData(rawTikTokData, liveData) {
 
     const avgViews = totalVideos > 0 ? Math.round(totalViews / totalVideos) : 0;
 
+    const resolvedAvatar = data.avatar_large_url 
+      || data.avatar_url_100 
+      || data.avatar_url 
+      || data.avatarUrl 
+      || data.profilePic 
+      || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80';
+
     return {
       username: data.username || '@karam.drame',
       displayName: data.display_name || data.displayName || data.username || 'Karamokho DRAME',
-      avatarUrl: data.avatar_url || data.avatarUrl || data.profilePic || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80',
+      avatarUrl: resolvedAvatar,
       followers,
       likes: totalLikes,
       totalLikes,
