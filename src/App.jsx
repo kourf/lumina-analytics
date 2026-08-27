@@ -78,8 +78,10 @@ function App() {
               ...(firebaseData.tiktok || {}),
               ...(firebaseData.tiktokAPI || {}),
               recentVideos: realRecentVideos,
-              followers: firebaseData.tiktokAPI?.followers || firebaseData.tiktok?.followers || baseData.tiktok?.followers || 6084,
-              likes: firebaseData.tiktokAPI?.likes || firebaseData.tiktok?.likes || baseData.tiktok?.likes || 15779
+              followers: firebaseData.tiktokAPI?.followers || firebaseData.tiktok?.followers || baseData.tiktok?.followers || 6158,
+              likes: firebaseData.tiktokAPI?.likes || firebaseData.tiktok?.likes || baseData.tiktok?.likes || 15955,
+              totalLikes: firebaseData.tiktokAPI?.totalLikes || firebaseData.tiktok?.totalLikes || baseData.tiktok?.totalLikes || 15955,
+              avatar_url: firebaseData.tiktokAPI?.avatar_url || firebaseData.tiktok?.avatar_url || baseData.tiktok?.avatar_url || "https://www.tiktok.com/api/img/?userId=7030929632657638405&location=2&aid=1988"
             };
 
             const mergedData = {

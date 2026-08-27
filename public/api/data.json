@@ -84,18 +84,19 @@
     ]
   },
   "tiktok": {
-    "followers": 812000,
-    "likes": 510000,
-    "views": 6800000,
-    "shares": 62000,
+    "followers": 6158,
+    "likes": 15955,
+    "views": 275700,
+    "shares": 748,
     "followersGrowth": 18.4,
-    "totalLikes": 510000,
+    "totalLikes": 15955,
     "totalComments": 4200,
+    "avatar_url": "https://www.tiktok.com/api/img/?userId=7030929632657638405&location=2&aid=1988",
     "videoAnalytics": {
-      "avgViews": 145000,
-      "avgLikes": 15000,
-      "avgComments": 420,
-      "totalVideosAnalyzed": 68,
+      "avgViews": 3883,
+      "avgLikes": 225,
+      "avgComments": 59,
+      "totalVideosAnalyzed": 71,
       "avgVideosPerMonth": 12
     },
     "recentVideos": [
