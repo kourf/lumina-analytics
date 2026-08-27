@@ -71,82 +71,77 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
 
         {/* Equalizer audio animé en mode Live */}
         {isLive && (
-          <div className="absolute bottom-3 right-6 hidden sm:flex items-end gap-1 px-3 py-1.5 rounded-xl bg-black/40 backdrop-blur-md border border-white/10">
-            <span className="w-1 h-3 bg-[#FE2C55] rounded-full animate-bounce"></span>
-            <span className="w-1 h-5 bg-[#25F4EE] rounded-full animate-bounce [animation-delay:0.15s]"></span>
-            <span className="w-1 h-2 bg-white rounded-full animate-bounce [animation-delay:0.3s]"></span>
-            <span className="w-1 h-6 bg-[#FE2C55] rounded-full animate-bounce [animation-delay:0.2s]"></span>
-            <span className="w-1 h-4 bg-[#25F4EE] rounded-full animate-bounce [animation-delay:0.35s]"></span>
-            <span className="text-[10px] font-bold text-gray-300 ml-1.5 font-mono">STREAM ACTIF</span>
-          </div>
+          <div className="absolute -top-24 -left-24 w-96 h-96 bg-[#FE2C55]/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
         )}
+
+        {/* Badge Live / Offline Flottant Top-Right */}
+        <div className="absolute top-4 right-4 md:top-6 md:right-6 z-10">
+          <div className={cn(
+            "flex items-center gap-2.5 px-4 py-2 rounded-full border shadow-xl backdrop-blur-xl transition-all duration-300 font-mono text-xs font-black uppercase tracking-wider",
+            isLive
+              ? "bg-[#FE2C55]/20 border-[#FE2C55]/50 text-white shadow-[0_0_20px_rgba(254,44,85,0.4)] animate-pulse"
+              : "bg-black/40 border-white/10 text-gray-300 shadow-lg"
+          )}>
+            <span className={cn(
+              "w-2.5 h-2.5 rounded-full relative",
+              isLive ? "bg-[#FE2C55]" : "bg-gray-400"
+            )}>
+              {isLive && <span className="absolute inset-0 rounded-full bg-[#FE2C55] animate-ping" />}
+            </span>
+            <span>{isLive ? "🔴 EN DIRECT SUR TIKTOK" : "⚪ HORS LIGNE"}</span>
+          </div>
+        </div>
       </div>
 
-      {/* Contenu Profil & Actions */}
-      <div className="px-6 md:px-8 pb-7 flex flex-col lg:flex-row lg:items-end justify-between relative mt-[-45px] md:mt-[-55px] gap-6">
+      {/* Contenu Profil Inférieur */}
+      <div className="px-6 md:px-10 pb-8 pt-0 relative flex flex-col lg:flex-row items-center lg:items-end justify-between gap-6 -mt-16 md:-mt-20">
         
-        {/* Profil Gauche : Avatar + Badges + Bio */}
-        <div className="flex flex-col md:flex-row items-center md:items-end gap-5 text-center md:text-left">
+        {/* Avatar + Infos créateur */}
+        <div className="flex flex-col md:flex-row items-center md:items-end gap-5 md:gap-7 text-center md:text-left z-10">
           
-          {/* Avatar Container avec Glow dynamique en Live */}
-          <div className="relative shrink-0 group">
+          {/* Avatar avec Bague Cyber Neon si Live */}
+          <div className="relative group shrink-0">
             <div className={cn(
-              "w-24 h-24 md:w-32 md:h-32 rounded-3xl overflow-hidden bg-slate-800 relative z-10 transition-transform duration-300 group-hover:scale-[1.02]",
+              "w-28 h-28 md:w-36 md:h-36 rounded-full p-1.5 transition-all duration-500 shadow-2xl relative",
               isLive 
-                ? "border-4 border-[#FE2C55] shadow-[0_0_30px_rgba(254,44,85,0.6)] ring-4 ring-[#FE2C55]/30" 
-                : "border-4 border-[#0F172A] dark:border-[#111827] shadow-2xl"
+                ? "bg-gradient-to-tr from-[#FE2C55] via-[#FF007F] to-[#25F4EE] shadow-[0_0_35px_rgba(254,44,85,0.6)] animate-spin-slow" 
+                : "bg-gradient-to-tr from-slate-700 to-slate-800 border-2 border-white/10"
             )}>
               <img 
                 src={avatarUrl} 
-                alt="Avatar" 
-                className="w-full h-full object-cover" 
-                onError={(e) => {
-                  e.target.src = "https://ui-avatars.com/api/?name=Karam&background=FE2C55&color=fff&size=200";
-                }}
+                alt={displayName} 
+                className="w-full h-full object-cover rounded-full bg-slate-900 border-2 border-black/40"
               />
             </div>
-            
-            {/* Badge Live Pulsant sous l'Avatar */}
-            {isLive && (
-              <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-[#FE2C55] text-white text-[10px] font-black px-3 py-0.5 rounded-full border-2 border-[#111827] flex items-center gap-1.5 shadow-[0_0_15px_rgba(254,44,85,0.8)] z-20 uppercase tracking-wider animate-pulse">
-                <Radio size={11} />
-                LIVE
-              </div>
-            )}
-          </div>
-          
-          {/* Infos Textuelles & Mini-KPIs */}
-          <div className="flex-1 space-y-2">
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5">
-              <h1 className="text-2xl md:text-3xl font-black text-white tracking-tight flex items-center gap-2">
-                {displayName}
-                <span className="text-sm font-semibold text-gray-400 font-mono">{cleanUsername}</span>
-              </h1>
-              
-              <span className="inline-flex items-center gap-1 bg-[#25F4EE]/10 text-[#25F4EE] border border-[#25F4EE]/20 px-2.5 py-0.5 rounded-full text-xs font-semibold">
-                <ShieldCheck size={13} />
-                Vérifié
-              </span>
 
-              {isLive && (
-                <span className="inline-flex items-center gap-1 bg-[#FE2C55]/20 text-[#FE2C55] border border-[#FE2C55]/30 px-2.5 py-0.5 rounded-full text-xs font-bold font-mono animate-pulse">
-                  <Flame size={12} />
-                  En Direct
-                </span>
-              )}
+            {/* Badge TikTok Icon Over Avatar */}
+            <div className="absolute -bottom-1 -right-1 bg-black text-white p-2 rounded-full border-2 border-slate-800 shadow-lg group-hover:scale-110 transition-transform">
+              <TikTokIcon className="w-4 h-4 fill-current" />
+            </div>
+          </div>
+
+          {/* Noms & Badges */}
+          <div className="flex flex-col gap-1.5 pb-2">
+            <div className="flex items-center justify-center md:justify-start gap-2.5 flex-wrap">
+              <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                {displayName}
+              </h1>
+              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#FE2C55]/15 text-[#FE2C55] border border-[#FE2C55]/30">
+                <ShieldCheck size={13} className="text-[#FE2C55]" />
+                Créateur Certifié
+              </span>
             </div>
 
-            <p className="text-xs md:text-sm text-gray-300 max-w-xl leading-relaxed">
-              {isLive 
-                ? "🎙️ Karamokho est actuellement en Live sur TikTok ! Rejoignez le live pour poser vos questions en direct."
-                : (user?.bio_description || "Créateur de contenu & Stratège Freelance | Analyses en direct, webdesign & automatisation.")
-              }
+            <p className="text-sm font-medium text-gray-400 font-mono flex items-center justify-center md:justify-start gap-2">
+              <span>{cleanUsername}</span>
+              <span className="w-1 h-1 rounded-full bg-gray-500" />
+              <span className="text-gray-400">TikTok Live Creator</span>
             </p>
 
-            {/* Quick Metrics Badges */}
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-3 pt-1 text-xs">
+            {/* Mini métriques rapides */}
+            <div className="flex items-center justify-center md:justify-start gap-3 pt-2 text-xs font-semibold">
               <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
-                <Users size={13} className="text-[#25F4EE]" />
+                <Users size={13} className="text-cyan-400" />
                 <span className="font-bold text-white font-mono">{new Intl.NumberFormat('fr-FR').format(followersCount)}</span>
                 <span className="text-gray-400 text-[11px]">Abonnés</span>
               </div>
@@ -156,18 +151,23 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
                 <span className="font-bold text-[#FE2C55] font-mono">{new Intl.NumberFormat('fr-FR').format(likesCount)}</span>
                 <span className="text-gray-400 text-[11px]">Likes</span>
               </div>
-
-              <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
-                <TrendingUp size={13} className="text-emerald-400" />
-                <span className="font-bold text-emerald-400 font-mono">5.8%</span>
-                <span className="text-gray-400 text-[11px]">Engagement</span>
-              </div>
             </div>
           </div>
         </div>
 
-        {/* Action Unique Droite : Épurée & Minimaliste */}
-        <div className="shrink-0 flex items-center justify-center md:justify-end pt-2 lg:pt-0">
+        {/* Actions Droite : Bouton Suppression Libre-Service + Bouton TikTok */}
+        <div className="shrink-0 flex flex-wrap items-center justify-center md:justify-end gap-3 pt-2 lg:pt-0">
+          
+          {/* Bouton Libre-Service : Suppression des Données */}
+          <button
+            onClick={() => setShowDeleteModal(true)}
+            className="flex items-center gap-2 px-3.5 py-3 rounded-2xl text-xs font-semibold bg-white/5 hover:bg-red-500/10 text-gray-400 hover:text-red-400 border border-white/10 hover:border-red-500/30 transition-all duration-300 active:scale-95 shadow-sm"
+            title="Supprimer mes données TikTok en libre-service"
+          >
+            <Trash2 size={14} />
+            <span className="hidden sm:inline">Supprimer mes données</span>
+          </button>
+
           <a 
             href={isLive ? `https://tiktok.com/@${cleanUsername.replace('@', '')}/live` : (user?.links?.tiktok || `https://tiktok.com/@${cleanUsername.replace('@', '')}`)}
             target="_blank"
