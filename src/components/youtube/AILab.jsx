@@ -8,26 +8,62 @@ export const AILab = () => {
   const [selectedTitle, setSelectedTitle] = useState(null);
   const [showInfo, setShowInfo] = useState(false);
 
-  const handleGenerate = () => {
-    if (!idea) return;
+  const handleGenerate = async () => {
+    if (!idea.trim()) return;
     
     setIsAnalyzing(true);
     
-    // Simulation d'une génération IA qui dure 2s
-    setTimeout(() => {
-      // Pour la démo, on simule des titres générés à partir de l'idée
-      const generated = [
-        { id: 1, text: `Pourquoi ${idea || "ceci"} va tout changer en 2026`, score: 98 },
-        { id: 2, text: `J'ai testé ${idea || "cette idée"} pendant 30 jours (Bilan)`, score: 94 },
-        { id: 3, text: `Le secret caché de ${idea || "cette méthode"}`, score: 89 },
-        { id: 4, text: `Ne faites pas ça avec ${idea || "votre projet"} !`, score: 85 },
-        { id: 5, text: `Le guide ultime : ${idea || "comment réussir"}`, score: 78 }
-      ];
+    try {
+      // Configuration d'appel Google AI Studio (Gemini 1.5 Flash Free Tier - 15 RPM max)
+      const geminiApiKey = import.meta.env.VITE_GEMINI_API_KEY || '';
       
+      if (geminiApiKey) {
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: `Tu es un expert en viralité YouTube. Génère exactement 5 titres accrocheurs et irrésistibles en français pour cette idée de vidéo : "${idea}".
+Format de réponse strict : Un tableau JSON valide contenant 5 objets avec les clés "id" (1 à 5), "text" (le titre), et "score" (score de 75 à 99). Ne renvoie rien d'autre que le JSON brut sans markdown.`
+              }]
+            }],
+            generationConfig: {
+              maxOutputTokens: 256,
+              temperature: 0.7
+            }
+          })
+        });
+
+        if (response.ok) {
+          const resData = await response.json();
+          const rawText = resData.candidates?.[0]?.content?.parts?.[0]?.text?.replace(/```json|```/g, '').trim() || '';
+          const parsed = JSON.parse(rawText);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            setTitles(parsed);
+            setIsAnalyzing(false);
+            setSelectedTitle(null);
+            return;
+          }
+        }
+      }
+    } catch (e) {
+      console.warn('[AILab] Fallback local utilisé:', e.message);
+    }
+
+    // Fallback dynamique haute qualité si aucune clé API configurée
+    setTimeout(() => {
+      const generated = [
+        { id: 1, text: `Pourquoi ${idea || "cette méthode"} va tout exploser en 2026`, score: 98 },
+        { id: 2, text: `J'ai testé "${idea || "ce concept"}" pendant 30 jours (Le Bilan)`, score: 95 },
+        { id: 3, text: `Le secret caché que personne ne vous dit sur ${idea || "ce projet"}`, score: 91 },
+        { id: 4, text: `Ne faites JAMAIS cette erreur avec ${idea || "vos vidéos"} !`, score: 87 },
+        { id: 5, text: `Le guide ultime étape par étape : ${idea || "réussir à coup sûr"}`, score: 82 }
+      ];
       setTitles(generated);
       setIsAnalyzing(false);
       setSelectedTitle(null);
-    }, 2000);
+    }, 1000);
   };
 
   return (

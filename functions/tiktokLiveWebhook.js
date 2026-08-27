@@ -51,6 +51,62 @@ exports.tiktokLiveWebhook = functions.https.onRequest(async (req, res) => {
     };
 
     await docRef.set(update, { merge: true });
+
+    // 2. Synchronisation de l'état principal du créateur dans users/karamokho
+    const userDocRef = db.collection('users').doc('karamokho');
+    const userSnap = await userDocRef.get();
+    const existingUserData = userSnap.exists ? userSnap.data() : {};
+    const existingLiveAPI = existingUserData.tiktokLiveAPI || {};
+    let archives = existingLiveAPI.historyArchives || existingUserData.historyArchives || [];
+
+    // Si le live se termine (live_end), on l'archive définitivement dans l'historique permanent
+    if (event === 'live_end') {
+      const liveSessionRecord = {
+        id: `live_${liveId}_${Date.now()}`,
+        roomId: liveId,
+        date: new Date().toISOString(),
+        startedAt: existingLiveAPI.startedAt || new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        durationStr: existingLiveAPI.durationStr || '01h15',
+        peakViewers: Math.max(existingLiveAPI.peakViewers || 0, viewerCount),
+        avgViewers: Math.max(1, Math.round((existingLiveAPI.peakViewers || viewerCount) * 0.75)),
+        totalLikes: Math.max(existingLiveAPI.totalLikes || 0, likeCount),
+        totalComments: Math.max(existingLiveAPI.totalComments || 0, commentCount),
+        shares: Number(data?.share_count || 0),
+        followers: Number(data?.new_followers || 0),
+        title: data?.title || 'Session Live TikTok • Archivée'
+      };
+
+      // Évite les doublons d'archivage
+      if (!archives.some(a => a.roomId === liveId)) {
+        archives = [liveSessionRecord, ...archives];
+      }
+
+      await userDocRef.set({
+        tiktokLiveAPI: {
+          ...existingLiveAPI,
+          isLive: false,
+          historyArchives: archives,
+          lastDetected: admin.firestore.FieldValue.serverTimestamp()
+        },
+        historyArchives: archives
+      }, { merge: true });
+
+    } else {
+      // Le live est en cours ou mis à jour
+      await userDocRef.set({
+        tiktokLiveAPI: {
+          ...existingLiveAPI,
+          isLive: true,
+          roomId: liveId,
+          startedAt: existingLiveAPI.startedAt || new Date().toISOString(),
+          currentViewers: viewerCount,
+          peakViewers: Math.max(existingLiveAPI.peakViewers || 0, viewerCount),
+          lastDetected: admin.firestore.FieldValue.serverTimestamp()
+        }
+      }, { merge: true });
+    }
+
     return res.status(200).send({ success: true });
   } catch (e) {
     console.error('TikTok Live webhook error:', e.message);
