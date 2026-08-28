@@ -1,13 +1,9 @@
 const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
-const db = admin.firestore();
-
 // Topic name must match the Pub/Sub topic created in GCP (e.g., youtube-live-events)
 exports.youtubeLivePush = functions.pubsub.topic('youtube-live-events').onPublish(async (message) => {
+  const db = admin.firestore();
   try {
     if (!message || !message.data) {
       console.warn('YouTube Live Pub/Sub handler: Message data is empty.');

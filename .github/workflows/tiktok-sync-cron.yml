@@ -4,17 +4,22 @@ on:
   schedule:
     # Exécution automatique toutes les heures (0 * * * *)
     - cron: '0 * * * *'
-  workflow_dispatch: # Permet également un déclenchement manuel en 1 clic
+  workflow_dispatch: # Déclenchement manuel
 
 jobs:
   sync-tiktok-metrics:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping TikTok Force Sync Cloud Function
-        run: |
-          echo  Triggering TikTok live metrics sync...
-          curl -X POST https://us-central1-lumina-analytics-kd-2026.cloudfunctions.net/forceSyncTikTok \
-            -H Content-Type: application/json \
-            --max-time 60 \
-            --retry 3 || true
-          echo TikTok Sync completed successfully.
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Firebase dependencies
+        run: npm install firebase
+
+      - name: Execute Live TikTok Sync to Firestore
+        run: node scripts/sync-tiktok.mjs

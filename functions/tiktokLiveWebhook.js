@@ -3,12 +3,8 @@ const functions = require('firebase-functions/v1');
 const admin = require('firebase-admin');
 const { getSecret } = require('./secrets');
 
-if (!admin.apps.length) {
-  admin.initializeApp();
-}
-const db = admin.firestore();
-
 exports.tiktokLiveWebhook = functions.https.onRequest(async (req, res) => {
+  const db = admin.firestore();
   if (req.method !== 'POST') {
     return res.status(405).send({ success: false, error: 'Method Not Allowed' });
   }
