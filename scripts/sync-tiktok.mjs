@@ -1,6 +1,6 @@
 ﻿import fs from 'fs';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
   projectId: 'lumina-analytics-kd-2026',
@@ -100,7 +100,7 @@ async function fetchLiveVideoStats(videoId) {
 }
 
 async function syncAllVideos() {
-  console.log('Demarrage de la synchronisation complete (Videos + Profil + Lives Discord)...');
+  console.log('Demarrage de la synchronisation complete (Videos + Profil + Verification Lives)...');
   
   const userDocRef = doc(db, 'users', 'karamokho');
   const snap = await getDoc(userDocRef);
@@ -146,7 +146,6 @@ async function syncAllVideos() {
     console.warn('Erreur profil global:', e.message);
   }
 
-  // --- DETECTION LIVE YOUTUBE ---
   let isYouTubeLive = false;
   try {
     const ytRes = await fetch('https://www.youtube.com/@karamdrm/live', {
@@ -162,18 +161,18 @@ async function syncAllVideos() {
     console.warn('Erreur verif YouTube Live:', e.message);
   }
 
-  // Verification des nouvelles sessions et envoi des alertes Discord
-  const autoBroadcastEnabled = userData.autoBroadcastEnabled !== false; // Active par defaut
+  // SECURITE STRICTE : Desactive par defaut, envoi uniquement si Karam a active manuellement le switch
+  const autoBroadcastEnabled = (userData.autoBroadcastEnabled === true || userData.tiktokLiveAPI?.autoBroadcastEnabled === true);
   const prevTikTokLive = userData.tiktokLiveAPI?.isLive || false;
   const prevYouTubeLive = userData.youtubeLiveAPI?.isLive || false;
 
   if (isTikTokLive && !prevTikTokLive && autoBroadcastEnabled) {
-    console.log('🚨 NOUVEAU LIVE TIKTOK DETECTE -> Envoi alerte Discord...');
+    console.log('Notification Discord autorisee pour TikTok Live.');
     await sendDiscordLiveNotification('TikTok', 'Karamokho est en direct sur TikTok !', 'https://www.tiktok.com/@karam.drame/live');
   }
 
   if (isYouTubeLive && !prevYouTubeLive && autoBroadcastEnabled) {
-    console.log('🚨 NOUVEAU LIVE YOUTUBE DETECTE -> Envoi alerte Discord...');
+    console.log('Notification Discord autorisee pour YouTube Live.');
     await sendDiscordLiveNotification('YouTube', 'Karamokho est en direct sur YouTube !', 'https://www.youtube.com/@karamdrm/live');
   }
 
@@ -232,8 +231,7 @@ async function syncAllVideos() {
     'tiktokAPI.videoAnalytics': videoAnalytics,
     'tiktokAPI.lastSync': new Date().toISOString(),
     'tiktokLiveAPI.isLive': isTikTokLive,
-    'youtubeLiveAPI.isLive': isYouTubeLive,
-    'autoBroadcastEnabled': autoBroadcastEnabled
+    'youtubeLiveAPI.isLive': isYouTubeLive
   };
 
   console.log('TOTAUX ACTUALISES : ' + totalViews + ' vues cumulees, ' + totalLikes + ' likes, ' + liveFollowers + ' followers.');
