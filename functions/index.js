@@ -277,22 +277,26 @@ exports.forceSyncYouTube = functions.https.onRequest(async (req, res) => {
 });
 
 // ==========================================
-// TIKTOK INTEGRATION
+// TIKTOK INTEGRATION (100% Dynamique & Auto-Refresh)
 // ==========================================
-const TIKTOK_CLIENT_KEY = process.env.TIKTOK_CLIENT_KEY || 'MISSING_CLIENT_KEY';
-const TIKTOK_CLIENT_SECRET = process.env.TIKTOK_CLIENT_SECRET || 'MISSING_CLIENT_SECRET';
 const TIKTOK_REDIRECT_URI = 'https://us-central1-lumina-analytics-kd-2026.cloudfunctions.net/tiktokCallback';
 
-exports.tiktokAuth = functions.https.onRequest((req, res) => {
-  const csrfState = Math.random().toString(36).substring(2);
-  let url = 'https://www.tiktok.com/v2/auth/authorize/';
-  url += `?client_key=${TIKTOK_CLIENT_KEY}`;
-  url += '&scope=user.info.basic,user.info.stats,video.list';
-  url += '&response_type=code';
-  url += `&redirect_uri=${encodeURIComponent(TIKTOK_REDIRECT_URI)}`;
-  url += '&state=' + csrfState;
-  
-  res.redirect(url);
+exports.tiktokAuth = functions.https.onRequest(async (req, res) => {
+  try {
+    const clientKey = (await getSecret('TIKTOK_CLIENT_KEY')) || process.env.TIKTOK_CLIENT_KEY;
+    const csrfState = Math.random().toString(36).substring(2);
+    let url = 'https://www.tiktok.com/v2/auth/authorize/';
+    url += `?client_key=${clientKey}`;
+    url += '&scope=user.info.basic,user.info.stats,video.list';
+    url += '&response_type=code';
+    url += `&redirect_uri=${encodeURIComponent(TIKTOK_REDIRECT_URI)}`;
+    url += '&state=' + csrfState;
+    
+    res.redirect(url);
+  } catch (error) {
+    console.error('Error in tiktokAuth:', error);
+    res.status(500).send('Failed to initiate auth: ' + error.message);
+  }
 });
 
 exports.tiktokCallback = functions.https.onRequest(async (req, res) => {
@@ -302,9 +306,12 @@ exports.tiktokCallback = functions.https.onRequest(async (req, res) => {
   }
 
   try {
+    const clientKey = (await getSecret('TIKTOK_CLIENT_KEY')) || process.env.TIKTOK_CLIENT_KEY;
+    const clientSecret = (await getSecret('TIKTOK_CLIENT_SECRET')) || process.env.TIKTOK_CLIENT_SECRET;
+
     const params = new URLSearchParams();
-    params.append('client_key', TIKTOK_CLIENT_KEY);
-    params.append('client_secret', TIKTOK_CLIENT_SECRET);
+    params.append('client_key', clientKey);
+    params.append('client_secret', clientSecret);
     params.append('code', code);
     params.append('grant_type', 'authorization_code');
     params.append('redirect_uri', TIKTOK_REDIRECT_URI);
@@ -359,39 +366,43 @@ exports.forceSyncTikTok = functions.https.onRequest(async (req, res) => {
     }
 
     let authData = docSnap.data().tiktokAuth;
+    const clientKey = (await getSecret('TIKTOK_CLIENT_KEY')) || process.env.TIKTOK_CLIENT_KEY;
+    const clientSecret = (await getSecret('TIKTOK_CLIENT_SECRET')) || process.env.TIKTOK_CLIENT_SECRET;
     
     // Tentative d'appel
     let response = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=follower_count,following_count,likes_count,video_count,avatar_url,display_name', {
       headers: { 'Authorization': `Bearer ${authData.accessToken}` }
     });
 
-    if (response.status === 401) {
-      // Access token expiré, on utilise le refresh token
-      const params = new URLSearchParams();
-      params.append('client_key', TIKTOK_CLIENT_KEY);
-      params.append('client_secret', TIKTOK_CLIENT_SECRET);
-      params.append('grant_type', 'refresh_token');
-      params.append('refresh_token', authData.refreshToken);
+    if (response.status === 401 || !response.ok) {
+      // Access token expiré ou erreur d'auth, on utilise le refresh token
+      if (authData.refreshToken && clientKey && clientSecret) {
+        const params = new URLSearchParams();
+        params.append('client_key', clientKey);
+        params.append('client_secret', clientSecret);
+        params.append('grant_type', 'refresh_token');
+        params.append('refresh_token', authData.refreshToken);
 
-      const refreshRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: params.toString()
-      });
+        const refreshRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
 
-      const refreshData = await refreshRes.json();
-      if (!refreshData.access_token) throw new Error("Impossible de rafraichir le token");
+        const refreshData = await refreshRes.json();
+        if (refreshData.access_token) {
+          authData.accessToken = refreshData.access_token;
+          authData.refreshToken = refreshData.refresh_token || authData.refreshToken;
+          authData.updatedAt = FieldValue.serverTimestamp();
 
-      authData.accessToken = refreshData.access_token;
-      authData.refreshToken = refreshData.refresh_token;
-      authData.updatedAt = FieldValue.serverTimestamp();
+          await userRef.set({ tiktokAuth: authData }, { merge: true });
 
-      await userRef.set({ tiktokAuth: authData }, { merge: true });
-
-      // Retry
-      response = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=follower_count,following_count,likes_count,video_count,avatar_url,display_name', {
-        headers: { 'Authorization': `Bearer ${authData.accessToken}` }
-      });
+          // Retry après renouvellement
+          response = await fetch('https://open.tiktokapis.com/v2/user/info/?fields=follower_count,following_count,likes_count,video_count,avatar_url,display_name', {
+            headers: { 'Authorization': `Bearer ${authData.accessToken}` }
+          });
+        }
+      }
     }
 
     if (!response.ok) throw new Error(`Erreur API Info: ${response.status}`);
