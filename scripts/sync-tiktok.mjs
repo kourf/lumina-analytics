@@ -24,7 +24,8 @@ async function fetchLiveVideoStats(videoId) {
         'User-Agent': USER_AGENT,
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
         'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-        'Cache-Control': 'no-cache'
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache'
       }
     });
 
@@ -77,7 +78,7 @@ async function syncAllVideos() {
 
   try {
     const profileRes = await fetch('https://www.tiktok.com/@karam.drame', {
-      headers: { 'User-Agent': USER_AGENT, 'Accept': 'text/html', 'Accept-Language': 'fr-FR,fr;q=0.9' }
+      headers: { 'User-Agent': USER_AGENT, 'Accept': 'text/html', 'Accept-Language': 'fr-FR,fr;q=0.9', 'Cache-Control': 'no-cache' }
     });
     if (profileRes.ok) {
       const html = await profileRes.text();
@@ -111,14 +112,14 @@ async function syncAllVideos() {
       if (liveStats) {
         updatedVideos[realIndex] = {
           ...v,
-          views: Math.max(v.views || 0, liveStats.views),
-          likes: Math.max(v.likes || 0, liveStats.likes),
-          comments: Math.max(v.comments || 0, liveStats.comments),
-          shares: Math.max(v.shares || 0, liveStats.shares),
+          views: liveStats.views,
+          likes: liveStats.likes,
+          comments: liveStats.comments,
+          shares: liveStats.shares,
           coverUrl: liveStats.coverUrl || v.coverUrl,
           title: liveStats.title || v.title
         };
-        console.log('[' + (realIndex + 1) + '/' + updatedVideos.length + '] Video ' + v.id + ' : ' + updatedVideos[realIndex].views + ' vues, ' + updatedVideos[realIndex].likes + ' likes');
+        console.log('[' + (realIndex + 1) + '/' + updatedVideos.length + '] Video ' + v.id + ' : ' + updatedVideos[realIndex].views + ' vues, ' + updatedVideos[realIndex].likes + ' likes, ' + updatedVideos[realIndex].shares + ' partages');
       } else {
         console.log('[' + (realIndex + 1) + '/' + updatedVideos.length + '] Video ' + v.id + ' conservee');
       }
