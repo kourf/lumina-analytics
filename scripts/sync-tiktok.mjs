@@ -1,6 +1,6 @@
 ﻿import fs from 'fs';
 import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
+import { getFirestore, doc, getDoc, updateDoc, setDoc } from 'firebase/firestore';
 
 const firebaseConfig = {
   projectId: 'lumina-analytics-kd-2026',
@@ -15,6 +15,47 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/1540098204714930319/w71fW-1Am_A4LVtIFg-2-b8s9J5Vryi32q_0LwTB76kX_j-yRQMhFMVRYt8wpiPqwPa9';
+
+async function sendDiscordLiveNotification(platform, title, liveUrl) {
+  try {
+    const isYouTube = platform === 'YouTube';
+    const payload = {
+      username: 'Karam Live',
+      avatar_url: 'https://p16-common-sign.tiktokcdn-eu.com/tos-no1a-avt-0068c001-no/0ace94e1ff2808e8032a8a8af1799c75~tplv-tiktokx-cropcenter:1080:1080.jpeg',
+      content: '@everyone 🔴 **Karamokho est actuellement EN DIRECT sur ' + platform + ' !**',
+      embeds: [{
+        title: '🔴 [DIRECT] REJOINDRE LE LIVE STREAM SUR ' + platform.toUpperCase(),
+        url: liveUrl,
+        description: '🚀 **Karamokho DRAMÉ (@' + (isYouTube ? 'karamdrm' : 'karam.drame') + ')** a démarré une session live !\n\nVenez participer, poser vos questions et suivre la session en direct.\n\n👉 **[🔴 CLIQUEZ ICI POUR REJOINDRE LE DIRECT (1 CLIC) ↗](' + liveUrl + ')**',
+        color: isYouTube ? 16711680 : 2487534,
+        thumbnail: {
+          url: isYouTube ? 'https://cdn-icons-png.flaticon.com/512/1384/1384060.png' : 'https://cdn-icons-png.flaticon.com/512/3046/3046121.png'
+        },
+        fields: [
+          { name: '📺 Plateforme', value: platform + ' Live', inline: true },
+          { name: '⚡ Statut', value: '🔴 EN DIRECT', inline: true },
+          { name: '👤 Créateur', value: '@' + (isYouTube ? 'karamdrm' : 'karam.drame'), inline: true },
+          { name: '🔗 Lien d\'accès direct', value: '[**' + liveUrl.replace('https://', '') + '**](' + liveUrl + ')', inline: false }
+        ],
+        footer: {
+          text: 'Lumina Analytics • Alerte Automatique ' + platform + ' Live'
+        },
+        timestamp: new Date().toISOString()
+      }]
+    };
+
+    const res = await fetch(DISCORD_WEBHOOK_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    console.log('Discord Webhook (' + platform + ') envoyé avec statut:', res.status);
+  } catch (e) {
+    console.error('Erreur webhook Discord:', e.message);
+  }
+}
 
 async function fetchLiveVideoStats(videoId) {
   try {
@@ -59,7 +100,7 @@ async function fetchLiveVideoStats(videoId) {
 }
 
 async function syncAllVideos() {
-  console.log('Demarrage de la synchronisation des 71 videos TikTok...');
+  console.log('Demarrage de la synchronisation complete (Videos + Profil + Lives Discord)...');
   
   const userDocRef = doc(db, 'users', 'karamokho');
   const snap = await getDoc(userDocRef);
@@ -75,6 +116,7 @@ async function syncAllVideos() {
   let liveFollowers = userData.tiktokAPI?.followers || 6163;
   let liveTotalLikes = userData.tiktokAPI?.totalLikes || 16000;
   let liveAvatar = userData.tiktokAPI?.avatar_url || '';
+  let isTikTokLive = false;
 
   try {
     const profileRes = await fetch('https://www.tiktok.com/@karam.drame', {
@@ -95,10 +137,44 @@ async function syncAllVideos() {
         if (userDetail?.userInfo?.user?.avatarLarger) {
           liveAvatar = userDetail.userInfo.user.avatarLarger;
         }
+        if (userDetail?.userInfo?.user?.status === 2 || userDetail?.userInfo?.user?.roomId) {
+          isTikTokLive = true;
+        }
       }
     }
   } catch (e) {
     console.warn('Erreur profil global:', e.message);
+  }
+
+  // --- DETECTION LIVE YOUTUBE ---
+  let isYouTubeLive = false;
+  try {
+    const ytRes = await fetch('https://www.youtube.com/@karamdrm/live', {
+      headers: { 'User-Agent': USER_AGENT, 'Accept-Language': 'fr-FR,fr;q=0.9', 'Cache-Control': 'no-cache' }
+    });
+    if (ytRes.ok) {
+      const ytHtml = await ytRes.text();
+      if (ytHtml.includes(' isLive:true') || ytHtml.includes('style:LIVE')) {
+        isYouTubeLive = true;
+      }
+    }
+  } catch(e) {
+    console.warn('Erreur verif YouTube Live:', e.message);
+  }
+
+  // Verification des nouvelles sessions et envoi des alertes Discord
+  const autoBroadcastEnabled = userData.autoBroadcastEnabled !== false; // Active par defaut
+  const prevTikTokLive = userData.tiktokLiveAPI?.isLive || false;
+  const prevYouTubeLive = userData.youtubeLiveAPI?.isLive || false;
+
+  if (isTikTokLive && !prevTikTokLive && autoBroadcastEnabled) {
+    console.log('🚨 NOUVEAU LIVE TIKTOK DETECTE -> Envoi alerte Discord...');
+    await sendDiscordLiveNotification('TikTok', 'Karamokho est en direct sur TikTok !', 'https://www.tiktok.com/@karam.drame/live');
+  }
+
+  if (isYouTubeLive && !prevYouTubeLive && autoBroadcastEnabled) {
+    console.log('🚨 NOUVEAU LIVE YOUTUBE DETECTE -> Envoi alerte Discord...');
+    await sendDiscordLiveNotification('YouTube', 'Karamokho est en direct sur YouTube !', 'https://www.youtube.com/@karamdrm/live');
   }
 
   const updatedVideos = [...videos];
@@ -154,7 +230,10 @@ async function syncAllVideos() {
     'tiktokAPI.avatar_url': liveAvatar,
     'tiktokAPI.recentVideos': updatedVideos,
     'tiktokAPI.videoAnalytics': videoAnalytics,
-    'tiktokAPI.lastSync': new Date().toISOString()
+    'tiktokAPI.lastSync': new Date().toISOString(),
+    'tiktokLiveAPI.isLive': isTikTokLive,
+    'youtubeLiveAPI.isLive': isYouTubeLive,
+    'autoBroadcastEnabled': autoBroadcastEnabled
   };
 
   console.log('TOTAUX ACTUALISES : ' + totalViews + ' vues cumulees, ' + totalLikes + ' likes, ' + liveFollowers + ' followers.');
