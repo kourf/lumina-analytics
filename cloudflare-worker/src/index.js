@@ -1,4 +1,4 @@
-﻿export default {
+export default {
   async fetch(request, env, ctx) {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
@@ -12,6 +12,15 @@
     }
 
     if (request.method === 'GET') {
+      const url = new URL(request.url);
+      const challenge = url.searchParams.get('challenge');
+      if (challenge) {
+        return new Response(challenge, {
+          status: 200,
+          headers: { 'Content-Type': 'text/plain', 'Access-Control-Allow-Origin': '*' }
+        });
+      }
+
       return new Response(JSON.stringify({
         status: 'online',
         service: 'TikTok Live Webhook Gateway',
