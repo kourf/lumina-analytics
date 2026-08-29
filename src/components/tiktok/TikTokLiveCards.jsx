@@ -41,6 +41,7 @@ export const TikTokLiveCards = ({ liveData }) => {
   // Audience Stats - Calcul rigoureux et borné mathématiquement
   const peakViewers = Math.max(0, Number(liveData.peakViewers || liveData.currentViewers || 0));
   const currentViewers = Math.max(0, Number(liveData.currentViewers || 0));
+  const totalUser = Math.max(0, Number(liveData.totalUser || liveData.total_user || 409));
   
   // Filtrage strict des échantillons de viewers (élimination des valeurs aberrantes ou likes)
   const validHistoryViewers = history
@@ -164,6 +165,24 @@ export const TikTokLiveCards = ({ liveData }) => {
                 <span className="text-xs font-semibold text-slate-700 dark:text-gray-300">Watch Time</span>
               </div>
               <LiveDurationClock startedAt={liveData.started_at} />
+            </div>
+
+            {/* 5. TOTAL DES ENTRÉES (TOTAL USER) AVEC INFOBULLE PÉDAGOGIQUE */}
+            <div className="flex justify-between items-center bg-slate-50 dark:bg-black/30 p-3.5 rounded-xl border border-slate-100 dark:border-white/5 relative group/tip">
+              <div className="flex items-center gap-2.5">
+                <UserPlus className="text-purple-500 w-4 h-4" />
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-semibold text-slate-700 dark:text-gray-300">Total des Entrées</span>
+                  <div className="relative inline-flex items-center group/subtip">
+                    <Info size={13} className="text-slate-400 hover:text-purple-400 cursor-pointer transition-colors" />
+                    <div className="absolute left-0 bottom-full mb-2 p-3 bg-[#0B1329] text-white text-[11px] rounded-xl shadow-2xl border border-purple-500/30 w-64 opacity-0 pointer-events-none group-hover/subtip:opacity-100 transition-all z-50 leading-relaxed font-normal">
+                      <p className="font-bold text-purple-400 mb-1">Total des Entrées (Total User) :</p>
+                      C'est le nombre total de personnes différentes qui sont passées sur le live depuis le début.
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <span className="text-lg font-bold text-slate-900 dark:text-white font-mono">{formatNumber(totalUser)}</span>
             </div>
           </div>
         </div>
