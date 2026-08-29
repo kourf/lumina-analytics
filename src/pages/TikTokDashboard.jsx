@@ -19,8 +19,24 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     document.documentElement.classList.add('dark');
     localStorage.theme = 'dark';
 
-    // Option 3 : Synchronisation Réactive automatique à l'ouverture du Dashboard
+    // Synchronisation Réactive automatique à l'ouverture du Dashboard
     handleManualRefresh();
+
+    // Actualisation dynamique en temps réel du live via notre passerelle Cloudflare Edge toutes les 15 secondes
+    const fetchLiveEdge = async () => {
+      try {
+        await fetch('https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status');
+      } catch (err) {
+        // En cas d'indisponibilité temporaire, Firestore conserve la dernière valeur
+      }
+    };
+
+    fetchLiveEdge();
+    const interval = setInterval(fetchLiveEdge, 15000);
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
   }, []);
 
   const handleManualRefresh = async () => {
@@ -28,6 +44,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
       setLoading(true);
       // Synchronisation directe des métriques réactives
       window.dispatchEvent(new CustomEvent('tiktok:refresh'));
+      await fetch('https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status').catch(() => {});
     } catch (e) {
       console.error("Erreur de synchronisation TikTok :", e);
     } finally {

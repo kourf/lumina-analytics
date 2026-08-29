@@ -1,3 +1,5 @@
 name = "lumina-tiktok-webhook"
 main = "src/index.js"
 compatibility_date = "2024-01-01"
+account_id = "886180ad14663d4e27ed8d11291db876"
+workers_dev = true
