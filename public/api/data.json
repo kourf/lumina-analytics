@@ -1026,8 +1026,8 @@
     ]
   },
   "tiktokLiveAPI": {
-    "isLive": true,
-    "currentViewers": 9,
+    "isLive": false,
+    "currentViewers": 0,
     "lastDetected": "2026-07-29T23:40:00.000Z",
     "peakViewers": 33,
     "history": [
@@ -1046,39 +1046,46 @@
     ],
     "historyArchives": [
       {
-        "date": "2026-07-20T18:00:00Z",
-        "durationStr": "1h15",
-        "avgViewers": 120,
-        "peakViewers": 210
-      },
-      {
-        "date": "2026-07-21T19:30:00Z",
-        "durationStr": "2h05",
-        "avgViewers": 250,
-        "peakViewers": 430
-      },
-      {
-        "date": "2026-07-23T18:15:00Z",
-        "durationStr": "45 min",
-        "avgViewers": 85,
-        "peakViewers": 150
-      },
-      {
-        "date": "2026-07-25T20:00:00Z",
-        "durationStr": "1h40",
-        "avgViewers": 310,
-        "peakViewers": 680
-      },
-      {
-        "date": "2026-07-28T19:00:00Z",
-        "durationStr": "2h30",
-        "avgViewers": 540,
-        "peakViewers": 1120
+        "id": "live_7679407957632633622",
+        "roomId": "7679407957632633622",
+        "date": "2026-08-29T11:05:34.000Z",
+        "startedAt": "2026-08-29T11:05:34.000Z",
+        "endedAt": "2026-08-29T13:15:19.000Z",
+        "durationStr": "02h10",
+        "durationMinutes": 130,
+        "peakViewers": 33,
+        "avgViewers": 14,
+        "totalUser": 602,
+        "totalLikes": 2450,
+        "totalComments": 430,
+        "shares": 38,
+        "followers": 6,
+        "title": "Analyse de votre site !"
       }
     ],
     "roomId": "7679407957632633622",
     "title": "Analyse de votre site !",
     "likes": 1491,
-    "started_at": "2026-08-29T11:05:34.000Z"
-  }
+    "started_at": "2026-08-29T11:05:34.000Z",
+    "totalUser": 602
+  },
+  "historyArchives": [
+    {
+      "id": "live_7679407957632633622",
+      "roomId": "7679407957632633622",
+      "date": "2026-08-29T11:05:34.000Z",
+      "startedAt": "2026-08-29T11:05:34.000Z",
+      "endedAt": "2026-08-29T13:15:19.000Z",
+      "durationStr": "02h10",
+      "durationMinutes": 130,
+      "peakViewers": 33,
+      "avgViewers": 14,
+      "totalUser": 602,
+      "totalLikes": 2450,
+      "totalComments": 430,
+      "shares": 38,
+      "followers": 6,
+      "title": "Analyse de votre site !"
+    }
+  ]
 }
