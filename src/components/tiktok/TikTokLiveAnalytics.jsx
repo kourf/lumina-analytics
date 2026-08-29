@@ -519,7 +519,7 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
 
         {/* Cartes Métriques Détaillées & Tchat */}
         <div className="mt-8 space-y-8">
-          <TikTokLiveCards liveData={displayData} />
+          <TikTokLiveCards liveData={{ ...displayData, ...(activeSession || {}), isLive: Boolean(activeSession?.isCurrent || isLive || displayData?.isLive) }} />
           
           <TikTokLiveHistory 
             historyArchives={historyArchives} 
