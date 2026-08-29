@@ -116,7 +116,15 @@ async function syncAllVideos() {
   let liveFollowers = userData.tiktokAPI?.followers || 6163;
   let liveTotalLikes = userData.tiktokAPI?.totalLikes || 16000;
   let liveAvatar = userData.tiktokAPI?.avatar_url || '';
+  
+  // LIVE TIKTOK VARIABLES
   let isTikTokLive = false;
+  let liveRoomId = null;
+  let liveTitle = 'Session Live TikTok';
+  let liveCurrentViewers = 0;
+  let livePeakViewers = Number(userData.tiktokLiveAPI?.peakViewers || 0);
+  let liveStartedAt = userData.tiktokLiveAPI?.started_at || new Date().toISOString();
+  let liveLikes = Number(userData.tiktokLiveAPI?.likes || 0);
 
   try {
     const profileRes = await fetch('https://www.tiktok.com/@karam.drame', {
@@ -130,15 +138,41 @@ async function syncAllVideos() {
         const endTag = html.indexOf('</script>', tagClose);
         const json = JSON.parse(html.substring(tagClose + 1, endTag));
         const userDetail = json.__DEFAULT_SCOPE__?.['webapp.user-detail'];
+        const userInfo = userDetail?.userInfo?.user;
         if (userDetail?.userInfo?.stats) {
           liveFollowers = userDetail.userInfo.stats.followerCount || liveFollowers;
           liveTotalLikes = userDetail.userInfo.stats.heart || userDetail.userInfo.stats.heartCount || liveTotalLikes;
         }
-        if (userDetail?.userInfo?.user?.avatarLarger) {
-          liveAvatar = userDetail.userInfo.user.avatarLarger;
+        if (userInfo?.avatarLarger) {
+          liveAvatar = userInfo.avatarLarger;
         }
-        if (userDetail?.userInfo?.user?.status === 2 || userDetail?.userInfo?.user?.roomId) {
-          isTikTokLive = true;
+
+        // Detection Live via Webcast API
+        if (userInfo?.roomId) {
+          liveRoomId = userInfo.roomId;
+          console.log('Room ID detecte sur profil:', liveRoomId);
+          try {
+            const webcastRes = await fetch('https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=' + liveRoomId, {
+              headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json', 'Referer': 'https://www.tiktok.com/@karam.drame' }
+            });
+            if (webcastRes.ok) {
+              const roomJson = await webcastRes.json();
+              const room = roomJson.data;
+              if (room && (room.status === 2 || room.status === 4)) {
+                isTikTokLive = true;
+                liveTitle = room.title || liveTitle;
+                liveCurrentViewers = Number(room.user_count || 0);
+                livePeakViewers = Math.max(livePeakViewers, liveCurrentViewers);
+                liveLikes = Math.max(liveLikes, Number(room.like_count || 0));
+                if (room.create_time) {
+                  liveStartedAt = new Date(room.create_time * 1000).toISOString();
+                }
+                console.log('🔴 LIVE TIKTOK EN COURS :', liveTitle, 'Viewers:', liveCurrentViewers);
+              }
+            }
+          } catch(webcastErr) {
+            console.warn('Erreur webcast room info:', webcastErr.message);
+          }
         }
       }
     }
@@ -194,9 +228,6 @@ async function syncAllVideos() {
           coverUrl: liveStats.coverUrl || v.coverUrl,
           title: liveStats.title || v.title
         };
-        console.log('[' + (realIndex + 1) + '/' + updatedVideos.length + '] Video ' + v.id + ' : ' + updatedVideos[realIndex].views + ' vues, ' + updatedVideos[realIndex].likes + ' likes, ' + updatedVideos[realIndex].shares + ' partages');
-      } else {
-        console.log('[' + (realIndex + 1) + '/' + updatedVideos.length + '] Video ' + v.id + ' conservee');
       }
     });
 
@@ -231,10 +262,21 @@ async function syncAllVideos() {
     'tiktokAPI.videoAnalytics': videoAnalytics,
     'tiktokAPI.lastSync': new Date().toISOString(),
     'tiktokLiveAPI.isLive': isTikTokLive,
+    'tiktokLiveAPI.roomId': liveRoomId || userData.tiktokLiveAPI?.roomId || '',
+    'tiktokLiveAPI.title': liveTitle,
+    'tiktokLiveAPI.currentViewers': liveCurrentViewers,
+    'tiktokLiveAPI.peakViewers': livePeakViewers,
+    'tiktokLiveAPI.likes': liveLikes,
+    'tiktokLiveAPI.started_at': liveStartedAt,
+    'tiktokLiveAPI.lastDetected': new Date().toISOString(),
+    'tiktokAPI.isLive': isTikTokLive,
     'youtubeLiveAPI.isLive': isYouTubeLive
   };
 
   console.log('TOTAUX ACTUALISES : ' + totalViews + ' vues cumulees, ' + totalLikes + ' likes, ' + liveFollowers + ' followers.');
+  if (isTikTokLive) {
+    console.log('🔴 LIVE TIKTOK ENREGISTRE DANS FIRESTORE AVEC SUCCES : ' + liveTitle + ' (' + liveCurrentViewers + ' spectateurs)');
+  }
 
   await updateDoc(userDocRef, payload);
   console.log('Firestore mis a jour avec succes !');
@@ -254,7 +296,18 @@ async function syncAllVideos() {
         avatar_url: liveAvatar,
         recentVideos: updatedVideos,
         videoAnalytics,
+        isLive: isTikTokLive,
         lastSync: new Date().toISOString()
+      };
+      currentJson.tiktokLiveAPI = {
+        ...(currentJson.tiktokLiveAPI || {}),
+        isLive: isTikTokLive,
+        roomId: liveRoomId,
+        title: liveTitle,
+        currentViewers: liveCurrentViewers,
+        peakViewers: livePeakViewers,
+        likes: liveLikes,
+        started_at: liveStartedAt
       };
       fs.writeFileSync(dataJsonPath, JSON.stringify(currentJson, null, 2), 'utf8');
       console.log('public/api/data.json synchronise !');
