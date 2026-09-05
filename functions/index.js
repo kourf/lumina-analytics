@@ -1272,8 +1272,22 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             }, 270000); 
         });
     } catch(e) {
-       console.error("Daemon Live erreur:", e);
-       return { status: 'error', error: e.message };
+       console.error("Daemon Live erreur (stream inactif ou erreur API):", e.message);
+       try {
+         // Sécurité absolue : si une erreur survient, on ne laisse jamais un état LIVE fantôme
+         if (existingData.isLive) {
+           await userRef.set({
+             tiktokLiveAPI: {
+               isLive: false,
+               currentViewers: 0,
+               ended_at: FieldValue.serverTimestamp()
+             }
+           }, { merge: true });
+         }
+       } catch (dbErr) {
+         console.warn("Erreur fallback Firestore liveWorkerDaemon:", dbErr.message);
+       }
+       return { status: 'offline', error: e.message };
     }
 });
 

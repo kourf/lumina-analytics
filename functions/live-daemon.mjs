@@ -37,14 +37,14 @@ let isConnected = false;
 let updateTimeout = null;
 
 let stateData = {
-  isLive: true,
+  isLive: false,
   likes: 12700,
   shares: 152,
   followers: 87,
   comments: 457,
-  currentViewers: 13,
+  currentViewers: 0,
   peakViewers: 89,
-  started_at: new Date().toISOString(),
+  started_at: null,
   roomId: '',
   topQuestions: [],
   topComments: [],
@@ -240,8 +240,10 @@ async function connectToLive() {
     });
 
   } catch (err) {
-    console.error(`[Lumina Daemon] Erreur connexion TikTok:`, err.message);
+    console.error(`[Lumina Daemon] Erreur connexion TikTok (stream inactif ou erreur):`, err.message);
     isConnected = false;
+    stateData.isLive = false;
+    scheduleFirestoreSync();
     setTimeout(connectToLive, 15000);
   }
 }

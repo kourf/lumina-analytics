@@ -915,7 +915,7 @@
     "display_name": "Karam",
     "lastSync": "2026-08-29T11:40:03.693Z",
     "comments": 319,
-    "isLive": true
+    "isLive": false
   },
   "linkedin": {
     "followers": 1715,
@@ -1067,7 +1067,8 @@
     "title": "Analyse de votre site !",
     "likes": 1491,
     "started_at": "2026-08-29T11:05:34.000Z",
-    "totalUser": 602
+    "totalUser": 602,
+    "autoBroadcastEnabled": false
   },
   "historyArchives": [
     {
@@ -1087,5 +1088,6 @@
       "followers": 6,
       "title": "Analyse de votre site !"
     }
-  ]
+  ],
+  "autoBroadcastEnabled": false
 }

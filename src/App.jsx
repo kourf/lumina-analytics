@@ -77,6 +77,7 @@ function App() {
               ...(baseData.tiktok || {}),
               ...(firebaseData.tiktok || {}),
               ...(firebaseData.tiktokAPI || {}),
+              isLive: Boolean(firebaseData.tiktokLiveAPI?.isLive === true && (firebaseData.tiktokLiveAPI?.status === 2 || firebaseData.tiktokLiveAPI?.roomId)),
               recentVideos: realRecentVideos,
               followers: firebaseData.tiktokAPI?.followers || firebaseData.tiktok?.followers || baseData.tiktok?.followers || 6158,
               likes: firebaseData.tiktokAPI?.likes || firebaseData.tiktok?.likes || baseData.tiktok?.likes || 15955,

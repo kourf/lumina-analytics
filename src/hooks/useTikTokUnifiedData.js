@@ -1,4 +1,5 @@
 import { useMemo } from 'react';
+import { validateTrueLiveCondition } from '../services/tiktokLiveService';
 
 export function useTikTokUnifiedData(rawTikTokData, liveData) {
   return useMemo(() => {
@@ -30,6 +31,10 @@ export function useTikTokUnifiedData(rawTikTokData, liveData) {
       || data.profilePic 
       || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&auto=format&fit=crop&q=80';
 
+    // Strict validation of true live conditions (never accept unverified fallback)
+    const isVerifiedLive = validateTrueLiveCondition(liveData) || 
+      (Boolean(liveData?.isLive) && Boolean(liveData?.roomId && liveData?.roomId !== 'unknown'));
+
     return {
       username: data.username || '@karam.drame',
       displayName: data.display_name || data.displayName || data.username || 'Karamokho DRAME',
@@ -56,7 +61,7 @@ export function useTikTokUnifiedData(rawTikTokData, liveData) {
         avgComments: totalVideos > 0 ? Math.round(totalComments / totalVideos) : 0,
         engagementRate: engagementRateStr
       },
-      isLive: Boolean(liveData?.isLive || data.isLive)
+      isLive: isVerifiedLive
     };
   }, [rawTikTokData, liveData]);
 }

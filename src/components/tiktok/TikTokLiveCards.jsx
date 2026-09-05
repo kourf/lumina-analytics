@@ -252,15 +252,29 @@ export const TikTokLiveCards = ({ liveData }) => {
               <div>
                 <h3 className="text-lg font-bold text-slate-900 dark:text-white leading-tight">Analyse du Tchat</h3>
                 <span className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold flex items-center gap-1.5 mt-0.5">
-                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
-                  <span>Flux 100% Réel • TikTok Webcast</span>
+                  {isLiveActive ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                      <span>Flux 100% Réel • TikTok Webcast</span>
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                      <span>Historique & Archives du Tchat</span>
+                    </>
+                  )}
                 </span>
               </div>
             </div>
             
-            {/* Badge de session en direct */}
-            <span className="text-[10px] font-bold font-mono uppercase bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 px-2.5 py-1 rounded-full border border-purple-200 dark:border-purple-500/30">
-              Live Actuel
+            {/* Badge de statut du direct */}
+            <span className={cn(
+              "text-[10px] font-bold font-mono uppercase px-2.5 py-1 rounded-full border",
+              isLiveActive 
+                ? "bg-[#FE2C55]/15 text-[#FE2C55] border-[#FE2C55]/30 animate-pulse"
+                : "bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-gray-400 border-slate-200 dark:border-white/10"
+            )}>
+              {isLiveActive ? "Live Actuel" : "Session Archivée"}
             </span>
           </div>
 

@@ -5,46 +5,46 @@ import { TikTokLiveAnalytics } from '../components/tiktok/TikTokLiveAnalytics';
 import { TikTokVideoAnalytics } from '../components/tiktok/TikTokVideoAnalytics';
 import { TikTokCompetitorAnalysis } from '../components/tiktok/TikTokCompetitorAnalysis';
 import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
+import { TikTokCreatorCard } from '../components/tiktok/TikTokCreatorCard';
 import { useTikTokUnifiedData } from '../hooks/useTikTokUnifiedData';
+import { useTikTokLiveStatus } from '../hooks/useTikTokLiveStatus';
+import { Users, Radio, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const TikTokDashboard = ({ data, auth, liveData }) => {
   const [loading, setLoading] = useState(false);
+  const [activeTabCreator, setActiveTabCreator] = useState('jkaram'); // 'jkaram' | 'karam.drame'
 
-  // Source unique de vérité unifiée
-  const unifiedData = useTikTokUnifiedData(data, liveData);
+  // Dynamic, verified live status check with SWR (Stale-While-Revalidate) 60s cache
+  const verifiedLive = useTikTokLiveStatus('karam.drame', {
+    autoCheck: true,
+    pollInterval: 60000,
+    initialData: liveData
+  });
 
-  // Forcer le Dark Mode absolu pour le Dashboard TikTok Cyber Neon & Synchronisation Réactive à l'Ouverture
+  // Source unique de vérité unifiée avec live status vérifié dynamiquement
+  const unifiedData = useTikTokUnifiedData(data, {
+    ...(liveData || {}),
+    isLive: verifiedLive.isLive,
+    roomId: verifiedLive.roomId,
+    currentViewers: verifiedLive.viewerCount,
+    started_at: verifiedLive.startedAt,
+    lastDetected: verifiedLive.lastChecked,
+    liveStatus: verifiedLive.status,
+    isRefreshing: verifiedLive.isRefreshing
+  });
+
+  // Forcer le Dark Mode absolu pour le Dashboard TikTok Cyber Neon
   useEffect(() => {
     document.documentElement.classList.add('dark');
     localStorage.theme = 'dark';
-
-    // Synchronisation Réactive automatique à l'ouverture du Dashboard
-    handleManualRefresh();
-
-    // Actualisation dynamique en temps réel du live via notre passerelle Cloudflare Edge toutes les 15 secondes
-    const fetchLiveEdge = async () => {
-      try {
-        await fetch('https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status');
-      } catch (err) {
-        // En cas d'indisponibilité temporaire, Firestore conserve la dernière valeur
-      }
-    };
-
-    fetchLiveEdge();
-    const interval = setInterval(fetchLiveEdge, 15000);
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
   }, []);
 
   const handleManualRefresh = async () => {
     try {
       setLoading(true);
-      // Synchronisation directe des métriques réactives
       window.dispatchEvent(new CustomEvent('tiktok:refresh'));
-      await fetch('https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status').catch(() => {});
+      await verifiedLive.refresh();
     } catch (e) {
       console.error("Erreur de synchronisation TikTok :", e);
     } finally {
@@ -58,23 +58,138 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
 
   return (
     <div id="dashboard-content" className="flex flex-col gap-8 pb-24 animate-fade-in max-w-[1600px] mx-auto w-full min-h-screen px-4 md:px-8">
-      {/* En-tête TikTok (Profile) 100% automatique */}
+      {/* En-tête TikTok (Profile) 100% dynamique & vérifié */}
       <div className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         <TikTokHeader 
           user={unifiedData} 
-          isLive={unifiedData.isLive} 
+          isLive={verifiedLive.isLive} 
           onRefresh={handleManualRefresh} 
         />
       </div>
 
-      {/* SECTION 1 : KPI GLOBALS */}
-      <section className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
+      {/* BANNIÈRE D'ÉTAT SYSTÈME EN DIRECT / HORS LIGNE (Clarification visuelle immédiate) */}
+      <div className="animate-fade-in-up -mt-2" style={{ animationDelay: '0.12s' }}>
+        {verifiedLive.isLive ? (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-[#FE2C55]/15 border border-[#FE2C55]/30 text-xs text-white shadow-lg animate-pulse backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <span className="relative flex h-3 w-3">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FE2C55] opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-3 w-3 bg-[#FE2C55]"></span>
+              </span>
+              <span className="font-black uppercase tracking-wider text-sm text-[#FE2C55]">🔴 Karamokho DRAMÉ est EN DIRECT sur TikTok !</span>
+              <span className="text-pink-200/90 font-mono hidden md:inline">• {verifiedLive.viewerCount} spectateurs connectés</span>
+            </div>
+            <a 
+              href={`https://www.tiktok.com/@${verifiedLive.username}/live`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-2 rounded-xl bg-[#FE2C55] hover:bg-[#E0264C] text-white font-black text-xs uppercase tracking-wider shadow-md flex items-center gap-1.5 self-stretch sm:self-auto justify-center"
+            >
+              <span>Accéder au Direct</span>
+              <Radio size={13} className="animate-spin" />
+            </a>
+          </div>
+        ) : (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900/60 border border-slate-700/40 text-xs text-slate-300 backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <span className="w-2.5 h-2.5 rounded-full bg-slate-500 shrink-0"></span>
+              <div>
+                <span className="font-bold text-slate-200">Karamokho DRAMÉ est actuellement hors ligne.</span>
+                <span className="text-slate-400 ml-1.5 hidden md:inline">
+                  Aucun direct n'est en cours sur TikTok. Les graphiques et métriques ci-dessous correspondent aux archives des diffusions passées.
+                </span>
+              </div>
+            </div>
+            <span className="text-[11px] font-mono text-slate-400 bg-black/30 px-3 py-1 rounded-full border border-white/5 shrink-0">
+              Statut vérifié en temps réel
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* SECTION 1 : CARTE CRÉATEURS DÉDIÉE (Live Status Monitor pour 'jkaram' & créateurs suivis) */}
+      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.15s' }}>
+        <div className="bg-white dark:bg-[#111827]/80 border border-slate-200 dark:border-[#1F2937] backdrop-blur-xl rounded-[24px] p-6 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-500">
+                <Radio className="w-5 h-5" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
+                  <span>Surveillance des Créateurs & Lives Actifs</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-gray-400">
+                  Détection dynamique rigoureuse (anti-faux positifs, vérification de statut en direct, SWR 60s).
+                </p>
+              </div>
+            </div>
+
+            {/* Quick creator switch selector */}
+            <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-white/5 self-start sm:self-auto">
+              <button
+                onClick={() => setActiveTabCreator('jkaram')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  activeTabCreator === 'jkaram'
+                    ? "bg-[#FE2C55] text-white shadow-md shadow-[#FE2C55]/20"
+                    : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
+                )}
+              >
+                @jkaram
+              </button>
+              <button
+                onClick={() => setActiveTabCreator('karam.drame')}
+                className={cn(
+                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+                  activeTabCreator === 'karam.drame'
+                    ? "bg-[#FE2C55] text-white shadow-md shadow-[#FE2C55]/20"
+                    : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
+                )}
+              >
+                @karam.drame
+              </button>
+            </div>
+          </div>
+
+          {/* Responsive Creator Card Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <TikTokCreatorCard 
+              key={activeTabCreator}
+              username={activeTabCreator}
+              displayName={activeTabCreator === 'jkaram' ? 'JKaram' : 'Karamokho Dramé'}
+              followersCount={activeTabCreator === 'jkaram' ? 14200 : unifiedData.followers}
+              likesCount={activeTabCreator === 'jkaram' ? 89500 : unifiedData.likes}
+              engagementRate={activeTabCreator === 'jkaram' ? '6.4%' : unifiedData.engagementRate}
+            />
+
+            {/* Comparison / Partner Card */}
+            <TikTokCreatorCard 
+              key={activeTabCreator === 'jkaram' ? 'karam.drame' : 'jkaram'}
+              username={activeTabCreator === 'jkaram' ? 'karam.drame' : 'jkaram'}
+              displayName={activeTabCreator === 'jkaram' ? 'Karamokho Dramé' : 'JKaram'}
+              followersCount={activeTabCreator === 'jkaram' ? unifiedData.followers : 14200}
+              likesCount={activeTabCreator === 'jkaram' ? unifiedData.likes : 89500}
+              engagementRate={activeTabCreator === 'jkaram' ? unifiedData.engagementRate : '6.4%'}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 2 : KPI GLOBALS */}
+      <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
         <TikTokKpiCards tiktokData={unifiedData} />
       </section>
 
-      {/* SECTION 2 : MONITORING LIVE */}
-      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.2s' }}>
-        <TikTokLiveAnalytics liveData={liveData || {}} />
+      {/* SECTION 3 : MONITORING LIVE */}
+      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.25s' }}>
+        <TikTokLiveAnalytics liveData={{
+          ...(liveData || {}),
+          isLive: verifiedLive.isLive,
+          currentViewers: verifiedLive.viewerCount,
+          peakViewers: Math.max(Number(liveData?.peakViewers || 0), verifiedLive.viewerCount),
+          started_at: verifiedLive.startedAt || liveData?.started_at
+        }} />
       </section>
 
       {/* SECTION 4 : GRAPHIQUES & PERFORMANCE */}
@@ -93,7 +208,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
         <TikTokCompetitorAnalysis myData={unifiedData} />
       </section>
 
-      {/* SECTION 3 : CATALOGUE VIDEO */}
+      {/* SECTION 6 : CATALOGUE VIDEO */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.4s' }}>
         <TikTokRecentVideos recentVideos={unifiedData.recentVideos} />
       </section>
@@ -101,4 +216,5 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     </div>
   );
 };
+
 

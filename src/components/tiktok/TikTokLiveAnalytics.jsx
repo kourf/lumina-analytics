@@ -269,19 +269,26 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
               <Radio className={cn("w-5 h-5", isLive ? "animate-pulse" : "")} />
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <h2 className="text-xl font-black text-slate-900 dark:text-white tracking-tight">
                   Monitoring & Rétention Live
                 </h2>
-                {isLive && (
+                {isLive ? (
                   <span className="inline-flex items-center gap-1.5 bg-[#FE2C55] text-white text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full shadow-[0_0_12px_rgba(254,44,85,0.6)] animate-pulse font-mono">
                     <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping"></span>
-                    Direct
+                    Direct Actif
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-gray-300 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-white/10 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+                    Actuellement Hors Ligne
                   </span>
                 )}
               </div>
               <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
-                Analyse précise de chaque live du début à la fin, séparée par jour et par session.
+                {isLive 
+                  ? "Diffusion en direct en cours • Données télémétriques TikTok Webcast temps réel." 
+                  : "Aucun direct en cours. Consultation des archives et métriques des sessions précédentes."}
               </p>
             </div>
           </div>
@@ -377,9 +384,9 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 relative z-10 pb-4 border-b border-slate-200 dark:border-white/5">
               <div>
                 <div className="flex items-center gap-2.5">
-                  <Activity className="w-5 h-5 text-[#FE2C55] animate-pulse" />
+                  <Activity className={cn("w-5 h-5 text-[#FE2C55]", isLive ? "animate-pulse" : "")} />
                   <h3 className="text-base font-black text-slate-900 dark:text-white">
-                    Courbe de Rétention & Évolution de l'Audience
+                    {isLive ? "Courbe de Rétention en Direct" : "Rétention & Analyse de la Session Archivée"}
                   </h3>
                 </div>
                 <p className="text-xs text-slate-500 dark:text-gray-400 mt-1 flex items-center gap-2 font-mono">
@@ -393,7 +400,7 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
 
               {/* Mini-KPIs de la session sélectionnée */}
               <div className="flex flex-wrap items-center gap-2.5 text-xs">
-                {(isLive || activeSession?.isCurrent) && (
+                {(isLive && activeSession?.isCurrent) && (
                   <div className="bg-[#FE2C55]/15 border border-[#FE2C55]/30 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-sm animate-pulse">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FE2C55] opacity-75"></span>
@@ -519,7 +526,7 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
 
         {/* Cartes Métriques Détaillées & Tchat */}
         <div className="mt-8 space-y-8">
-          <TikTokLiveCards liveData={{ ...displayData, ...(activeSession || {}), isLive: Boolean(activeSession?.isCurrent || isLive || displayData?.isLive) }} />
+          <TikTokLiveCards liveData={{ ...displayData, ...(activeSession || {}), isLive: Boolean(isLive && activeSession?.isCurrent) }} />
           
           <TikTokLiveHistory 
             historyArchives={historyArchives} 

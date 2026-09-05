@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp } from 'lucide-react';
+import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp, RefreshCw } from 'lucide-react';
 import { TikTokIcon } from '../SocialIcons';
 import { cn } from '../../lib/utils';
 
@@ -45,7 +45,7 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           }}
         />
 
-        {/* Statut Système : EN DIRECT vs FLUX CONNECTÉ */}
+        {/* Statut Système : EN DIRECT vs HORS LIGNE vs INCONNU */}
         <div className="absolute top-4 right-6 flex items-center gap-3">
           {isLive ? (
             <div className="flex items-center gap-2.5 bg-[#FE2C55] text-white border border-white/20 px-4 py-1.5 rounded-full shadow-[0_0_25px_rgba(254,44,85,0.6)] animate-pulse">
@@ -53,15 +53,20 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
               </span>
-              <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5">
+              <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5 font-mono">
                 <Radio size={13} className="animate-spin" />
                 EN LIVE SUR TIKTOK
               </span>
             </div>
+          ) : user?.liveStatus === 'STATUS_UNKNOWN' ? (
+            <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 backdrop-blur-md px-3.5 py-1.5 rounded-full text-amber-300">
+              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span className="text-xs font-semibold">Statut Non Confirmé</span>
+            </div>
           ) : (
-            <div className="flex items-center gap-2 bg-black/40 border border-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-              <span className="text-gray-300 text-xs font-medium">Flux Connecté</span>
+            <div className="flex items-center gap-2 bg-black/60 border border-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-slate-300">
+              <span className="w-2 h-2 rounded-full bg-slate-500"></span>
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">⚫ Hors Ligne</span>
             </div>
           )}
         </div>
@@ -140,11 +145,11 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           {onRefresh && (
             <button
               onClick={onRefresh}
-              className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/15 active:scale-95 text-gray-200 border border-white/10 transition-all shadow-md backdrop-blur-md"
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/15 active:scale-95 text-gray-200 border border-white/10 transition-all shadow-md backdrop-blur-md group"
               title="Actualiser les métriques en direct depuis TikTok"
             >
-              <TrendingUp size={14} className="text-[#25F4EE]" />
-              <span>Actualiser</span>
+              <RefreshCw size={14} className={cn("text-[#25F4EE] transition-transform duration-300", user?.isRefreshing ? "animate-spin" : "group-hover:rotate-180")} />
+              <span>{user?.isRefreshing ? "Actualisation..." : "Actualiser"}</span>
             </button>
           )}
 
