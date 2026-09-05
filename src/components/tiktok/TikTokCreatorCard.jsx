@@ -61,12 +61,12 @@ const formatTimeOnly = (isoString) => {
  * Supports usernames like 'jkaram', 'karam.drame', etc.
  */
 export const TikTokCreatorCard = ({ 
-  username = 'jkaram',
+  username = 'karam.drame',
   displayName: initialDisplayName,
   avatarUrl: initialAvatarUrl,
   followersCount = 0,
   likesCount = 0,
-  engagementRate = '5.8%',
+  engagementRate = '6.1%',
   className = ''
 }) => {
   const [showTooltip, setShowTooltip] = useState(false);
@@ -232,7 +232,11 @@ export const TikTokCreatorCard = ({
           <Info size={14} className="shrink-0 mt-0.5 text-amber-400" />
           <div className="flex-1">
             <p className="font-semibold text-amber-300">Statut de diffusion temporairement non confirmé :</p>
-            <p className="text-amber-200/80 mt-0.5">{error || "TikTok a limité temporairement l'accès aux flux (429/403) ou la connexion est instable. Par précaution, aucun faux badge 'LIVE' n'est affiché."}</p>
+            <p className="text-amber-200/80 mt-0.5">
+              {String(error || '').includes('<!doctype') || String(error || '').includes('JSON') || String(error || '').includes('token')
+                ? "La vérification automatique auprès des serveurs TikTok a rencontré une limitation temporaire. Le compte @karam.drame est traité comme hors ligne par sécurité."
+                : (error || "TikTok a limité temporairement l'accès aux flux (429/403). Par précaution, aucun faux badge 'LIVE' n'est affiché.")}
+            </p>
             <button 
               onClick={refresh}
               className="mt-2 inline-flex items-center gap-1 text-[10px] font-bold text-amber-300 underline hover:text-amber-200"

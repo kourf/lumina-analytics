@@ -13,7 +13,6 @@ import { cn } from '../lib/utils';
 
 export const TikTokDashboard = ({ data, auth, liveData }) => {
   const [loading, setLoading] = useState(false);
-  const [activeTabCreator, setActiveTabCreator] = useState('jkaram'); // 'jkaram' | 'karam.drame'
 
   // Dynamic, verified live status check with SWR (Stale-While-Revalidate) 60s cache
   const verifiedLive = useTikTokLiveStatus('karam.drame', {
@@ -107,7 +106,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
         )}
       </div>
 
-      {/* SECTION 1 : CARTE CRÉATEURS DÉDIÉE (Live Status Monitor pour 'jkaram' & créateurs suivis) */}
+      {/* SECTION 1 : CARTE CRÉATEUR DÉDIÉE (@karam.drame) */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.15s' }}>
         <div className="bg-white dark:bg-[#111827]/80 border border-slate-200 dark:border-[#1F2937] backdrop-blur-xl rounded-[24px] p-6 shadow-sm">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -117,60 +116,26 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
               </div>
               <div>
                 <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <span>Surveillance des Créateurs & Lives Actifs</span>
+                  <span>Surveillance Live du Créateur</span>
+                  <span className="text-xs font-mono font-medium px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-300">
+                    @karam.drame
+                  </span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-gray-400">
-                  Détection dynamique rigoureuse (anti-faux positifs, vérification de statut en direct, SWR 60s).
+                  Détection dynamique rigoureuse pour le compte officiel @karam.drame (anti-faux positifs, SWR 60s).
                 </p>
               </div>
             </div>
-
-            {/* Quick creator switch selector */}
-            <div className="flex items-center gap-1.5 p-1 bg-slate-100 dark:bg-black/40 rounded-xl border border-slate-200 dark:border-white/5 self-start sm:self-auto">
-              <button
-                onClick={() => setActiveTabCreator('jkaram')}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                  activeTabCreator === 'jkaram'
-                    ? "bg-[#FE2C55] text-white shadow-md shadow-[#FE2C55]/20"
-                    : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-                )}
-              >
-                @jkaram
-              </button>
-              <button
-                onClick={() => setActiveTabCreator('karam.drame')}
-                className={cn(
-                  "px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                  activeTabCreator === 'karam.drame'
-                    ? "bg-[#FE2C55] text-white shadow-md shadow-[#FE2C55]/20"
-                    : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-                )}
-              >
-                @karam.drame
-              </button>
-            </div>
           </div>
 
-          {/* Responsive Creator Card Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Dedicated Creator Card for @karam.drame */}
+          <div className="w-full">
             <TikTokCreatorCard 
-              key={activeTabCreator}
-              username={activeTabCreator}
-              displayName={activeTabCreator === 'jkaram' ? 'JKaram' : 'Karamokho Dramé'}
-              followersCount={activeTabCreator === 'jkaram' ? 14200 : unifiedData.followers}
-              likesCount={activeTabCreator === 'jkaram' ? 89500 : unifiedData.likes}
-              engagementRate={activeTabCreator === 'jkaram' ? '6.4%' : unifiedData.engagementRate}
-            />
-
-            {/* Comparison / Partner Card */}
-            <TikTokCreatorCard 
-              key={activeTabCreator === 'jkaram' ? 'karam.drame' : 'jkaram'}
-              username={activeTabCreator === 'jkaram' ? 'karam.drame' : 'jkaram'}
-              displayName={activeTabCreator === 'jkaram' ? 'Karamokho Dramé' : 'JKaram'}
-              followersCount={activeTabCreator === 'jkaram' ? unifiedData.followers : 14200}
-              likesCount={activeTabCreator === 'jkaram' ? unifiedData.likes : 89500}
-              engagementRate={activeTabCreator === 'jkaram' ? unifiedData.engagementRate : '6.4%'}
+              username="karam.drame"
+              displayName="Karamokho Dramé"
+              followersCount={unifiedData.followers}
+              likesCount={unifiedData.likes}
+              engagementRate={unifiedData.engagementRate}
             />
           </div>
         </div>

@@ -28,14 +28,14 @@ export const LIVE_STATUS = {
  * Strips leading '@', URL protocols, domain paths, and query parameters.
  * 
  * @param {string} input - Raw username, handle or profile URL
- * @returns {string} Sanitized clean handle (e.g., 'jkaram')
+ * @returns {string} Sanitized clean handle (e.g., 'karam.drame')
  */
 export function sanitizeTikTokUsername(input) {
   if (!input || typeof input !== 'string') return '';
 
   let cleaned = input.trim();
 
-  // If a URL was provided (e.g. https://www.tiktok.com/@jkaram?lang=en)
+  // If a URL was provided (e.g. https://www.tiktok.com/@karam.drame?lang=en)
   if (cleaned.includes('tiktok.com/')) {
     const afterDomain = cleaned.split('tiktok.com/')[1] || '';
     cleaned = afterDomain.split('/')[0].split('?')[0];
@@ -92,7 +92,7 @@ export function validateTrueLiveCondition(roomData) {
 /**
  * Fetches verified live status for a TikTok creator with SWR caching.
  * 
- * @param {string} rawUsername - Creator username (e.g. 'jkaram')
+ * @param {string} rawUsername - Creator username (e.g. 'karam.drame')
  * @param {object} [options]
  * @param {boolean} [options.forceRefresh=false] - Bypass cache and force network check
  * @param {AbortSignal} [options.signal] - AbortSignal for request cancellation
@@ -157,26 +157,13 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
     }
 
     let response = null;
-    let endpointUrl = `https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status?username=${encodeURIComponent(username)}`;
+    const endpointUrl = `https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status?username=${encodeURIComponent(username)}&_t=${now}`;
 
+    // Standard GET request without custom headers that would trigger CORS preflight OPTIONS
     try {
       response = await fetch(endpointUrl, {
-        headers: {
-          'Accept': 'application/json',
-          'Cache-Control': 'no-cache',
-        },
         signal: effectiveSignal,
       });
-    } catch (networkErr) {
-      // Fallback: try relative API endpoint if running on full-stack server
-      try {
-        response = await fetch(`/api/tiktok-live?username=${encodeURIComponent(username)}`, {
-          headers: { 'Accept': 'application/json' },
-          signal: effectiveSignal,
-        });
-      } catch {
-        throw networkErr;
-      }
     } finally {
       clearTimeout(timeoutId);
     }
@@ -236,8 +223,19 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
       return serverErrorResult;
     }
 
+    // Ensure response has valid JSON content-type
+    const contentType = response.headers?.get?.('content-type') || '';
+    if (contentType && !contentType.includes('application/json')) {
+      return fallbackOffline;
+    }
+
     // Parse JSON safely
-    const payload = await response.json();
+    let payload = null;
+    try {
+      payload = await response.json();
+    } catch {
+      return fallbackOffline;
+    }
     if (!payload || typeof payload !== 'object') {
       return fallbackOffline;
     }

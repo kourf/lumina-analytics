@@ -13,7 +13,7 @@ const REFRESH_THROTTLE_MS = 5000; // 5-second cooldown for user manual refresh
  * Stale-While-Revalidate (SWR) 60-second caching, throttle protection,
  * and resilient 3-state management.
  * 
- * @param {string} rawUsername - Creator username or handle (e.g., 'jkaram')
+ * @param {string} rawUsername - Creator username or handle (e.g., 'karam.drame')
  * @param {object} [options]
  * @param {boolean} [options.autoCheck=true] - Auto-fetch on mount/change
  * @param {number} [options.pollInterval=60000] - Polling frequency (default 60s)
