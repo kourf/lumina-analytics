@@ -13,7 +13,7 @@ async function main() {
     await page.setCacheEnabled(false);
     
     await page.goto('https://lumina-analytics-kd-2026.web.app/tiktok', {
-      waitUntil: 'networkidle2',
+      waitUntil: 'domcontentloaded',
       timeout: 30000
     });
 
@@ -27,9 +27,12 @@ async function main() {
     console.log('Contains EN LIVE / LIVE NOW badge:', hasLiveBadge);
     console.log('Contains HORS LIGNE / OFFLINE:', hasHorsLigne);
 
-    const screenshotPath = 'C:\\Users\\RO2TK\\.gemini\\antigravity\\brain\\e615edbf-4eb6-46b7-80f9-100c9bbe037d\\deployed_verified.png';
+    await page.evaluate(() => window.scrollBy(0, 500));
+    await new Promise(r => setTimeout(r, 1000));
+
+    const screenshotPath = 'C:\\Users\\RO2TK\\.gemini\\antigravity\\brain\\e615edbf-4eb6-46b7-80f9-100c9bbe037d\\deployed_hub_details.png';
     await page.screenshot({ path: screenshotPath, fullPage: false });
-    console.log('Screenshot saved to:', screenshotPath);
+    console.log('Second screenshot saved to:', screenshotPath);
   } finally {
     await browser.close();
   }

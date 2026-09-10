@@ -45,30 +45,12 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           }}
         />
 
-        {/* Statut Système : EN DIRECT vs HORS LIGNE vs INCONNU */}
+        {/* Badge Identité Officielle discret (Le statut Live est centralisé dans le Hub Live Unique) */}
         <div className="absolute top-4 right-6 flex items-center gap-3">
-          {isLive ? (
-            <div className="flex items-center gap-2.5 bg-[#FE2C55] text-white border border-white/20 px-4 py-1.5 rounded-full shadow-[0_0_25px_rgba(254,44,85,0.6)] animate-pulse">
-              <span className="relative flex h-2.5 w-2.5">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-              </span>
-              <span className="text-xs font-black uppercase tracking-wider flex items-center gap-1.5 font-mono">
-                <Radio size={13} className="animate-spin" />
-                EN LIVE SUR TIKTOK
-              </span>
-            </div>
-          ) : user?.liveStatus === 'STATUS_UNKNOWN' ? (
-            <div className="flex items-center gap-2 bg-amber-500/10 border border-amber-500/30 backdrop-blur-md px-3.5 py-1.5 rounded-full text-amber-300">
-              <span className="w-2 h-2 rounded-full bg-amber-400"></span>
-              <span className="text-xs font-semibold">Statut Non Confirmé</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-2 bg-black/60 border border-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-slate-300">
-              <span className="w-2 h-2 rounded-full bg-slate-500"></span>
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">⚫ Hors Ligne</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 bg-black/60 border border-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-slate-300">
+            <span className="w-2 h-2 rounded-full bg-[#25F4EE]"></span>
+            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">Compte Certifié</span>
+          </div>
         </div>
 
       </div>
@@ -154,29 +136,14 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           )}
 
           <a 
-            href={isLive ? `https://tiktok.com/@${cleanUsername.replace('@', '')}/live` : (user?.links?.tiktok || `https://tiktok.com/@${cleanUsername.replace('@', '')}`)}
+            href={user?.links?.tiktok || `https://tiktok.com/@${cleanUsername.replace('@', '')}`}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-              "flex items-center gap-2.5 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 group shadow-lg",
-              isLive
-                ? "bg-[#FE2C55] hover:bg-[#E0264C] text-white shadow-[0_0_30px_rgba(254,44,85,0.5)] hover:shadow-[0_0_40px_rgba(254,44,85,0.7)] animate-pulse"
-                : "bg-gradient-to-r from-[#FE2C55] to-[#FF416C] hover:from-[#E0264C] hover:to-[#FE2C55] text-white shadow-[0_4px_16px_rgba(254,44,85,0.25)] hover:shadow-[0_6px_20px_rgba(254,44,85,0.4)]"
-            )}
+            className="flex items-center gap-2.5 px-6 py-3 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 group shadow-lg bg-gradient-to-r from-[#FE2C55] to-[#FF416C] hover:from-[#E0264C] hover:to-[#FE2C55] text-white shadow-[0_4px_16px_rgba(254,44,85,0.25)] hover:shadow-[0_6px_20px_rgba(254,44,85,0.4)]"
           >
-            {isLive ? (
-              <>
-                <Radio className="w-4 h-4 animate-spin text-white" />
-                <span>Rejoindre le Live</span>
-                <ExternalLink size={14} className="opacity-90 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-              </>
-            ) : (
-              <>
-                <TikTokIcon className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" />
-                <span>Ouvrir TikTok</span>
-                <ExternalLink size={13} className="opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
-              </>
-            )}
+            <TikTokIcon className="w-4 h-4 fill-current group-hover:scale-110 transition-transform" />
+            <span>Ouvrir Profil TikTok</span>
+            <ExternalLink size={13} className="opacity-80 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
           </a>
         </div>
       </div>
