@@ -46,6 +46,21 @@ const formatNumber = (num) => {
   return Number(num).toLocaleString('fr-FR');
 };
 
+// Formatage local des dates et heures selon le fuseau de l'utilisateur (UTC vers local)
+const formatLocalDateTime = (dateStr, options = {}) => {
+  if (!dateStr) return '';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat(navigator.language || 'fr-FR', {
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+    ...options
+  }).format(date);
+};
+
 // Chronomètre en direct pour la session live
 const LiveClock = ({ startedAt }) => {
   const [uptime, setUptime] = useState('00:00:00');
@@ -196,8 +211,9 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
   const [isArchivesAccordionOpen, setIsArchivesAccordionOpen] = useState(false);
   const [selectedLiveForDrawer, setSelectedLiveForDrawer] = useState(null);
 
-  // État de diffusion 100% automatique
-  const isLive = Boolean(liveData?.isLive);
+  // Mécanisme de Secours (Bouton Override Manuel) en cas de latence réseau ou de délai webhook
+  const [manualOverride, setManualOverride] = useState(null); // null (Auto 24/7) | true (Forcé Live) | false (Forcé Hors Ligne)
+  const isLive = manualOverride !== null ? manualOverride : Boolean(liveData?.isLive);
   const username = 'karam.drame';
   const cleanHandle = '@karam.drame';
   const liveUrl = `https://www.tiktok.com/${cleanHandle}/live`;
@@ -311,7 +327,7 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
               </div>
             </div>
 
-            {/* Badge d'État Automatique */}
+            {/* Badge d'État Automatique & Secours */}
             {isLive ? (
               <div className="flex items-center gap-2 bg-[#FE2C55] text-white px-3.5 py-1.5 rounded-full shadow-[0_0_20px_rgba(254,44,85,0.5)] animate-pulse">
                 <span className="relative flex h-2.5 w-2.5">
@@ -319,14 +335,14 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
                 </span>
                 <span className="text-xs font-black uppercase tracking-wider font-mono">
-                  🔴 EN DIRECT
+                  🔴 EN DIRECT {manualOverride !== null && "(SECOURS)"}
                 </span>
               </div>
             ) : (
               <div className="flex items-center gap-2 bg-slate-200/80 dark:bg-black/50 border border-slate-300 dark:border-white/10 px-3.5 py-1.5 rounded-full text-slate-600 dark:text-gray-400">
                 <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-gray-500"></span>
                 <span className="text-xs font-bold uppercase tracking-wider font-mono">
-                  ⚪ HORS LIGNE
+                  ⚪ HORS LIGNE {manualOverride !== null && "(SECOURS)"}
                 </span>
               </div>
             )}
@@ -344,6 +360,31 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
               <Users size={14} className={isLive ? "animate-pulse" : ""} />
               <span>{isLive ? `${formatNumber(currentViewers)} spectateurs` : "0 spectateur en direct"}</span>
             </div>
+
+            {/* Bouton de Secours (Override Manuel Réseau) */}
+            <button
+              onClick={() => {
+                if (manualOverride === null) {
+                  setManualOverride(!isLive);
+                } else {
+                  setManualOverride(null);
+                }
+              }}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-95",
+                manualOverride !== null
+                  ? "bg-amber-500/15 border-amber-500/40 text-amber-500 dark:text-amber-400 shadow-sm"
+                  : "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"
+              )}
+              title={
+                manualOverride !== null
+                  ? "Mode Secours actif (cliquer pour revenir au mode 100% automatique)"
+                  : "Bouton de secours manuel en cas de délai de propagation ou blocage réseau"
+              }
+            >
+              <ShieldCheck size={14} className={manualOverride !== null ? "text-amber-500 animate-pulse" : ""} />
+              <span className="hidden sm:inline">{manualOverride !== null ? "Secours Actif" : "Secours"}</span>
+            </button>
 
             {/* Bouton de Synchronisation SWR */}
             {onRefresh && (
@@ -493,7 +534,7 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                           : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
                       )}
                     >
-                      {new Date(session.startedAt || session.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                      {formatLocalDateTime(session.startedAt || session.date, { day: 'numeric', month: 'short' })}
                     </button>
                   ))}
                 </div>
@@ -794,10 +835,10 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                       <Calendar size={14} className="text-[#FE2C55]" />
                       <div>
                         <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-[#FE2C55] transition-colors">
-                          {arch.title || `Live du ${new Date(arch.startedAt || arch.date).toLocaleDateString('fr-FR')}`}
+                          {arch.title || `Live du ${formatLocalDateTime(arch.startedAt || arch.date, { day: 'numeric', month: 'short', year: 'numeric' })}`}
                         </span>
                         <span className="text-[10px] text-slate-500 font-mono">
-                          {new Date(arch.startedAt || arch.date).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })} • {arch.durationStr || arch.duration || '01h30'}
+                          {formatLocalDateTime(arch.startedAt || arch.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} • {arch.durationStr || arch.duration || '01h30'}
                         </span>
                       </div>
                     </div>
