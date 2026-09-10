@@ -91,3 +91,18 @@ jobs:
         env:
           PROJECT_ID: lumina-analytics-kd-2026
           REPOSITORY: lumina-analytics
+
+      - name: Setup Node.js for Frontend & Firebase
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Build Web App Distribution
+        run: |
+          npm ci || npm install
+          npm run build
+
+      - name: Deploy to Firebase Hosting
+        run: |
+          npx firebase-tools deploy --only hosting --project ${{ env.PROJECT_ID }}
