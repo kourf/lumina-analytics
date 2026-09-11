@@ -7,6 +7,7 @@ import { TikTokCompetitorAnalysis } from '../components/tiktok/TikTokCompetitorA
 import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
 import { useTikTokUnifiedData } from '../hooks/useTikTokUnifiedData';
 import { useTikTokLiveStatus } from '../hooks/useTikTokLiveStatus';
+import { useTikTokLiveSocket } from '../hooks/useTikTokLiveSocket';
 import { Users, Radio, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -20,13 +21,19 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     initialData: liveData
   });
 
+  // Connexion WebSocket sub-seconde avec le Worker Backend (Socket.io)
+  const socketLive = useTikTokLiveSocket(undefined, liveData);
+
+  // Détermination de l'état Live : priorité au flux WebSocket s'il est connecté, sinon SWR / Firestore
+  const effectiveIsLive = socketLive.isSocketConnected ? socketLive.isLive : verifiedLive.isLive;
+
   // Source unique de vérité unifiée avec live status vérifié dynamiquement
   const unifiedData = useTikTokUnifiedData(data, {
     ...(liveData || {}),
-    isLive: verifiedLive.isLive,
-    roomId: verifiedLive.roomId,
-    currentViewers: verifiedLive.viewerCount,
-    started_at: verifiedLive.startedAt,
+    isLive: effectiveIsLive,
+    roomId: socketLive.sessionId || verifiedLive.roomId,
+    currentViewers: socketLive.isSocketConnected ? socketLive.metrics.viewers : verifiedLive.viewerCount,
+    started_at: (socketLive.isSocketConnected ? socketLive.startedAt : null) || verifiedLive.startedAt,
     lastDetected: verifiedLive.lastChecked,
     liveStatus: verifiedLive.status,
     isRefreshing: verifiedLive.isRefreshing
@@ -70,13 +77,26 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
         <TikTokLiveHub 
           liveData={{
             ...(liveData || {}),
-            isLive: verifiedLive.isLive,
-            currentViewers: verifiedLive.viewerCount,
-            peakViewers: Math.max(Number(liveData?.peakViewers || 0), verifiedLive.viewerCount),
-            started_at: verifiedLive.startedAt || liveData?.started_at,
+            isLive: effectiveIsLive,
+            currentViewers: socketLive.isSocketConnected ? socketLive.metrics.viewers : verifiedLive.viewerCount,
+            peakViewers: socketLive.isSocketConnected ? socketLive.metrics.peakViewers : Math.max(Number(liveData?.peakViewers || 0), verifiedLive.viewerCount),
+            likes: socketLive.isSocketConnected ? socketLive.metrics.likes : Number(liveData?.likes || 0),
+            shares: socketLive.isSocketConnected ? socketLive.metrics.shares : Number(liveData?.shares || 0),
+            followers: socketLive.isSocketConnected ? socketLive.metrics.followers : Number(liveData?.followers || 0),
+            diamonds: socketLive.isSocketConnected ? socketLive.metrics.diamonds : Number(liveData?.diamonds || 0),
+            started_at: (socketLive.isSocketConnected ? socketLive.startedAt : null) || verifiedLive.startedAt || liveData?.started_at,
             lastChecked: verifiedLive.lastChecked,
             status: verifiedLive.status,
-            historyArchives: unifiedData?.historyArchives || liveData?.historyArchives
+            historyArchives: socketLive.lastArchivedSession
+              ? [socketLive.lastArchivedSession, ...(unifiedData?.historyArchives || liveData?.historyArchives || [])]
+              : (unifiedData?.historyArchives || liveData?.historyArchives),
+            liveTimeline: socketLive.liveTimeline,
+            chatMessages: socketLive.chatMessages,
+            topQuestions: socketLive.isSocketConnected && socketLive.metrics.topQuestions?.length > 0
+              ? socketLive.metrics.topQuestions
+              : liveData?.topQuestions,
+            topContributor: socketLive.isSocketConnected ? socketLive.metrics.topContributor : liveData?.topContributor,
+            isSocketConnected: socketLive.isSocketConnected
           }}
           onRefresh={handleManualRefresh}
           isRefreshing={verifiedLive.isRefreshing || loading}

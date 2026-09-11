@@ -1,17 +1,42 @@
+﻿/**
+ * Lumina Analytics - Backend Worker TikTok Live (Production-Ready)
+ * 
+ * Responsabilités :
+ * 1. Connexion temps réel TikTok Live via tiktok-live-connector (bypass CORS & WebSocket Webcast).
+ * 2. Serveur WebSocket bi-directionnel Socket.io pour diffusion sub-seconde vers React.
+ * 3. Détection automatique du Live avec boucle de reconnexion exponentielle (Backoff).
+ * 4. Détection de streamEnd, agrégation statistique, calcul de rétention et archivage Firestore.
+ * 5. Réinitialisation automatique à zéro du dashboard pour la session suivante.
+ */
+
+require('dotenv').config();
+const http = require('http');
+const express = require('express');
+const cors = require('cors');
+const { Server } = require('socket.io');
 const { WebcastPushConnection } = require('tiktok-live-connector');
 const admin = require('firebase-admin');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
-const express = require('express');
-const cors = require('cors');
 const Redis = require('ioredis');
 
-// Initialisation de Firebase Admin
+// 1. INITIALISATION FIREBASE ADMIN SDK
 if (!admin.apps.length) {
-    admin.initializeApp();
+    // Si la clé de compte de service est fournie par variable d'environnement ou GOOGLE_APPLICATION_CREDENTIALS
+    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+        try {
+            const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+            admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+        } catch (e) {
+            console.warn('[Firebase] Initialisation via variable JSON échouée, fallback default credentials:', e.message);
+            admin.initializeApp();
+        }
+    } else {
+        admin.initializeApp();
+    }
 }
 const db = getFirestore();
 
-// Initialisation optionnelle de Redis (avec gestion gracieuse du mode dégradé)
+// 2. INITIALISATION OPTIONNELLE DE REDIS (Mode dégradé gracieux)
 let redis = null;
 if (process.env.REDIS_HOST) {
     try {
@@ -23,60 +48,68 @@ if (process.env.REDIS_HOST) {
             lazyConnect: true,
             maxRetriesPerRequest: 3,
             retryStrategy(times) {
-                if (times > 5) {
-                    console.warn('[Redis] Max retries reached. Operating in fallback memory mode.');
-                    return null; // Stop retrying
-                }
+                if (times > 5) return null;
                 return Math.min(times * 200, 2000);
             }
         });
-
-        redis.on('error', (err) => {
-            console.warn('[Redis Error] Connection failure, operating without cache:', err.message);
-        });
-
-        redis.connect()
-            .then(() => console.log('Connecté au cache Memorystore Redis'))
-            .catch(err => console.warn('Redis Memorystore non disponible:', err.message));
+        redis.on('error', (err) => console.warn('[Redis] Indisponible, fallback mémoire locale:', err.message));
+        redis.connect().then(() => console.log('✓ Connecté au cache Redis Memorystore')).catch(() => {});
     } catch (e) {
-        console.warn('Initialisation Redis échouée:', e.message);
+        console.warn('[Redis] Erreur configuration:', e.message);
     }
 }
 
+// 3. INITIALISATION EXPRESS & SERVEUR WEBSOCKET SOCKET.IO
 const app = express();
-app.use(cors({ origin: true }));
+app.use(cors({ origin: '*' }));
 app.use(express.json());
 
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: {
+        origin: '*',
+        methods: ['GET', 'POST']
+    },
+    pingInterval: 10000,
+    pingTimeout: 5000
+});
+
+// 4. CONFIGURATION DE L'UTILISATEUR CIBLE & CONSTANTES
+const TIKTOK_USERNAME = process.env.TIKTOK_USERNAME || 'karam.drame';
+const TARGET_FIRESTORE_USER = process.env.FIRESTORE_USER_ID || 'karamokho';
+const MAX_RECONNECT_ATTEMPTS = 8;
+const DETECTION_INTERVAL_OFFLINE_MS = 30000; // 30 secondes en mode hors ligne
+
+// 5. VARIABLES D'ÉTAT DE SESSION LIVE EN MÉMOIRE
 let currentConnection = null;
 let isConnected = false;
-let sessionRef = null;
-let reconnectAttempts = 0;
-const MAX_RECONNECT_ATTEMPTS = 5;
-
-// Compteurs et statistiques en mémoire
-let viewersCount = 0;
-let totalLikes = 0;
-let peakViewers = 0;
+let currentRoomId = null;
+let currentSessionId = null;
 let liveStartTime = null;
-let totalComments = 0;
+let reconnectAttempts = 0;
+let isDetecting = false;
+let detectionTimer = null;
+let timelineInterval = null;
 
-// Nouveaux compteurs
+// Compteurs volatils en temps réel
+let viewersCount = 0;
+let peakViewers = 0;
+let viewerSamples = []; // Échantillons pour calcul de la moyenne
+let totalLikes = 0;
+let totalComments = 0;
 let totalShares = 0;
 let newFollowers = 0;
 let totalDiamonds = 0;
 
-// Tracking Contributeurs et Donateurs
+// Tracking Contributeurs & IA
 let userMessagesCount = {};
 let userGiftsTotal = {};
-let topContributor = { nickname: '', count: 0 };
-let topDonator = { nickname: '', diamonds: 0 };
-
-// IA : Clustering de questions
+let topContributor = { nickname: 'Aucun', count: 0 };
+let topDonator = { nickname: 'Aucun', diamonds: 0 };
 let questionClusters = [];
+let liveTimelinePoints = []; // [{ time: '0m', timestamp: ISO, viewers: 10 }]
 
-const TIKTOK_USERNAME = process.env.TIKTOK_USERNAME || 'karam.drame';
-
-// Fonction basique de similarité de Jaccard (pour clustering IA)
+// Helper similarité Jaccard pour clustering de questions
 const getJaccardSimilarity = (str1, str2) => {
     if (!str1 || !str2) return 0;
     const set1 = new Set(str1.toLowerCase().split(/\s+/));
@@ -86,10 +119,89 @@ const getJaccardSimilarity = (str1, str2) => {
     return union.size === 0 ? 0 : intersection.size / union.size;
 };
 
-const startLiveTracker = async () => {
-    if (isConnected) return { status: 'already_connected' };
+// Formateur de durée (ex: "01h24m30s")
+const formatDuration = (startMs, endMs) => {
+    const diff = Math.max(0, endMs - startMs);
+    const h = Math.floor(diff / 3600000);
+    const m = Math.floor((diff % 3600000) / 60000);
+    const s = Math.floor((diff % 60000) / 1000);
+    return `${h > 0 ? `${String(h).padStart(2, '0')}h` : ''}${String(m).padStart(2, '0')}m${String(s).padStart(2, '0')}s`;
+};
 
-    console.log(`Tentative de connexion au Live de @${TIKTOK_USERNAME}... (Essai ${reconnectAttempts + 1})`);
+// 6. GESTION DES CONNEXIONS SOCKET.IO (CLIENTS FRONTEND)
+io.on('connection', (socket) => {
+    console.log(`[WebSocket] Client connecté : ${socket.id} (Total: ${io.engine.clientsCount})`);
+
+    // Envoi de l'état initial complet dès la connexion
+    socket.emit('liveStatus', {
+        isLive: isConnected,
+        username: TIKTOK_USERNAME,
+        roomId: currentRoomId,
+        sessionId: currentSessionId,
+        startedAt: liveStartTime ? liveStartTime.toISOString() : null,
+        currentViewers: viewersCount,
+        peakViewers: peakViewers,
+        totalLikes: totalLikes,
+        totalShares: totalShares,
+        newFollowers: newFollowers,
+        totalDiamonds: totalDiamonds,
+        topQuestions: questionClusters.slice(0, 4),
+        topContributors: [
+            { rank: 1, name: topContributor.nickname, count: topContributor.count },
+            { rank: 2, name: topDonator.nickname, diamonds: topDonator.diamonds }
+        ].filter(c => c.name && c.name !== 'Aucun'),
+        timeline: liveTimelinePoints
+    });
+
+    socket.on('requestState', () => {
+        socket.emit('liveStatus', {
+            isLive: isConnected,
+            username: TIKTOK_USERNAME,
+            roomId: currentRoomId,
+            sessionId: currentSessionId,
+            startedAt: liveStartTime ? liveStartTime.toISOString() : null,
+            currentViewers: viewersCount,
+            peakViewers: peakViewers,
+            totalLikes: totalLikes,
+            totalShares: totalShares,
+            newFollowers: newFollowers,
+            timeline: liveTimelinePoints
+        });
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`[WebSocket] Client déconnecté : ${socket.id}`);
+    });
+});
+
+// 7. BROADCASTING WEBSOCKET EN TEMPS RÉEL
+const broadcastMetrics = () => {
+    const elapsedSecs = liveStartTime ? Math.floor((Date.now() - liveStartTime.getTime()) / 1000) : 0;
+    const uptimeStr = liveStartTime ? formatDuration(liveStartTime.getTime(), Date.now()) : '00:00:00';
+
+    io.emit('metricsUpdate', {
+        timestamp: new Date().toISOString(),
+        viewersCount,
+        peakViewers,
+        totalLikes,
+        totalComments,
+        totalShares,
+        newFollowers,
+        totalDiamonds,
+        elapsedSeconds: elapsedSecs,
+        uptimeFormatted: uptimeStr,
+        topContributor,
+        topDonator,
+        topQuestions: questionClusters.slice(0, 4)
+    });
+};
+
+// 8. COEUR DU TRACKER : DÉMARRAGE DU LIVE TIKTOK
+const startLiveTracker = async () => {
+    if (isConnected || isDetecting) return { status: 'in_progress' };
+
+    isDetecting = true;
+    console.log(`[TikTok] Vérification de l'état Live pour @${TIKTOK_USERNAME} (Tentative ${reconnectAttempts + 1})...`);
 
     currentConnection = new WebcastPushConnection(TIKTOK_USERNAME, {
         processInitialData: true,
@@ -101,14 +213,28 @@ const startLiveTracker = async () => {
 
     try {
         const state = await currentConnection.connect();
-        isConnected = true;
-        reconnectAttempts = 0;
-        console.log(`Connecté avec succès à Room ID: ${state.roomId}`);
         
+        // LE STREAM EST ACTIF !
+        isConnected = true;
+        isDetecting = false;
+        reconnectAttempts = 0;
+        currentRoomId = state.roomId.toString();
         liveStartTime = new Date();
+        
+        // Génération d'un session_id unique et immutable pour l'archivage
+        const dateStamp = liveStartTime.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
+        currentSessionId = `live_${TIKTOK_USERNAME}_${dateStamp}_${currentRoomId}`;
+
+        console.log(`🔥 [TikTok] LIVE EN COURS DÉTECTÉ !`);
+        console.log(`- Room ID: ${currentRoomId}`);
+        console.log(`- Session ID: ${currentSessionId}`);
+        console.log(`- Début: ${liveStartTime.toISOString()}`);
+
+        // Réinitialisation stricte des compteurs de session
         viewersCount = 0;
-        totalLikes = 0;
         peakViewers = 0;
+        viewerSamples = [];
+        totalLikes = 0;
         totalComments = 0;
         totalShares = 0;
         newFollowers = 0;
@@ -118,27 +244,39 @@ const startLiveTracker = async () => {
         topContributor = { nickname: 'Aucun', count: 0 };
         topDonator = { nickname: 'Aucun', diamonds: 0 };
         questionClusters = [];
+        liveTimelinePoints = [{
+            time: '0m',
+            timestamp: liveStartTime.toISOString(),
+            viewers: 0
+        }];
 
-        sessionRef = db.collection('tiktokLiveSessions').doc(state.roomId.toString());
-        await sessionRef.set({
-            status: 'live',
-            roomId: state.roomId,
+        // Enregistrement initial dans la collection d'archives tiktokLiveSessions
+        await db.collection('tiktokLiveSessions').doc(currentSessionId).set({
+            session_id: currentSessionId,
+            roomId: currentRoomId,
             username: TIKTOK_USERNAME,
-            startTime: liveStartTime,
-            lastUpdate: FieldValue.serverTimestamp(),
-            viewers: viewersCount,
-            peakViewers: peakViewers,
-            totalLikes: totalLikes,
-            totalComments: totalComments,
-            totalShares: totalShares,
-            newFollowers: newFollowers,
-            totalDiamonds: totalDiamonds
+            status: 'live',
+            startedAt: liveStartTime.toISOString(),
+            createdAt: FieldValue.serverTimestamp(),
+            peakViewers: 0,
+            avgViewers: 0,
+            totalLikes: 0,
+            totalComments: 0,
+            totalShares: 0,
+            newFollowers: 0,
+            totalDiamonds: 0,
+            timeline: liveTimelinePoints,
+            topQuestions: [],
+            topContributors: []
         });
 
-        // Met à jour l'UI globale avec initialisation à 0
-        await db.collection('users').doc('karamokho').set({
+        // Mise à jour de la vue temps réel globale dans users/karamokho
+        await db.collection('users').doc(TARGET_FIRESTORE_USER).set({
             tiktokLiveAPI: {
                 isLive: true,
+                session_id: currentSessionId,
+                roomId: currentRoomId,
+                startedAt: liveStartTime.toISOString(),
                 currentViewers: 0,
                 peakViewers: 0,
                 likes: 0,
@@ -148,66 +286,110 @@ const startLiveTracker = async () => {
                 topContributor: topContributor,
                 topDonator: topDonator,
                 topQuestions: [],
-                lastDetected: FieldValue.serverTimestamp(),
-                roomId: state.roomId
+                lastUpdated: FieldValue.serverTimestamp()
             }
         }, { merge: true });
 
-        // VIEWERS
+        // Notification WebSocket immédiate à tous les dashboards
+        io.emit('liveStatus', {
+            isLive: true,
+            username: TIKTOK_USERNAME,
+            roomId: currentRoomId,
+            sessionId: currentSessionId,
+            startedAt: liveStartTime.toISOString(),
+            timeline: liveTimelinePoints
+        });
+
+        // Intervalle de snapshot de timeline de rétention (toutes les 60 secondes)
+        if (timelineInterval) clearInterval(timelineInterval);
+        timelineInterval = setInterval(() => {
+            if (!isConnected || !liveStartTime) return;
+            const minutesElapsed = Math.round((Date.now() - liveStartTime.getTime()) / 60000);
+            const point = {
+                time: `${minutesElapsed}m`,
+                timestamp: new Date().toISOString(),
+                viewers: viewersCount
+            };
+            liveTimelinePoints.push(point);
+            io.emit('timelinePoint', point);
+
+            // Synchronisation de la courbe dans Firestore
+            db.collection('tiktokLiveSessions').doc(currentSessionId).set({
+                timeline: liveTimelinePoints,
+                peakViewers,
+                totalLikes,
+                totalComments
+            }, { merge: true }).catch(() => {});
+        }, 60000);
+
+        // 9. ATTACHEMENT DES ÉVÉNEMENTS WEBCASHPUSH
+
+        // Concurrent Viewers
         currentConnection.on('roomUser', (data) => {
-            viewersCount = data?.viewerCount || 0;
-            if (viewersCount > peakViewers) peakViewers = viewersCount;
+            viewersCount = Math.max(0, Number(data?.viewerCount) || 0);
+            viewerSamples.push(viewersCount);
+            if (viewersCount > peakViewers) {
+                peakViewers = viewersCount;
+            }
+            broadcastMetrics();
         });
 
-        // LIKES
+        // Likes de session
         currentConnection.on('like', (data) => {
-            totalLikes += data?.likeCount || 0;
+            const count = Math.max(1, Number(data?.likeCount) || 1);
+            totalLikes += count;
+            broadcastMetrics();
         });
 
-        // PARTAGES & ABONNEMENTS
+        // Partages & Abonnements
         currentConnection.on('social', (data) => {
             if (data?.displayType === 'pm_mt_guidance_share') {
                 totalShares++;
             } else if (data?.displayType === 'pm_main_follow_message_viewer_2') {
                 newFollowers++;
             }
+            broadcastMetrics();
         });
 
-        // CADEAUX (Gifts)
+        // Cadeaux (Gifts / Diamonds)
         currentConnection.on('gift', (data) => {
-            if (data?.giftType === 1 && !data?.repeatEnd) {
-                return;
-            }
+            if (data?.giftType === 1 && !data?.repeatEnd) return;
             const diamonds = (data?.diamondCount || 0) * (data?.repeatCount || 1);
             totalDiamonds += diamonds;
 
-            const uid = data?.userId;
+            const uid = data?.userId || data?.uniqueId;
             if (uid) {
-                if (!userGiftsTotal[uid]) userGiftsTotal[uid] = { nickname: data.nickname || 'Anonyme', diamonds: 0 };
+                const name = data.nickname || data.uniqueId || 'Anonyme';
+                if (!userGiftsTotal[uid]) userGiftsTotal[uid] = { nickname: name, diamonds: 0 };
                 userGiftsTotal[uid].diamonds += diamonds;
 
                 if (userGiftsTotal[uid].diamonds > topDonator.diamonds) {
-                    topDonator = { nickname: data.nickname || 'Anonyme', diamonds: userGiftsTotal[uid].diamonds };
+                    topDonator = { nickname: name, diamonds: userGiftsTotal[uid].diamonds };
                 }
             }
+            broadcastMetrics();
         });
 
-        // CHAT & IA CLUSTERING
+        // Tchat en direct & Extraction de questions
         currentConnection.on('chat', async (data) => {
             totalComments++;
-            
-            const uid = data?.userId;
+
+            const uid = data?.userId || data?.uniqueId;
+            const nickname = data?.nickname || data?.uniqueId || 'Spectateur';
+            const msg = (data?.comment || '').trim();
+
             if (uid) {
-                if (!userMessagesCount[uid]) userMessagesCount[uid] = { nickname: data.nickname || 'Anonyme', count: 0 };
+                if (!userMessagesCount[uid]) userMessagesCount[uid] = { nickname, count: 0 };
                 userMessagesCount[uid].count++;
 
                 if (userMessagesCount[uid].count > topContributor.count) {
-                    topContributor = { nickname: data.nickname || 'Anonyme', count: userMessagesCount[uid].count };
+                    topContributor = { nickname, count: userMessagesCount[uid].count };
                 }
             }
 
-            const msg = (data?.comment || '').trim();
-            if (msg.includes('?') || msg.toLowerCase().startsWith('comment') || msg.toLowerCase().startsWith('pourquoi')) {
+            // Détection automatique de question stratégique
+            const isQuestion = msg.includes('?') || /^(comment|pourquoi|combien|quel|quelle|est-ce)/i.test(msg);
+            if (isQuestion && msg.length > 8) {
                 let foundCluster = false;
                 for (let cluster of questionClusters) {
                     if (getJaccardSimilarity(cluster.original, msg) > 0.4) {
@@ -223,155 +405,278 @@ const startLiveTracker = async () => {
                 if (questionClusters.length > 20) questionClusters.pop();
             }
 
-            if (sessionRef) {
-                sessionRef.collection('messages').add({
-                    userId: data?.userId || 'unknown',
-                    uniqueId: data?.uniqueId || 'unknown',
-                    nickname: data?.nickname || 'Anonyme',
-                    comment: msg,
-                    timestamp: FieldValue.serverTimestamp()
-                }).catch(() => {});
+            // Émission WebSocket instantanée du message au composant Tchat
+            io.emit('chatMessage', {
+                id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+                user: nickname,
+                uniqueId: data?.uniqueId || '',
+                text: msg,
+                isQuestion,
+                avatar: data?.profilePictureUrl || null,
+                timestamp: new Date().toISOString()
+            });
+
+            // Enregistrement asynchrone non-bloquant du message dans la sous-collection Firestore
+            if (currentSessionId) {
+                db.collection('tiktokLiveSessions')
+                  .doc(currentSessionId)
+                  .collection('messages')
+                  .add({
+                      userId: uid || 'unknown',
+                      nickname,
+                      comment: msg,
+                      isQuestion,
+                      timestamp: FieldValue.serverTimestamp()
+                  }).catch(() => {});
             }
+
+            broadcastMetrics();
         });
 
+        // Événement streamEnd officiel de TikTok
         currentConnection.on('streamEnd', async () => {
-            console.log("Le Live TikTok est terminé.");
+            console.log("🛑 [TikTok] Événement streamEnd reçu de TikTok !");
             await stopLiveTracker();
         });
 
+        // Déconnexion temporaire du flux
         currentConnection.on('disconnected', async () => {
-            console.warn("Déconnecté de TikTok Live. Tentative de reconnexion...");
+            console.warn("⚠️ [TikTok] Connexion Webcast fermée. Vérification de reconnexion...");
             isConnected = false;
             handleAutoReconnect();
         });
 
         currentConnection.on('error', (err) => {
-            console.error('Erreur TikTok Live connection:', err?.message || err);
+            console.error('[TikTok Error]', err?.message || err);
         });
 
     } catch (err) {
-        console.error("Échec de la connexion TikTok Live:", err.message);
+        // En cas d'erreur (ex: utilisateur hors ligne), on programme la vérification suivante
+        isDetecting = false;
         isConnected = false;
         handleAutoReconnect();
-        return { status: 'failed', error: err.message };
+        return { status: 'offline', message: err.message };
     }
 
-    return { status: 'connected' };
+    return { status: 'connected', roomId: currentRoomId, sessionId: currentSessionId };
 };
 
+// 10. GESTION DE RECONNEXION AVEC BACKOFF EXPONENTIEL
 const handleAutoReconnect = () => {
-    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-        reconnectAttempts++;
-        const backoffDelay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000);
-        console.log(`Reconnexion programmée dans ${backoffDelay / 1000}s (Tentative ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-        setTimeout(() => {
-            if (!isConnected) {
-                startLiveTracker();
-            }
-        }, backoffDelay);
-    } else {
-        console.error("Nombre maximal de tentatives de reconnexion atteint. Arrêt du tracker.");
-    }
+    if (detectionTimer) clearTimeout(detectionTimer);
+
+    // Calcul du délai avec backoff exponentiel plafonné à 30 secondes
+    const backoffDelay = isConnected 
+        ? 5000 
+        : Math.min(1000 * Math.pow(2, Math.min(reconnectAttempts, 5)), DETECTION_INTERVAL_OFFLINE_MS);
+
+    reconnectAttempts++;
+    console.log(`[Reconnexion] Prochaine vérification programmée dans ${Math.round(backoffDelay / 1000)}s (Tentative ${reconnectAttempts})...`);
+
+    detectionTimer = setTimeout(async () => {
+        if (!isConnected) {
+            await startLiveTracker();
+        }
+    }, backoffDelay);
 };
 
+// 11. ARRÊT & ARCHIVAGE COMPLET DE LA SESSION (streamEnd)
 const stopLiveTracker = async () => {
+    if (timelineInterval) {
+        clearInterval(timelineInterval);
+        timelineInterval = null;
+    }
+
     if (currentConnection) {
         try {
             currentConnection.disconnect();
         } catch (e) {
-            console.warn('Erreur lors de la déconnexion TikTok:', e.message);
+            console.warn('[TikTok] Erreur disconnect:', e.message);
         }
         currentConnection = null;
     }
-    
-    if (isConnected && sessionRef) {
-        try {
-            await sessionRef.set({
-                status: 'ended',
-                endTime: FieldValue.serverTimestamp(),
-                viewers: viewersCount,
-                peakViewers: peakViewers,
-                totalLikes: totalLikes,
-                totalComments: totalComments,
-                totalShares: totalShares,
-                newFollowers: newFollowers,
-                totalDiamonds: totalDiamonds,
-                topQuestions: questionClusters.slice(0, 3)
-            }, { merge: true });
 
-            await db.collection('users').doc('karamokho').set({
-                tiktokLiveAPI: {
-                    isLive: false,
-                    currentViewers: 0,
-                    peakViewers: 0,
-                    likes: 0,
-                    shares: 0,
-                    followers: 0,
-                    diamonds: 0,
-                    topContributor: { nickname: '', count: 0 },
-                    topDonator: { nickname: '', diamonds: 0 },
-                    topQuestions: [],
-                    lastUpdated: FieldValue.serverTimestamp()
-                }
-            }, { merge: true });
-        } catch (err) {
-            console.error('Erreur mise à jour Firestore à l\'arrêt du Live:', err.message);
-        }
-    }
+    const streamEndTime = new Date();
+    const durationMs = liveStartTime ? Math.max(0, streamEndTime.getTime() - liveStartTime.getTime()) : 0;
+    const durationFormatted = liveStartTime ? formatDuration(liveStartTime.getTime(), streamEndTime.getTime()) : '00:00';
     
+    // Calcul de l'audience moyenne
+    const avgViewers = viewerSamples.length > 0 
+        ? Math.round(viewerSamples.reduce((a, b) => a + b, 0) / viewerSamples.length)
+        : Math.round(peakViewers * 0.75);
+
+    const completedSessionRecord = {
+        id: currentSessionId || `live_${Date.now()}`,
+        session_id: currentSessionId || `live_${Date.now()}`,
+        roomId: currentRoomId,
+        username: TIKTOK_USERNAME,
+        status: 'ended',
+        startedAt: liveStartTime ? liveStartTime.toISOString() : streamEndTime.toISOString(),
+        endedAt: streamEndTime.toISOString(),
+        date: liveStartTime ? liveStartTime.toISOString() : streamEndTime.toISOString(),
+        durationSeconds: Math.floor(durationMs / 1000),
+        duration: durationFormatted,
+        durationStr: durationFormatted,
+        peakViewers,
+        avgViewers,
+        likes: totalLikes,
+        totalLikes,
+        comments: totalComments,
+        totalComments,
+        shares: totalShares,
+        followers: newFollowers,
+        diamonds: totalDiamonds,
+        title: `Live TikTok • Session @${TIKTOK_USERNAME} (${durationFormatted})`,
+        topQuestions: questionClusters.slice(0, 4),
+        topContributors: [
+            { rank: 1, name: topContributor.nickname, badge: "Top Fan", comments: topContributor.count },
+            { rank: 2, name: topDonator.nickname, badge: "VIP", diamonds: topDonator.diamonds }
+        ].filter(c => c.name && c.name !== 'Aucun'),
+        timeline: liveTimelinePoints.length > 0 ? liveTimelinePoints : [
+            { time: '0m', viewers: 0 },
+            { time: durationFormatted, viewers: peakViewers }
+        ]
+    };
+
+    console.log(`💾 [Archivage] Sauvegarde de la session ${completedSessionRecord.id} dans Firestore...`);
+
+    try {
+        // A. Sauvegarde dans le document unique d'archive
+        if (currentSessionId) {
+            await db.collection('tiktokLiveSessions').doc(currentSessionId).set(completedSessionRecord, { merge: true });
+        }
+
+        // B. Ajout dans l'historique permanent de l'utilisateur (tableau dénormalisé pour l'UI)
+        const userDocRef = db.collection('users').doc(TARGET_FIRESTORE_USER);
+        const userSnap = await userDocRef.get();
+        const existingData = userSnap.exists ? userSnap.data() : {};
+        const existingArchives = existingData.historyArchives || existingData.tiktokLiveAPI?.historyArchives || [];
+
+        // Évite les doublons d'archivage
+        const updatedArchives = [
+            completedSessionRecord,
+            ...existingArchives.filter(a => a.id !== completedSessionRecord.id && a.sessionId !== completedSessionRecord.id)
+        ].slice(0, 50); // Conservation des 50 dernières sessions
+
+        // C. RÉINITIALISATION DU DASHBOARD À ZÉRO pour le prochain direct
+        await userDocRef.set({
+            historyArchives: updatedArchives,
+            tiktokLiveAPI: {
+                isLive: false,
+                session_id: null,
+                roomId: null,
+                startedAt: null,
+                endedAt: streamEndTime.toISOString(),
+                currentViewers: 0,
+                peakViewers: 0,
+                likes: 0,
+                shares: 0,
+                followers: 0,
+                diamonds: 0,
+                topContributor: { nickname: '', count: 0 },
+                topDonator: { nickname: '', diamonds: 0 },
+                topQuestions: [],
+                historyArchives: updatedArchives,
+                lastDetected: FieldValue.serverTimestamp()
+            }
+        }, { merge: true });
+
+        console.log(`✓ [Archivage] Session archivée avec succès. Dashboard réinitialisé à zéro.`);
+    } catch (err) {
+        console.error('[Archivage Error]', err.message);
+    }
+
+    // D. Diffusion de la fin de stream aux clients WebSocket
+    io.emit('streamEnded', {
+        session: completedSessionRecord
+    });
+
+    io.emit('liveStatus', {
+        isLive: false,
+        username: TIKTOK_USERNAME,
+        roomId: null,
+        sessionId: null,
+        currentViewers: 0
+    });
+
+    // Remise à zéro des états en mémoire
     isConnected = false;
+    currentRoomId = null;
+    currentSessionId = null;
+    liveStartTime = null;
+
+    // Relance de la détection périodique
+    handleAutoReconnect();
 };
 
+// 12. ROUTES HTTP DE MONITORING ET DE COMMANDE
 app.get('/status', (req, res) => {
-    res.json({ 
-        service: 'Lumina TikTok Live Worker', 
-        status: 'running',
-        isConnected: isConnected,
-        reconnectAttempts: reconnectAttempts,
-        viewers: viewersCount,
-        likes: totalLikes,
-        comments: totalComments
+    res.json({
+        service: 'Lumina TikTok Live WebSocket Engine',
+        status: isConnected ? 'streaming' : 'monitoring',
+        isLive: isConnected,
+        username: TIKTOK_USERNAME,
+        connectedClients: io.engine.clientsCount,
+        session_id: currentSessionId,
+        metrics: {
+            viewers: viewersCount,
+            peak: peakViewers,
+            likes: totalLikes,
+            comments: totalComments,
+            shares: totalShares,
+            followers: newFollowers,
+            diamonds: totalDiamonds
+        },
+        uptime: liveStartTime ? formatDuration(liveStartTime.getTime(), Date.now()) : null
     });
 });
 
-app.post('/start', async (req, res) => {
+app.get('/session/current', (req, res) => {
+    res.json({
+        isLive: isConnected,
+        session_id: currentSessionId,
+        roomId: currentRoomId,
+        startedAt: liveStartTime,
+        metrics: {
+            viewers: viewersCount,
+            peak: peakViewers,
+            likes: totalLikes,
+            shares: totalShares,
+            followers: newFollowers
+        },
+        topQuestions: questionClusters.slice(0, 4),
+        timeline: liveTimelinePoints
+    });
+});
+
+app.post('/session/start', async (req, res) => {
     reconnectAttempts = 0;
     const result = await startLiveTracker();
     res.json(result);
 });
 
-app.post('/stop', async (req, res) => {
+app.post('/session/stop', async (req, res) => {
     await stopLiveTracker();
-    res.json({ status: 'stopped' });
+    res.json({ status: 'stopped', message: 'Live archivé et réinitialisé avec succès' });
 });
 
-const port = process.env.PORT || 8080;
-app.listen(port, () => {
-    console.log(`Worker TikTok Live à l'écoute sur le port ${port}`);
-    
-    startLiveTracker();
-    
-    setInterval(() => {
-        if (!isConnected && reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
-            console.log("Worker inactif, vérification reconnexion...");
-            handleAutoReconnect();
-        } else if (isConnected) {
-            const top3Questions = questionClusters.slice(0, 3);
-            
-            if (sessionRef) {
-                sessionRef.set({
-                    viewers: viewersCount,
-                    peakViewers: peakViewers,
-                    totalLikes: totalLikes,
-                    totalComments: totalComments,
-                    totalShares: totalShares,
-                    newFollowers: newFollowers,
-                    totalDiamonds: totalDiamonds,
-                    lastUpdate: FieldValue.serverTimestamp()
-                }, { merge: true }).catch(e => console.error("Heartbeat error", e.message));
-            }
+// 13. DÉMARRAGE DU SERVEUR SUR LE PORT CONFIGURÉ
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+    console.log(`🚀 [Backend Worker] Serveur actif sur le port ${PORT}`);
+    console.log(`- Surveillance Live : @${TIKTOK_USERNAME}`);
+    console.log(`- WebSocket : ws://localhost:${PORT}`);
+    console.log(`- Synchronisation : Firestore 'users/${TARGET_FIRESTORE_USER}'`);
 
-            db.collection('users').doc('karamokho').set({
+    // Démarrage initial de la boucle de détection
+    startLiveTracker();
+
+    // Heartbeat périodique (toutes les 15 secondes) vers Firestore pendant un Live
+    setInterval(() => {
+        if (isConnected && currentSessionId) {
+            broadcastMetrics();
+
+            db.collection('users').doc(TARGET_FIRESTORE_USER).set({
                 tiktokLiveAPI: {
                     currentViewers: viewersCount,
                     peakViewers: peakViewers,
@@ -381,10 +686,10 @@ app.listen(port, () => {
                     diamonds: totalDiamonds,
                     topContributor: topContributor,
                     topDonator: topDonator,
-                    topQuestions: top3Questions,
+                    topQuestions: questionClusters.slice(0, 4),
                     lastUpdated: FieldValue.serverTimestamp()
                 }
-            }, { merge: true }).catch(e => console.error("UI Heartbeat error", e.message));
+            }, { merge: true }).catch(() => {});
         }
     }, 15000);
 });

@@ -251,7 +251,12 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
     return found || historyArchives[0] || DEFAULT_REAL_ARCHIVES[0];
   }, [isLive, liveData, selectedSessionId, historyArchives]);
 
-  const retentionCurve = useMemo(() => generateRetentionCurve(activeSession), [activeSession]);
+  const retentionCurve = useMemo(() => {
+    if (isLive && Array.isArray(liveData?.liveTimeline) && liveData.liveTimeline.length >= 2) {
+      return liveData.liveTimeline;
+    }
+    return generateRetentionCurve(activeSession);
+  }, [isLive, liveData?.liveTimeline, activeSession]);
 
   // Audience & métriques courantes
   const currentViewers = isLive ? (liveData?.currentViewers || 0) : 0;
@@ -261,9 +266,25 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
   const sessionShares = isLive ? Number(liveData?.shares || 0) : Number(activeSession?.shares || 148);
   const sessionFollowers = isLive ? Number(liveData?.followers || 0) : Number(activeSession?.followers || 86);
 
-  const topQuestions = activeSession?.topQuestions || DEFAULT_REAL_ARCHIVES[0].topQuestions;
-  const topContributors = activeSession?.topContributors || DEFAULT_REAL_ARCHIVES[0].topContributors;
-  const recentComments = activeSession?.recentComments || DEFAULT_REAL_ARCHIVES[0].recentComments;
+  const topQuestions = (isLive && liveData?.topQuestions?.length > 0)
+    ? liveData.topQuestions
+    : (activeSession?.topQuestions || DEFAULT_REAL_ARCHIVES[0].topQuestions);
+
+  const topContributors = (isLive && liveData?.topContributors?.length > 0)
+    ? liveData.topContributors
+    : (activeSession?.topContributors || DEFAULT_REAL_ARCHIVES[0].topContributors);
+
+  const recentComments = useMemo(() => {
+    if (isLive && Array.isArray(liveData?.chatMessages) && liveData.chatMessages.length > 0) {
+      return liveData.chatMessages.map(m => ({
+        nickname: m.user || m.nickname || 'Spectateur',
+        comment: m.text || m.comment || '',
+        time: m.timestamp ? formatLocalDateTime(m.timestamp, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'À l\'instant',
+        isQuestion: Boolean(m.isQuestion)
+      }));
+    }
+    return activeSession?.recentComments || DEFAULT_REAL_ARCHIVES[0].recentComments;
+  }, [isLive, liveData?.chatMessages, activeSession]);
 
   return (
     <>
@@ -320,6 +341,15 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                   <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-gray-300 font-semibold">
                     {cleanHandle}
                   </span>
+                  {liveData?.isSocketConnected && (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-sm animate-fade-in">
+                      <span className="relative flex h-1.5 w-1.5">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                      </span>
+                      WS Actif
+                    </span>
+                  )}
                 </div>
                 <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
                   Détection automatique 24/7 en temps réel (zéro latence, webhook officiel & SWR).
