@@ -64,29 +64,38 @@ export function sanitizeTikTokUsername(input) {
  * @param {any} roomData - Raw room data object
  * @returns {boolean} True if confirmed live, false otherwise
  */
-export function validateTrueLiveCondition(roomData) {
+export function validateTrueLiveCondition(roomData, expectedUsername = 'karam.drame') {
   if (!roomData || typeof roomData !== 'object') return false;
 
   // Extract room ID
-  const roomId = roomData.roomId || roomData.room_id || roomData.id_str || roomData.id;
-  if (!roomId || String(roomId).trim() === '' || String(roomId) === '0' || String(roomId) === 'unknown') {
+  const roomId = String(roomData.roomId || roomData.room_id || roomData.id_str || roomData.id || '');
+  if (!roomId || roomId.trim() === '' || roomId === '0' || roomId === 'unknown') {
     return false;
   }
 
-  // Verify room status code === 2 (Active Live)
-  const statusCode = Number(roomData.status ?? roomData.room_status ?? roomData.live_status);
-  
-  // Explicitly check for status 2
-  if (statusCode === 2) {
-    return true;
+  // Vérification stricte du propriétaire si les métadonnées sont présentes
+  const ownerDisplayId = (roomData.owner?.display_id || roomData.owner?.unique_id || roomData.display_id || '').toLowerCase();
+  const ownerId = String(roomData.owner?.id_str || roomData.owner?.id || '');
+  const targetHandle = (expectedUsername || 'karam.drame').toLowerCase().replace(/^@+/, '');
+  const targetUserId = '7030929632657638405';
+
+  if (ownerDisplayId && ownerDisplayId !== targetHandle) {
+    return false; // Ce direct appartient à un autre streamer (ex: equinoxerpfr)
+  }
+  if (ownerId && ownerId !== targetUserId && ownerDisplayId === '') {
+    return false;
   }
 
-  // If live_stream_id or active flag is provided alongside confirmed active state
-  if (roomData.isLive === true && statusCode !== 4 && statusCode !== 0) {
-    return true;
+  // Verify room status code === 2 (Active Live Broadcast)
+  const rawStatus = roomData.status ?? roomData.room_status ?? roomData.live_status;
+  if (rawStatus === undefined || rawStatus === null) {
+    // Si aucun statut numérique n'est fourni, on exige au minimum isLive explicite
+    return Boolean(roomData.isLive === true && Number(roomData.currentViewers || roomData.user_count || 0) > 0);
   }
 
-  return false;
+  const statusCode = Number(rawStatus);
+  // SEUL le status 2 certifie un direct en cours. Status 4 = terminé, 0 = inactif
+  return statusCode === 2;
 }
 
 /**
@@ -242,7 +251,7 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
 
     // Extract potential room data structure
     const roomInfo = payload.room || payload.roomInfo?.data || payload.data || payload;
-    const isLiveConfirmed = validateTrueLiveCondition(roomInfo);
+    const isLiveConfirmed = validateTrueLiveCondition(roomInfo, username);
 
     if (isLiveConfirmed) {
       const viewerCount = Math.max(0, Number(

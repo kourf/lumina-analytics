@@ -1,4 +1,4 @@
-﻿import fs from 'fs';
+import fs from 'fs';
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
 
@@ -147,19 +147,25 @@ async function syncAllVideos() {
           liveAvatar = userInfo.avatarLarger;
         }
 
-        // Detection Live via Webcast API
+        // Detection Live via Webcast API (Verification stricte d'identite et de statut actif)
         if (userInfo?.roomId) {
-          liveRoomId = userInfo.roomId;
-          console.log('Room ID detecte sur profil:', liveRoomId);
+          const detectedRoomId = String(userInfo.roomId);
+          console.log('Room ID detecte sur profil:', detectedRoomId);
           try {
-            const webcastRes = await fetch('https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=' + liveRoomId, {
+            const webcastRes = await fetch('https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=' + detectedRoomId, {
               headers: { 'User-Agent': USER_AGENT, 'Accept': 'application/json', 'Referer': 'https://www.tiktok.com/@karam.drame' }
             });
             if (webcastRes.ok) {
               const roomJson = await webcastRes.json();
               const room = roomJson.data;
-              if (room && (room.status === 2 || room.status === 4)) {
+              const ownerHandle = String(room?.owner?.display_id || room?.owner?.unique_id || '').toLowerCase();
+              const ownerId = String(room?.owner?.id_str || room?.owner?.id || '');
+              const targetUserId = String(userInfo?.id || '7030929632657638405');
+              const isOwnerValid = (ownerHandle === 'karam.drame') || (ownerId && ownerId === targetUserId);
+
+              if (room && room.status === 2 && isOwnerValid) {
                 isTikTokLive = true;
+                liveRoomId = detectedRoomId;
                 liveTitle = room.title || liveTitle;
                 liveCurrentViewers = Number(room.user_count || 0);
                 livePeakViewers = Math.max(livePeakViewers, liveCurrentViewers);
@@ -167,11 +173,23 @@ async function syncAllVideos() {
                 if (room.create_time) {
                   liveStartedAt = new Date(room.create_time * 1000).toISOString();
                 }
-                console.log('🔴 LIVE TIKTOK EN COURS :', liveTitle, 'Viewers:', liveCurrentViewers);
+                console.log('🔴 LIVE TIKTOK CONFIRME POUR KARAM :', liveTitle, 'Viewers:', liveCurrentViewers);
+              } else {
+                if (room && !isOwnerValid) {
+                  console.log(`⚪ Live tiers ignore (Room ${detectedRoomId} appartient a @${ownerHandle}, pas a @karam.drame).`);
+                } else if (room && room.status !== 2) {
+                  console.log(`⚪ Live termine ou inactif (status: ${room?.status}).`);
+                }
+                isTikTokLive = false;
+                liveRoomId = '';
+                liveCurrentViewers = 0;
               }
             }
           } catch(webcastErr) {
             console.warn('Erreur webcast room info:', webcastErr.message);
+            isTikTokLive = false;
+            liveRoomId = '';
+            liveCurrentViewers = 0;
           }
         }
       }

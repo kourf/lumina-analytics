@@ -145,8 +145,8 @@ export async function handleTikTokLiveCheck(rawUsername) {
     const webcastData = await webcastRes.json();
     const room = webcastData.data;
 
-    // Strict validation: status code must equal 2 (Active Live Broadcast)
-    const isLive = validateTrueLiveCondition(room);
+    // Strict validation: status code must equal 2 and room owner must match username
+    const isLive = validateTrueLiveCondition(room, username);
 
     if (isLive) {
       return {
