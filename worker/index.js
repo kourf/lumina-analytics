@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Lumina Analytics - Backend Worker TikTok Live (Production-Ready)
  * 
  * Responsabilités :
@@ -14,7 +14,7 @@ const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const { WebcastPushConnection } = require('tiktok-live-connector');
+const { WebcastPushConnection } = require('tiktok-live-connector/legacy');
 const admin = require('firebase-admin');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const Redis = require('ioredis');
