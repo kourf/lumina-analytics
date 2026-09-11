@@ -1,4 +1,4 @@
-﻿import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 
 /**
@@ -14,7 +14,10 @@ import { io } from 'socket.io-client';
  * @param {object} [fallbackData] - Données initiales issues de Firestore
  */
 export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
-  const wsUrl = serverUrl || import.meta.env.VITE_TIKTOK_WORKER_WS_URL || 'http://localhost:8080';
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  const configuredUrl = serverUrl || import.meta.env.VITE_TIKTOK_WORKER_WS_URL;
+  const isLocalOnHttps = isHttps && (!configuredUrl || configuredUrl.includes('localhost') || configuredUrl.includes('127.0.0.1'));
+  const wsUrl = isLocalOnHttps ? null : (configuredUrl || 'http://localhost:8080');
   
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [isLive, setIsLive] = useState(Boolean(fallbackData?.isLive));
@@ -48,14 +51,20 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    if (!wsUrl) {
+      // En production HTTPS sans serveur WSS dédié : synchronisation temps réel 100% via Firestore
+      setIsSocketConnected(false);
+      return;
+    }
+
     // Connexion au serveur WebSocket Socket.io
     const socket = io(wsUrl, {
       transports: ['websocket', 'polling'],
       reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
-      timeout: 10000
+      timeout: 8000
     });
 
     socketRef.current = socket;

@@ -15,23 +15,39 @@ const express = require('express');
 const cors = require('cors');
 const { Server } = require('socket.io');
 const { WebcastPushConnection } = require('tiktok-live-connector/legacy');
-const admin = require('firebase-admin');
+const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const Redis = require('ioredis');
 
+const fs = require('fs');
+const path = require('path');
+
 // 1. INITIALISATION FIREBASE ADMIN SDK
-if (!admin.apps.length) {
-    // Si la clé de compte de service est fournie par variable d'environnement ou GOOGLE_APPLICATION_CREDENTIALS
-    if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
+const apps = getApps();
+if (!apps.length) {
+    const saPath = path.join(__dirname, 'serviceAccountKey.json');
+    if (fs.existsSync(saPath)) {
+        try {
+            const serviceAccount = require(saPath);
+            initializeApp({ credential: cert(serviceAccount) });
+            console.log('✓ Firebase Admin initialisé avec succès via serviceAccountKey.json');
+        } catch (e) {
+            console.warn('[Firebase] Erreur chargement serviceAccountKey.json:', e.message);
+        }
+    } else if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
         try {
             const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-            admin.initializeApp({ credential: admin.credential.cert(serviceAccount) });
+            initializeApp({ credential: cert(serviceAccount) });
+            console.log('✓ Firebase Admin initialisé via variable JSON');
         } catch (e) {
-            console.warn('[Firebase] Initialisation via variable JSON échouée, fallback default credentials:', e.message);
-            admin.initializeApp();
+            console.warn('[Firebase] Initialisation via variable JSON échouée:', e.message);
         }
     } else {
-        admin.initializeApp();
+        try {
+            initializeApp({ projectId: process.env.PROJECT_ID || 'lumina-analytics-kd-2026' });
+        } catch (e) {
+            console.warn('[Firebase] Initialisation par défaut:', e.message);
+        }
     }
 }
 const db = getFirestore();
@@ -583,7 +599,30 @@ const stopLiveTracker = async () => {
 
         console.log(`✓ [Archivage] Session archivée avec succès. Dashboard réinitialisé à zéro.`);
     } catch (err) {
-        console.error('[Archivage Error]', err.message);
+        console.warn('[Archivage Admin SDK Warning]', err.message);
+        try {
+            // Fallback gracieux via API REST Firestore sécurisée
+            const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
+            const PROJECT_ID = 'lumina-analytics-kd-2026';
+            const restUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${TARGET_FIRESTORE_USER}?updateMask.fieldPaths=tiktokLiveAPI.isLive&updateMask.fieldPaths=tiktokLiveAPI.currentViewers&updateMask.fieldPaths=tiktokLiveAPI.roomId&updateMask.fieldPaths=tiktokLiveAPI.endedAt&updateMask.fieldPaths=tiktokAPI.isLive&key=${API_KEY}`;
+            
+            await fetch(restUrl, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    fields: {
+                        'tiktokLiveAPI.isLive': { booleanValue: false },
+                        'tiktokLiveAPI.currentViewers': { integerValue: 0 },
+                        'tiktokLiveAPI.roomId': { stringValue: '' },
+                        'tiktokLiveAPI.endedAt': { stringValue: streamEndTime.toISOString() },
+                        'tiktokAPI.isLive': { booleanValue: false }
+                    }
+                })
+            });
+            console.log(`✓ [Archivage Fallback] Dashboard réinitialisé via REST API.`);
+        } catch (restErr) {
+            console.error('[Archivage Fallback Error]', restErr.message);
+        }
     }
 
     // D. Diffusion de la fin de stream aux clients WebSocket

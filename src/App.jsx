@@ -85,17 +85,32 @@ function App() {
               avatar_url: firebaseData.tiktokAPI?.avatar_url || firebaseData.tiktok?.avatar_url || baseData.tiktok?.avatar_url || "https://www.tiktok.com/api/img/?userId=7030929632657638405&location=2&aid=1988"
             };
 
+            const tiktokLiveClean = {
+              isLive: Boolean(firebaseData.tiktokLiveAPI?.isLive === true && Boolean(firebaseData.tiktokLiveAPI?.roomId)),
+              currentViewers: Number(firebaseData.tiktokLiveAPI?.currentViewers || 0),
+              peakViewers: Number(firebaseData.tiktokLiveAPI?.peakViewers || 0),
+              likes: Number(firebaseData.tiktokLiveAPI?.likes || 0),
+              shares: Number(firebaseData.tiktokLiveAPI?.shares || 0),
+              followers: Number(firebaseData.tiktokLiveAPI?.followers || 0),
+              diamonds: Number(firebaseData.tiktokLiveAPI?.diamonds || 0),
+              roomId: firebaseData.tiktokLiveAPI?.roomId || '',
+              title: firebaseData.tiktokLiveAPI?.title || '',
+              startedAt: firebaseData.tiktokLiveAPI?.startedAt || null,
+              started_at: firebaseData.tiktokLiveAPI?.started_at || null,
+              history: firebaseData.tiktokLiveAPI?.history || [],
+              historyArchives: historyArchivesList,
+              topQuestions: firebaseData.tiktokLiveAPI?.topQuestions || [],
+              topContributors: firebaseData.tiktokLiveAPI?.topContributors || [],
+              recentComments: firebaseData.tiktokLiveAPI?.recentComments || []
+            };
+
             const mergedData = {
               ...baseData,
               ...firebaseData,
               historyArchives: historyArchivesList,
               tiktok: tiktokCombined,
               tiktokAPI: tiktokCombined,
-              tiktokLiveAPI: {
-                ...(baseData.tiktokLiveAPI || {}),
-                ...(firebaseData.tiktokLiveAPI || {}),
-                historyArchives: historyArchivesList
-              }
+              tiktokLiveAPI: tiktokLiveClean
             };
             setAppData(mergedData);
           } else {

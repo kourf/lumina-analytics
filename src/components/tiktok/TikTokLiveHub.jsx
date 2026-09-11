@@ -84,121 +84,26 @@ const LiveClock = ({ startedAt }) => {
   return <span className="font-mono">{uptime}</span>;
 };
 
-// Archives par défaut réelles pour affichage immédiat
-const DEFAULT_REAL_ARCHIVES = [
-  {
-    id: 'arch_2026_08_20_evening',
-    date: '2026-08-20T20:24:00.000Z',
-    startedAt: '2026-08-20T20:24:00.000Z',
-    endedAt: '2026-08-20T21:55:00.000Z',
-    duration: '01h31',
-    durationStr: '01h31',
-    peakViewers: 16,
-    avgViewers: 13,
-    likes: 12500,
-    totalLikes: 12500,
-    comments: 426,
-    totalComments: 426,
-    shares: 148,
-    followers: 86,
-    title: 'Live TikTok • Session Soirée & Audit Webflow',
-    topQuestions: [
-      { original: "Quel est ton process pour un site Webflow B2B ?", count: 18 },
-      { original: "Comment tu trouves tes premiers clients en agence ?", count: 14 },
-      { original: "Tu recommandes quel stack pour de l'e-commerce ?", count: 9 },
-      { original: "Tu fais des audits gratuits de portfolio en live ?", count: 7 }
-    ],
-    topContributors: [
-      { rank: 1, name: "Lucas_WebDev", badge: "Top Fan", diamonds: 340, comments: 42 },
-      { rank: 2, name: "Sarah_Design", badge: "VIP", diamonds: 210, comments: 31 },
-      { rank: 3, name: "Alex_Studio", badge: "Membre", diamonds: 150, comments: 24 }
-    ],
-    recentComments: [
-      { nickname: "Lucas_WebDev", comment: "Super clair tes explications sur la structure CMS !", time: "21:12" },
-      { nickname: "Sarah_Design", comment: "Le contraste sur le hero est parfait", time: "21:14" },
-      { nickname: "Alex_Studio", comment: "Merci pour le tips sur les animations Figma", time: "21:18" }
-    ]
-  },
-  {
-    id: 'arch_2026_08_20_morning',
-    date: '2026-08-20T08:57:00.000Z',
-    startedAt: '2026-08-20T08:57:00.000Z',
-    endedAt: '2026-08-20T10:56:00.000Z',
-    duration: '01h59',
-    durationStr: '01h59',
-    peakViewers: 14,
-    avgViewers: 10,
-    likes: 4151,
-    totalLikes: 4151,
-    comments: 218,
-    totalComments: 218,
-    shares: 63,
-    followers: 42,
-    title: 'Live TikTok • Session Matinale Branding & NoCode',
-    topQuestions: [
-      { original: "Quel tarif journalier fixer au démarrage ?", count: 12 },
-      { original: "Comment structurer sa proposition commerciale ?", count: 8 }
-    ],
-    topContributors: [
-      { rank: 1, name: "Maxime_Agency", badge: "Top Fan", diamonds: 180, comments: 28 },
-      { rank: 2, name: "Elena_UX", badge: "VIP", diamonds: 140, comments: 19 },
-      { rank: 3, name: "David_Tech", badge: "Membre", diamonds: 95, comments: 15 }
-    ]
-  },
-  {
-    id: 'arch_2026_08_19_night',
-    date: '2026-08-19T20:54:00.000Z',
-    startedAt: '2026-08-19T20:54:00.000Z',
-    endedAt: '2026-08-20T00:22:00.000Z',
-    duration: '03h28',
-    durationStr: '03h28',
-    peakViewers: 39,
-    avgViewers: 28,
-    likes: 7690,
-    totalLikes: 7690,
-    comments: 612,
-    totalComments: 612,
-    shares: 245,
-    followers: 118,
-    title: 'Live TikTok • Session Nocturne Code & Q&A',
-    topQuestions: [
-      { original: "Comment intégrer des animations GSAP sur Webflow ?", count: 22 },
-      { original: "Tu penses quoi de Framer vs Webflow en 2026 ?", count: 17 }
-    ],
-    topContributors: [
-      { rank: 1, name: "Thomas_Builder", badge: "Top Fan", diamonds: 520, comments: 56 },
-      { rank: 2, name: "Camille_Creative", badge: "VIP", diamonds: 310, comments: 38 },
-      { rank: 3, name: "Julien_Growth", badge: "Membre", diamonds: 230, comments: 29 }
-    ]
-  }
-];
+// Archives initiales vides (zéro fausse donnée)
+const DEFAULT_REAL_ARCHIVES = [];
 
-// Générateur de courbe de rétention minute par minute
+
+// Générateur de courbe de rétention minute par minute (100% basée sur des données réelles)
 function generateRetentionCurve(session) {
   if (!session) return [];
-  if (session.history && Array.isArray(session.history) && session.history.length > 5) {
+  if (session.history && Array.isArray(session.history) && session.history.length > 0) {
     return session.history.map((pt, idx) => ({
-      time: pt.time || `${idx * 4}m`,
+      time: pt.time || `${idx * 2}m`,
       viewers: Number(pt.viewers || pt.count || 0)
     }));
   }
-
-  const peak = Number(session.peakViewers || 16);
-  const avg = Number(session.avgViewers || Math.round(peak * 0.75));
-  const points = [];
-  const count = 16;
-  for (let i = 0; i <= count; i++) {
-    const progress = i / count;
-    let factor = Math.sin(progress * Math.PI);
-    if (i < 3) factor = progress * 1.5;
-    const jitter = Math.sin(i * 1.7) * (peak * 0.08);
-    const viewers = Math.max(1, Math.round(avg * 0.4 + factor * (peak - avg * 0.4) + jitter));
-    points.push({
-      time: `${i * 6}m`,
-      viewers: Math.min(peak, viewers)
-    });
+  if (session.timeline && Array.isArray(session.timeline) && session.timeline.length > 0) {
+    return session.timeline.map((pt, idx) => ({
+      time: pt.time || `${idx * 2}m`,
+      viewers: Number(pt.viewers || pt.count || 0)
+    }));
   }
-  return points;
+  return [];
 }
 
 /**
@@ -211,29 +116,28 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
   const [isArchivesAccordionOpen, setIsArchivesAccordionOpen] = useState(false);
   const [selectedLiveForDrawer, setSelectedLiveForDrawer] = useState(null);
 
-  // Mécanisme de Secours (Bouton Override Manuel) en cas de latence réseau ou de délai webhook
-  const [manualOverride, setManualOverride] = useState(null); // null (Auto 24/7) | true (Forcé Live) | false (Forcé Hors Ligne)
-  const isLive = manualOverride !== null ? manualOverride : Boolean(liveData?.isLive);
+  // Résolution stricte de l'état Live (0 manipulation manuelle)
+  const isLive = Boolean(liveData?.isLive === true);
   const username = 'karam.drame';
   const cleanHandle = '@karam.drame';
   const liveUrl = `https://www.tiktok.com/${cleanHandle}/live`;
   const profileUrl = `https://www.tiktok.com/${cleanHandle}`;
 
-  // Résolution des archives
-  const rawArchives = liveData?.historyArchives || liveData?.archives || DEFAULT_REAL_ARCHIVES;
+  // Résolution des archives 100% réelles
+  const rawArchives = liveData?.historyArchives || liveData?.archives || [];
   const historyArchives = useMemo(() => {
-    return (rawArchives && rawArchives.length > 0) ? rawArchives : DEFAULT_REAL_ARCHIVES;
+    return Array.isArray(rawArchives) ? rawArchives : [];
   }, [rawArchives]);
 
   // Session active sélectionnée
-  const [selectedSessionId, setSelectedSessionId] = useState(historyArchives[0]?.id);
+  const [selectedSessionId, setSelectedSessionId] = useState(historyArchives[0]?.id || null);
   const activeSession = useMemo(() => {
     if (isLive) {
       return {
         id: 'current_live',
         title: liveData?.title || 'Live TikTok en direct',
         isCurrent: true,
-        startedAt: liveData?.started_at || liveData?.startedAt || new Date().toISOString(),
+        startedAt: liveData?.started_at || liveData?.startedAt || null,
         durationStr: 'En cours',
         peakViewers: Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0)),
         currentViewers: Number(liveData?.currentViewers || 0),
@@ -242,37 +146,50 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
         shares: Number(liveData?.shares || 0),
         followers: Number(liveData?.followers || 0),
         comments: Number(liveData?.comments || 0),
-        topQuestions: liveData?.topQuestions || DEFAULT_REAL_ARCHIVES[0].topQuestions,
-        topContributors: liveData?.topContributors || DEFAULT_REAL_ARCHIVES[0].topContributors,
-        recentComments: liveData?.recentComments || DEFAULT_REAL_ARCHIVES[0].recentComments
+        topQuestions: liveData?.topQuestions || [],
+        topContributors: liveData?.topContributors || [],
+        recentComments: liveData?.recentComments || []
       };
     }
-    const found = historyArchives.find(s => s.id === selectedSessionId);
-    return found || historyArchives[0] || DEFAULT_REAL_ARCHIVES[0];
+    if (historyArchives.length > 0) {
+      const found = historyArchives.find(s => s.id === selectedSessionId);
+      return found || historyArchives[0] || null;
+    }
+    return null;
   }, [isLive, liveData, selectedSessionId, historyArchives]);
 
   const retentionCurve = useMemo(() => {
     if (isLive && Array.isArray(liveData?.liveTimeline) && liveData.liveTimeline.length >= 2) {
       return liveData.liveTimeline;
     }
-    return generateRetentionCurve(activeSession);
+    return activeSession ? generateRetentionCurve(activeSession) : [];
   }, [isLive, liveData?.liveTimeline, activeSession]);
 
-  // Audience & métriques courantes
-  const currentViewers = isLive ? (liveData?.currentViewers || 0) : 0;
-  const peakViewers = isLive ? Math.max(Number(liveData?.peakViewers || 0), currentViewers) : Number(activeSession?.peakViewers || 16);
-  const avgViewers = isLive ? Math.max(1, Math.round(peakViewers * 0.75)) : Number(activeSession?.avgViewers || 13);
-  const sessionLikes = isLive ? Number(liveData?.likes || 0) : Number(activeSession?.likes || 12500);
-  const sessionShares = isLive ? Number(liveData?.shares || 0) : Number(activeSession?.shares || 148);
-  const sessionFollowers = isLive ? Number(liveData?.followers || 0) : Number(activeSession?.followers || 86);
+  // Audience & métriques courantes - Strictement réelles, 0 si hors-ligne sans session
+  const currentViewers = isLive ? Number(liveData?.currentViewers || 0) : 0;
+  const peakViewers = isLive 
+    ? Math.max(Number(liveData?.peakViewers || 0), currentViewers) 
+    : Number(activeSession?.peakViewers || 0);
+  const avgViewers = isLive 
+    ? Math.max(0, Math.round(peakViewers * 0.75)) 
+    : Number(activeSession?.avgViewers || 0);
+  const sessionLikes = isLive 
+    ? Number(liveData?.likes || 0) 
+    : Number(activeSession?.totalLikes || activeSession?.likes || 0);
+  const sessionShares = isLive 
+    ? Number(liveData?.shares || 0) 
+    : Number(activeSession?.shares || 0);
+  const sessionFollowers = isLive 
+    ? Number(liveData?.followers || 0) 
+    : Number(activeSession?.followers || 0);
 
   const topQuestions = (isLive && liveData?.topQuestions?.length > 0)
     ? liveData.topQuestions
-    : (activeSession?.topQuestions || DEFAULT_REAL_ARCHIVES[0].topQuestions);
+    : (activeSession?.topQuestions || []);
 
   const topContributors = (isLive && liveData?.topContributors?.length > 0)
     ? liveData.topContributors
-    : (activeSession?.topContributors || DEFAULT_REAL_ARCHIVES[0].topContributors);
+    : (activeSession?.topContributors || []);
 
   const recentComments = useMemo(() => {
     if (isLive && Array.isArray(liveData?.chatMessages) && liveData.chatMessages.length > 0) {
@@ -283,7 +200,7 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
         isQuestion: Boolean(m.isQuestion)
       }));
     }
-    return activeSession?.recentComments || DEFAULT_REAL_ARCHIVES[0].recentComments;
+    return activeSession?.recentComments || [];
   }, [isLive, liveData?.chatMessages, activeSession]);
 
   return (
@@ -357,7 +274,7 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
               </div>
             </div>
 
-            {/* Badge d'État Automatique & Secours */}
+            {/* Badge d'État Automatique */}
             {isLive ? (
               <div className="flex items-center gap-2 bg-[#FE2C55] text-white px-3.5 py-1.5 rounded-full shadow-[0_0_20px_rgba(254,44,85,0.5)] animate-pulse">
                 <span className="relative flex h-2.5 w-2.5">
@@ -365,14 +282,14 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                   <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
                 </span>
                 <span className="text-xs font-black uppercase tracking-wider font-mono">
-                  🔴 EN DIRECT {manualOverride !== null && "(SECOURS)"}
+                  🔴 EN DIRECT
                 </span>
               </div>
             ) : (
               <div className="flex items-center gap-2 bg-slate-200/80 dark:bg-black/50 border border-slate-300 dark:border-white/10 px-3.5 py-1.5 rounded-full text-slate-600 dark:text-gray-400">
                 <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-gray-500"></span>
                 <span className="text-xs font-bold uppercase tracking-wider font-mono">
-                  ⚪ HORS LIGNE {manualOverride !== null && "(SECOURS)"}
+                  ⚪ HORS LIGNE
                 </span>
               </div>
             )}
@@ -391,40 +308,16 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
               <span>{isLive ? `${formatNumber(currentViewers)} spectateurs` : "0 spectateur en direct"}</span>
             </div>
 
-            {/* Bouton de Secours (Override Manuel Réseau) */}
-            <button
-              onClick={() => {
-                if (manualOverride === null) {
-                  setManualOverride(!isLive);
-                } else {
-                  setManualOverride(null);
-                }
-              }}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-xl border text-[11px] font-mono font-bold transition-all active:scale-95",
-                manualOverride !== null
-                  ? "bg-amber-500/15 border-amber-500/40 text-amber-500 dark:text-amber-400 shadow-sm"
-                  : "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-500 dark:text-gray-400 hover:text-slate-700 dark:hover:text-gray-200"
-              )}
-              title={
-                manualOverride !== null
-                  ? "Mode Secours actif (cliquer pour revenir au mode 100% automatique)"
-                  : "Bouton de secours manuel en cas de délai de propagation ou blocage réseau"
-              }
-            >
-              <ShieldCheck size={14} className={manualOverride !== null ? "text-amber-500 animate-pulse" : ""} />
-              <span className="hidden sm:inline">{manualOverride !== null ? "Secours Actif" : "Secours"}</span>
-            </button>
-
-            {/* Bouton de Synchronisation SWR */}
+            {/* Bouton de Synchronisation Directe (Vérification Réseau Réelle) */}
             {onRefresh && (
               <button
                 onClick={onRefresh}
                 disabled={isRefreshing}
-                className="p-2.5 rounded-xl border bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-gray-300 border-slate-200 dark:border-white/10 transition-all active:scale-95"
-                title="Actualiser la vérification automatique du direct"
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-[11px] font-mono font-bold bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-gray-300 border-slate-200 dark:border-white/10 transition-all active:scale-95 shadow-sm"
+                title="Vérifier l'état du Live TikTok en direct"
               >
-                <RefreshCw size={14} className={cn("transition-transform", isRefreshing ? "animate-spin text-[#25F4EE]" : "hover:rotate-180 duration-300")} />
+                <RefreshCw size={13} className={cn("transition-transform", isRefreshing ? "animate-spin text-[#25F4EE]" : "")} />
+                <span>{isRefreshing ? "Vérification..." : "Vérifier"}</span>
               </button>
             )}
 
@@ -473,11 +366,11 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                 {isLive ? (
                   <LiveClock startedAt={activeSession?.startedAt} />
                 ) : (
-                  activeSession?.durationStr || activeSession?.duration || '01h31'
+                  activeSession ? (activeSession.durationStr || activeSession.duration || '00h00') : '00h00'
                 )}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
-                {isLive ? "Diffusion en cours minute par minute" : "Durée de la dernière session"}
+                {isLive ? "Diffusion en cours minute par minute" : (activeSession ? "Durée de la dernière session" : "Aucun direct en cours")}
               </p>
             </div>
 
@@ -571,57 +464,69 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
               )}
             </div>
 
-            {/* Graphique Recharts Rétention */}
-            <div className="h-48 md:h-64 w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={retentionCurve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="liveHubGradient" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#FE2C55" stopOpacity={0.0} />
-                    </linearGradient>
-                  </defs>
-                  <XAxis 
-                    dataKey="time" 
-                    stroke="#64748b" 
-                    fontSize={11} 
-                    tickLine={false} 
-                    axisLine={false}
-                  />
-                  <YAxis 
-                    stroke="#64748b" 
-                    fontSize={11} 
-                    tickLine={false} 
-                    axisLine={false}
-                    domain={[0, 'auto']}
-                  />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: '#0F172A', 
-                      borderColor: 'rgba(255,255,255,0.1)', 
-                      borderRadius: '12px',
-                      color: '#fff',
-                      fontSize: '12px'
-                    }} 
-                    formatter={(val) => [`${val} spectateurs`, 'Audience']}
-                  />
-                  <ReferenceLine 
-                    y={avgViewers} 
-                    stroke="#25F4EE" 
-                    strokeDasharray="3 3" 
-                    label={{ value: `Moy: ${avgViewers}`, fill: '#25F4EE', fontSize: 10, position: 'right' }} 
-                  />
-                  <Area 
-                    type="monotone" 
-                    dataKey="viewers" 
-                    stroke="#FE2C55" 
-                    strokeWidth={3} 
-                    fillOpacity={1} 
-                    fill="url(#liveHubGradient)" 
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
+            {/* Graphique Recharts Rétention (Conditionné aux données réelles) */}
+            {retentionCurve.length > 0 ? (
+              <div className="h-48 md:h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={retentionCurve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="liveHubGradient" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.4} />
+                        <stop offset="95%" stopColor="#FE2C55" stopOpacity={0.0} />
+                      </linearGradient>
+                    </defs>
+                    <XAxis 
+                      dataKey="time" 
+                      stroke="#64748b" 
+                      fontSize={11} 
+                      tickLine={false} 
+                      axisLine={false}
+                    />
+                    <YAxis 
+                      stroke="#64748b" 
+                      fontSize={11} 
+                      tickLine={false} 
+                      axisLine={false}
+                      domain={[0, 'auto']}
+                    />
+                    <Tooltip 
+                      contentStyle={{ 
+                        backgroundColor: '#0F172A', 
+                        borderColor: 'rgba(255,255,255,0.1)', 
+                        borderRadius: '12px',
+                        color: '#fff',
+                        fontSize: '12px'
+                      }} 
+                      formatter={(val) => [`${val} spectateurs`, 'Audience']}
+                    />
+                    <ReferenceLine 
+                      y={avgViewers} 
+                      stroke="#25F4EE" 
+                      strokeDasharray="3 3" 
+                      label={{ value: `Moy: ${avgViewers}`, fill: '#25F4EE', fontSize: 10, position: 'right' }} 
+                    />
+                    <Area 
+                      type="monotone" 
+                      dataKey="viewers" 
+                      stroke="#FE2C55" 
+                      strokeWidth={3} 
+                      fillOpacity={1} 
+                      fill="url(#liveHubGradient)" 
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-36 md:h-48 w-full flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-white/10 rounded-xl text-center px-4">
+                <Activity size={24} className="text-slate-400 dark:text-gray-500 mb-2 opacity-40" />
+                <p className="text-xs font-semibold text-slate-600 dark:text-gray-300">
+                  {isLive ? "Enregistrement du flux en cours (premier point dans 60s)..." : "Aucun historique de rétention disponible"}
+                </p>
+                <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-1">
+                  Les métriques minute par minute se traceront en temps réel dès votre prochain direct.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* ======================================================== */}
@@ -696,112 +601,136 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
 
             {/* VUE 1 : QUESTIONS CLÉS EXTRAITES PAR GEMINI FLASH */}
             {chatTab === 'questions' && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                {topQuestions.map((q, idx) => (
-                  <div 
-                    key={idx} 
-                    className="p-4 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex flex-col justify-between gap-3 shadow-sm hover:border-purple-500/40 transition-all"
-                  >
-                    <div className="flex items-start gap-3">
-                      <span className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">
-                        Q{idx + 1}
-                      </span>
-                      <p className="text-xs font-semibold text-slate-800 dark:text-gray-100 leading-snug">
-                        "{q.original}"
-                      </p>
-                    </div>
+              topQuestions.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+                  {topQuestions.map((q, idx) => (
+                    <div 
+                      key={idx} 
+                      className="p-4 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex flex-col justify-between gap-3 shadow-sm hover:border-purple-500/40 transition-all"
+                    >
+                      <div className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">
+                          Q{idx + 1}
+                        </span>
+                        <p className="text-xs font-semibold text-slate-800 dark:text-gray-100 leading-snug">
+                          "{q.original}"
+                        </p>
+                      </div>
 
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5 text-[11px]">
-                      <span className="text-slate-500 flex items-center gap-1">
-                        <Sparkles size={11} className="text-purple-400" />
-                        Extraction Gemini Flash
-                      </span>
-                      <span className="font-bold font-mono px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
-                        Posée {q.count || 1}x
-                      </span>
+                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5 text-[11px]">
+                        <span className="text-slate-500 flex items-center gap-1">
+                          <Sparkles size={11} className="text-purple-400" />
+                          Extraction Gemini Flash
+                        </span>
+                        <span className="font-bold font-mono px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
+                          Posée {q.count || 1}x
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-500 dark:text-gray-400 text-xs">
+                  <HelpCircle size={20} className="mx-auto mb-2 opacity-40 text-purple-400" />
+                  <p className="font-medium">Aucune question détectée pour cette session.</p>
+                  <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-0.5">L'IA regroupe automatiquement les questions récurrentes posées par vos spectateurs en live.</p>
+                </div>
+              )
             )}
 
             {/* VUE 2 : TOP 3 SPECTATEURS ACTIFS (PODIUM OR / ARGENT / BRONZE) */}
             {chatTab === 'top3' && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {topContributors.map((c) => {
-                  const isGold = c.rank === 1;
-                  const isSilver = c.rank === 2;
-                  const isBronze = c.rank === 3;
+              topContributors.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {topContributors.map((c) => {
+                    const isGold = c.rank === 1;
+                    const isSilver = c.rank === 2;
+                    const isBronze = c.rank === 3;
 
-                  return (
-                    <div 
-                      key={c.rank} 
-                      className={cn(
-                        "p-5 rounded-2xl border flex flex-col items-center text-center relative overflow-hidden transition-all shadow-sm",
-                        isGold 
-                          ? "bg-amber-500/10 border-amber-500/40 dark:bg-amber-500/5 shadow-amber-500/10" 
-                          : isSilver 
-                            ? "bg-slate-200/50 dark:bg-white/5 border-slate-300 dark:border-white/10" 
-                            : "bg-orange-500/5 border-orange-500/20"
-                      )}
-                    >
-                      {/* Médaille ou couronne */}
-                      <div className="mb-2">
-                        {isGold && <Crown className="w-8 h-8 text-amber-400 animate-bounce" />}
-                        {isSilver && <Award className="w-7 h-7 text-slate-300" />}
-                        {isBronze && <Award className="w-7 h-7 text-amber-700" />}
+                    return (
+                      <div 
+                        key={c.rank || c.name} 
+                        className={cn(
+                          "p-5 rounded-2xl border flex flex-col items-center text-center relative overflow-hidden transition-all shadow-sm",
+                          isGold 
+                            ? "bg-amber-500/10 border-amber-500/40 dark:bg-amber-500/5 shadow-amber-500/10" 
+                            : isSilver 
+                              ? "bg-slate-200/50 dark:bg-white/5 border-slate-300 dark:border-white/10" 
+                              : "bg-orange-500/5 border-orange-500/20"
+                        )}
+                      >
+                        {/* Médaille ou couronne */}
+                        <div className="mb-2">
+                          {isGold && <Crown className="w-8 h-8 text-amber-400 animate-bounce" />}
+                          {isSilver && <Award className="w-7 h-7 text-slate-300" />}
+                          {isBronze && <Award className="w-7 h-7 text-amber-700" />}
+                        </div>
+
+                        <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-white/20 flex items-center justify-center text-sm font-black text-white mb-2 shadow-md">
+                          {c.name.charAt(0)}
+                        </div>
+
+                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                          {c.name}
+                        </h4>
+
+                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-slate-600 dark:text-gray-300 mt-1 border border-white/5 font-mono">
+                          {c.badge || `Rang #${c.rank}`}
+                        </span>
+
+                        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-600 dark:text-gray-300 font-mono">
+                          <span>💎 {c.diamonds || 0}</span>
+                          <span>•</span>
+                          <span>💬 {c.comments || 0} msgs</span>
+                        </div>
                       </div>
-
-                      <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-white/20 flex items-center justify-center text-sm font-black text-white mb-2 shadow-md">
-                        {c.name.charAt(0)}
-                      </div>
-
-                      <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                        {c.name}
-                      </h4>
-
-                      <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-slate-600 dark:text-gray-300 mt-1 border border-white/5 font-mono">
-                        {c.badge || `Rang #${c.rank}`}
-                      </span>
-
-                      <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-600 dark:text-gray-300 font-mono">
-                        <span>💎 {c.diamonds || 0}</span>
-                        <span>•</span>
-                        <span>💬 {c.comments || 0} msgs</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-500 dark:text-gray-400 text-xs">
+                  <Crown size={20} className="mx-auto mb-2 opacity-40 text-amber-400" />
+                  <p className="font-medium">Aucun top contributeur enregistré.</p>
+                  <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-0.5">Le classement des spectateurs les plus généreux et actifs s'établit en direct pendant vos streams.</p>
+                </div>
+              )
             )}
 
             {/* VUE 3 : FLUX DU TCHAT EN DIRECT */}
             {chatTab === 'feed' && (
-              <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-2">
-                {recentComments.map((msg, idx) => (
-                  <div 
-                    key={idx} 
-                    className="p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 shadow-sm hover:border-white/20 transition-all"
-                  >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                        {msg.nickname.charAt(0)}
+              recentComments.length > 0 ? (
+                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-2">
+                  {recentComments.map((msg, idx) => (
+                    <div 
+                      key={idx} 
+                      className="p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 shadow-sm hover:border-white/20 transition-all"
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                          {msg.nickname.charAt(0)}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                            {msg.nickname}
+                          </span>
+                          <p className="text-xs text-slate-600 dark:text-gray-300 truncate">
+                            {msg.comment}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
-                          {msg.nickname}
-                        </span>
-                        <p className="text-xs text-slate-600 dark:text-gray-300 truncate">
-                          {msg.comment}
-                        </p>
-                      </div>
+                      <span className="text-[10px] font-mono text-slate-600 dark:text-gray-400 shrink-0">
+                        {msg.time}
+                      </span>
                     </div>
-                    <span className="text-[10px] font-mono text-slate-600 dark:text-gray-400 shrink-0">
-                      {msg.time}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-500 dark:text-gray-400 text-xs">
+                  <MessageSquare size={20} className="mx-auto mb-2 opacity-40 text-purple-400" />
+                  <p className="font-medium">{isLive ? "En attente des premiers messages..." : "Le tchat est inactif hors direct."}</p>
+                  <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-0.5">Les commentaires et questions des spectateurs défileront ici dès la prochaine session.</p>
+                </div>
+              )
             )}
 
           </div>

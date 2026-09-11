@@ -1,4 +1,4 @@
-﻿# Logs
+# Logs
 logs
 *.log
 npm-debug.log*
@@ -18,6 +18,8 @@ build_dist
 .env.*
 functions/.env
 worker/.env
+*serviceAccountKey*.json
+serviceAccountKey.json
 
 # Temporary dump files & logs
 *.txt

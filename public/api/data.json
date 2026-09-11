@@ -1028,66 +1028,19 @@
   "tiktokLiveAPI": {
     "isLive": false,
     "currentViewers": 0,
-    "lastDetected": "2026-07-29T23:40:00.000Z",
-    "peakViewers": 33,
-    "history": [
-      {
-        "time": "17:13:55",
-        "viewers": 1482
-      },
-      {
-        "time": "17:14:11",
-        "viewers": 1494
-      },
-      {
-        "time": "17:14:26",
-        "viewers": 1493
-      }
-    ],
-    "historyArchives": [
-      {
-        "id": "live_7679407957632633622",
-        "roomId": "7679407957632633622",
-        "date": "2026-08-29T11:05:34.000Z",
-        "startedAt": "2026-08-29T11:05:34.000Z",
-        "endedAt": "2026-08-29T13:15:19.000Z",
-        "durationStr": "02h10",
-        "durationMinutes": 130,
-        "peakViewers": 33,
-        "avgViewers": 14,
-        "totalUser": 602,
-        "totalLikes": 2450,
-        "totalComments": 430,
-        "shares": 38,
-        "followers": 6,
-        "title": "Analyse de votre site !"
-      }
-    ],
-    "roomId": "7679407957632633622",
-    "title": "Analyse de votre site !",
-    "likes": 1491,
-    "started_at": "2026-08-29T11:05:34.000Z",
-    "totalUser": 602,
+    "lastDetected": null,
+    "peakViewers": 0,
+    "history": [],
+    "historyArchives": [],
+    "roomId": "",
+    "title": "",
+    "likes": 0,
+    "shares": 0,
+    "followers": 0,
+    "started_at": null,
+    "totalUser": 0,
     "autoBroadcastEnabled": false
   },
-  "historyArchives": [
-    {
-      "id": "live_7679407957632633622",
-      "roomId": "7679407957632633622",
-      "date": "2026-08-29T11:05:34.000Z",
-      "startedAt": "2026-08-29T11:05:34.000Z",
-      "endedAt": "2026-08-29T13:15:19.000Z",
-      "durationStr": "02h10",
-      "durationMinutes": 130,
-      "peakViewers": 33,
-      "avgViewers": 14,
-      "totalUser": 602,
-      "totalLikes": 2450,
-      "totalComments": 430,
-      "shares": 38,
-      "followers": 6,
-      "title": "Analyse de votre site !"
-    }
-  ],
+  "historyArchives": [],
   "autoBroadcastEnabled": false
 }
