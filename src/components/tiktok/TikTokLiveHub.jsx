@@ -61,22 +61,39 @@ const formatLocalDateTime = (dateStr, options = {}) => {
   }).format(date);
 };
 
-// Chronomètre en direct pour la session live
+// Chronomètre en direct pour la session live (supporte ISO string, epoch ms, et Firestore Timestamp)
 const LiveClock = ({ startedAt }) => {
-  const [uptime, setUptime] = useState('00:00:00');
+  const parseStartTime = (val) => {
+    if (!val) return null;
+    if (typeof val === 'number') return val;
+    if (typeof val?.toMillis === 'function') return val.toMillis();
+    if (typeof val?.seconds === 'number') return val.seconds * 1000;
+    if (typeof val?._seconds === 'number') return val._seconds * 1000;
+    const t = new Date(val).getTime();
+    return isNaN(t) || t <= 0 ? null : t;
+  };
+
+  const calculateUptime = (startTimeMs) => {
+    if (!startTimeMs) return '00:00:00';
+    const diff = Math.max(0, Date.now() - startTimeMs);
+    const h = Math.floor(diff / 3600000).toString().padStart(2, '0');
+    const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
+    const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
+    return `${h}:${m}:${s}`;
+  };
+
+  const startTimeMs = parseStartTime(startedAt);
+  const [uptime, setUptime] = useState(() => calculateUptime(startTimeMs));
 
   React.useEffect(() => {
-    if (!startedAt) {
+    const ms = parseStartTime(startedAt);
+    if (!ms) {
       setUptime('00:00:00');
       return;
     }
-    const start = new Date(startedAt).getTime();
+    setUptime(calculateUptime(ms));
     const interval = setInterval(() => {
-      const diff = Math.max(0, Date.now() - start);
-      const h = Math.floor(diff / 3600000).toString().padStart(2, '0');
-      const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
-      const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
-      setUptime(`${h}:${m}:${s}`);
+      setUptime(calculateUptime(ms));
     }, 1000);
     return () => clearInterval(interval);
   }, [startedAt]);

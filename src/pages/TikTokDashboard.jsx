@@ -24,18 +24,41 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   // Connexion WebSocket sub-seconde avec le Worker Backend (Socket.io)
   const socketLive = useTikTokLiveSocket(undefined, liveData);
 
-  // Détermination de l'état Live : priorité au flux WebSocket s'il est connecté, sinon SWR / Firestore
-  const effectiveIsLive = socketLive.isSocketConnected ? socketLive.isLive : verifiedLive.isLive;
+  // Détermination de l'état Live : priorité au flux WebSocket s'il est connecté, sinon Firestore / SWR
+  const effectiveIsLive = socketLive.isSocketConnected 
+    ? socketLive.isLive 
+    : Boolean(liveData?.isLive || verifiedLive.isLive);
+
+  // Résolution stricte des métriques en direct (source de vérité : Firestore en temps réel)
+  const resolvedCurrentViewers = socketLive.isSocketConnected 
+    ? socketLive.metrics.viewers 
+    : (effectiveIsLive ? Number(liveData?.currentViewers || verifiedLive.viewerCount || 0) : 0);
+
+  const resolvedPeakViewers = socketLive.isSocketConnected 
+    ? socketLive.metrics.peakViewers 
+    : Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0), Number(verifiedLive.viewerCount || 0));
+
+  const resolvedStartedAt = (socketLive.isSocketConnected ? socketLive.startedAt : null) 
+    || liveData?.started_at 
+    || liveData?.startedAt 
+    || (effectiveIsLive ? verifiedLive.startedAt : null) 
+    || null;
+
+  const resolvedRoomId = socketLive.sessionId 
+    || liveData?.roomId 
+    || verifiedLive.roomId 
+    || '';
 
   // Source unique de vérité unifiée avec live status vérifié dynamiquement
   const unifiedData = useTikTokUnifiedData(data, {
     ...(liveData || {}),
     isLive: effectiveIsLive,
-    roomId: socketLive.sessionId || verifiedLive.roomId,
-    currentViewers: socketLive.isSocketConnected ? socketLive.metrics.viewers : verifiedLive.viewerCount,
-    started_at: (socketLive.isSocketConnected ? socketLive.startedAt : null) || verifiedLive.startedAt,
-    lastDetected: verifiedLive.lastChecked,
-    liveStatus: verifiedLive.status,
+    roomId: resolvedRoomId,
+    currentViewers: resolvedCurrentViewers,
+    peakViewers: resolvedPeakViewers,
+    started_at: resolvedStartedAt,
+    lastDetected: liveData?.lastDetected || verifiedLive.lastChecked,
+    liveStatus: effectiveIsLive ? 'LIVE' : (verifiedLive.status || 'OFFLINE'),
     isRefreshing: verifiedLive.isRefreshing
   });
 
@@ -49,6 +72,9 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     try {
       setLoading(true);
       window.dispatchEvent(new CustomEvent('tiktok:refresh'));
+      if (socketLive.isSocketConnected) {
+        socketLive.requestSync();
+      }
       await verifiedLive.refresh();
     } catch (e) {
       console.error("Erreur de synchronisation TikTok :", e);
@@ -67,7 +93,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
       <div className="animate-fade-in-up" style={{ animationDelay: '0.1s' }}>
         <TikTokHeader 
           user={unifiedData} 
-          isLive={verifiedLive.isLive} 
+          isLive={effectiveIsLive} 
           onRefresh={handleManualRefresh} 
         />
       </div>
@@ -78,24 +104,30 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
           liveData={{
             ...(liveData || {}),
             isLive: effectiveIsLive,
-            currentViewers: socketLive.isSocketConnected ? socketLive.metrics.viewers : verifiedLive.viewerCount,
-            peakViewers: socketLive.isSocketConnected ? socketLive.metrics.peakViewers : Math.max(Number(liveData?.peakViewers || 0), verifiedLive.viewerCount),
+            roomId: resolvedRoomId,
+            currentViewers: resolvedCurrentViewers,
+            peakViewers: resolvedPeakViewers,
             likes: socketLive.isSocketConnected ? socketLive.metrics.likes : Number(liveData?.likes || 0),
             shares: socketLive.isSocketConnected ? socketLive.metrics.shares : Number(liveData?.shares || 0),
             followers: socketLive.isSocketConnected ? socketLive.metrics.followers : Number(liveData?.followers || 0),
             diamonds: socketLive.isSocketConnected ? socketLive.metrics.diamonds : Number(liveData?.diamonds || 0),
-            started_at: (socketLive.isSocketConnected ? socketLive.startedAt : null) || verifiedLive.startedAt || liveData?.started_at,
-            lastChecked: verifiedLive.lastChecked,
-            status: verifiedLive.status,
+            started_at: resolvedStartedAt,
+            title: socketLive.isSocketConnected 
+              ? (socketLive.metrics?.title || liveData?.title || 'Live TikTok en direct') 
+              : (liveData?.title || 'Live TikTok en direct'),
+            lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
+            status: effectiveIsLive ? 'LIVE' : (verifiedLive.status || 'OFFLINE'),
             historyArchives: socketLive.lastArchivedSession
               ? [socketLive.lastArchivedSession, ...(unifiedData?.historyArchives || liveData?.historyArchives || [])]
               : (unifiedData?.historyArchives || liveData?.historyArchives),
-            liveTimeline: socketLive.liveTimeline,
-            chatMessages: socketLive.chatMessages,
+            liveTimeline: socketLive.liveTimeline?.length > 0 ? socketLive.liveTimeline : (liveData?.history || liveData?.timeline || []),
+            chatMessages: socketLive.chatMessages?.length > 0 ? socketLive.chatMessages : (liveData?.recentComments || []),
             topQuestions: socketLive.isSocketConnected && socketLive.metrics.topQuestions?.length > 0
               ? socketLive.metrics.topQuestions
-              : liveData?.topQuestions,
-            topContributor: socketLive.isSocketConnected ? socketLive.metrics.topContributor : liveData?.topContributor,
+              : (liveData?.topQuestions || []),
+            topContributor: socketLive.isSocketConnected 
+              ? socketLive.metrics.topContributor 
+              : (liveData?.topContributor || liveData?.topContributors?.[0] || null),
             isSocketConnected: socketLive.isSocketConnected
           }}
           onRefresh={handleManualRefresh}

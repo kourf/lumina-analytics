@@ -235,7 +235,10 @@ const startLiveTracker = async () => {
         isDetecting = false;
         reconnectAttempts = 0;
         currentRoomId = state.roomId.toString();
-        liveStartTime = new Date();
+        const createTimeSec = state.roomInfo?.data?.create_time;
+        liveStartTime = (createTimeSec && typeof createTimeSec === 'number' && createTimeSec > 1000000000) 
+            ? new Date(createTimeSec * 1000) 
+            : new Date();
         
         // Génération d'un session_id unique et immutable pour l'archivage
         const dateStamp = liveStartTime.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
@@ -246,15 +249,16 @@ const startLiveTracker = async () => {
         console.log(`- Session ID: ${currentSessionId}`);
         console.log(`- Début: ${liveStartTime.toISOString()}`);
 
-        // Réinitialisation stricte des compteurs de session
-        viewersCount = 0;
-        peakViewers = 0;
-        viewerSamples = [];
-        totalLikes = 0;
-        totalComments = 0;
-        totalShares = 0;
-        newFollowers = 0;
-        totalDiamonds = 0;
+        // Initialisation avec les statistiques réelles fournies par TikTok
+        const initialStats = state.roomInfo?.data?.stats || {};
+        viewersCount = Number(state.roomInfo?.data?.user_count || 0);
+        peakViewers = viewersCount;
+        viewerSamples = viewersCount > 0 ? [viewersCount] : [];
+        totalLikes = Number(initialStats.like_count || 0);
+        totalComments = Number(initialStats.comment_count || 0);
+        totalShares = Number(initialStats.share_count || 0);
+        newFollowers = Number(initialStats.follow_count || 0);
+        totalDiamonds = Number(initialStats.fan_ticket || 0);
         userMessagesCount = {};
         userGiftsTotal = {};
         topContributor = { nickname: 'Aucun', count: 0 };
@@ -263,7 +267,7 @@ const startLiveTracker = async () => {
         liveTimelinePoints = [{
             time: '0m',
             timestamp: liveStartTime.toISOString(),
-            viewers: 0
+            viewers: viewersCount
         }];
 
         // Enregistrement initial dans la collection d'archives tiktokLiveSessions
@@ -273,14 +277,16 @@ const startLiveTracker = async () => {
             username: TIKTOK_USERNAME,
             status: 'live',
             startedAt: liveStartTime.toISOString(),
+            started_at: liveStartTime.toISOString(),
+            title: state.roomInfo?.data?.title || 'Live TikTok en direct',
             createdAt: FieldValue.serverTimestamp(),
-            peakViewers: 0,
-            avgViewers: 0,
-            totalLikes: 0,
-            totalComments: 0,
-            totalShares: 0,
-            newFollowers: 0,
-            totalDiamonds: 0,
+            peakViewers: peakViewers,
+            avgViewers: viewersCount,
+            totalLikes: totalLikes,
+            totalComments: totalComments,
+            totalShares: totalShares,
+            newFollowers: newFollowers,
+            totalDiamonds: totalDiamonds,
             timeline: liveTimelinePoints,
             topQuestions: [],
             topContributors: []
@@ -292,17 +298,20 @@ const startLiveTracker = async () => {
                 isLive: true,
                 session_id: currentSessionId,
                 roomId: currentRoomId,
+                title: state.roomInfo?.data?.title || 'Live TikTok en direct',
                 startedAt: liveStartTime.toISOString(),
-                currentViewers: 0,
-                peakViewers: 0,
-                likes: 0,
-                shares: 0,
-                followers: 0,
-                diamonds: 0,
+                started_at: liveStartTime.toISOString(),
+                currentViewers: viewersCount,
+                peakViewers: peakViewers,
+                likes: totalLikes,
+                shares: totalShares,
+                followers: newFollowers,
+                diamonds: totalDiamonds,
                 topContributor: topContributor,
                 topDonator: topDonator,
                 topQuestions: [],
-                lastUpdated: FieldValue.serverTimestamp()
+                lastUpdated: FieldValue.serverTimestamp(),
+                workerLastHeartbeat: FieldValue.serverTimestamp()
             }
         }, { merge: true });
 
@@ -582,6 +591,7 @@ const stopLiveTracker = async () => {
                 session_id: null,
                 roomId: null,
                 startedAt: null,
+                started_at: null,
                 endedAt: streamEndTime.toISOString(),
                 currentViewers: 0,
                 peakViewers: 0,
