@@ -107,10 +107,14 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
             roomId: resolvedRoomId,
             currentViewers: resolvedCurrentViewers,
             peakViewers: resolvedPeakViewers,
-            likes: socketLive.isSocketConnected ? socketLive.metrics.likes : Number(liveData?.likes || 0),
-            shares: socketLive.isSocketConnected ? socketLive.metrics.shares : Number(liveData?.shares || 0),
-            followers: socketLive.isSocketConnected ? socketLive.metrics.followers : Number(liveData?.followers || 0),
-            diamonds: socketLive.isSocketConnected ? socketLive.metrics.diamonds : Number(liveData?.diamonds || 0),
+            likes: socketLive.isSocketConnected ? (socketLive.metrics.likes ?? socketLive.metrics.totalLikes ?? 0) : Number(liveData?.likes ?? liveData?.totalLikes ?? liveData?.likeCount ?? 0),
+            totalLikes: socketLive.isSocketConnected ? (socketLive.metrics.totalLikes ?? socketLive.metrics.likes ?? 0) : Number(liveData?.totalLikes ?? liveData?.likes ?? liveData?.likeCount ?? 0),
+            shares: socketLive.isSocketConnected ? (socketLive.metrics.shares ?? socketLive.metrics.totalShares ?? 0) : Number(liveData?.shares ?? liveData?.totalShares ?? liveData?.shareCount ?? 0),
+            totalShares: socketLive.isSocketConnected ? (socketLive.metrics.totalShares ?? socketLive.metrics.shares ?? 0) : Number(liveData?.totalShares ?? liveData?.shares ?? liveData?.shareCount ?? 0),
+            followers: socketLive.isSocketConnected ? (socketLive.metrics.followers ?? socketLive.metrics.newFollowers ?? 0) : Number(liveData?.followers ?? liveData?.newFollowers ?? liveData?.followCount ?? 0),
+            newFollowers: socketLive.isSocketConnected ? (socketLive.metrics.newFollowers ?? socketLive.metrics.followers ?? 0) : Number(liveData?.newFollowers ?? liveData?.followers ?? liveData?.followCount ?? 0),
+            diamonds: socketLive.isSocketConnected ? (socketLive.metrics.diamonds ?? socketLive.metrics.totalDiamonds ?? 0) : Number(liveData?.diamonds ?? liveData?.totalDiamonds ?? 0),
+            comments: socketLive.isSocketConnected ? (socketLive.metrics.comments ?? socketLive.metrics.totalComments ?? 0) : Number(liveData?.comments ?? liveData?.totalComments ?? 0),
             started_at: resolvedStartedAt,
             title: socketLive.isSocketConnected 
               ? (socketLive.metrics?.title || liveData?.title || 'Live TikTok en direct') 

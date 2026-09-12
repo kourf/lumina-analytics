@@ -1074,41 +1074,118 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             }
         }, { merge: true });
 
-        connection.on('roomUser', async (data) => {
+        let syncTimer = null;
+        let isSyncing = false;
+        let pendingSync = false;
+
+        const flushLiveMetricsToFirestore = async () => {
+            if (!isConnected) return;
+            if (isSyncing) {
+                pendingSync = true;
+                return;
+            }
+            isSyncing = true;
+            pendingSync = false;
+            try {
+                await userRef.set({
+                    tiktokLiveAPI: {
+                        isLive: true,
+                        roomId: state.roomId,
+                        started_at: startedAt,
+                        startedAt: startedAt,
+                        workerLastHeartbeat: FieldValue.serverTimestamp(),
+                        likes: totalLikes,
+                        totalLikes: totalLikes,
+                        shares: totalShares,
+                        totalShares: totalShares,
+                        followers: newFollowers,
+                        newFollowers: newFollowers,
+                        diamonds: totalDiamonds,
+                        totalDiamonds: totalDiamonds,
+                        comments: totalComments,
+                        currentViewers: currentViewers,
+                        peakViewers: peakViewers,
+                        topQuestions: topQuestions,
+                        topComments: topComments,
+                        recentComments: recentComments
+                    }
+                }, { merge: true });
+            } catch (syncErr) {
+                console.warn("[Cloud Function liveWorkerDaemon] Throttled write error:", syncErr.message);
+            } finally {
+                isSyncing = false;
+                if (pendingSync) {
+                    scheduleThrottledSync(1000);
+                }
+            }
+        };
+
+        const scheduleThrottledSync = (delayMs = 2500) => {
+            if (syncTimer) return;
+            syncTimer = setTimeout(() => {
+                syncTimer = null;
+                flushLiveMetricsToFirestore();
+            }, delayMs);
+        };
+
+        // Dédoublonnage des événements de partage et d'abonnement
+        const handledSocialMsgIds = new Set();
+        const markSocialHandled = (id) => {
+            if (!id) return false;
+            if (handledSocialMsgIds.has(id)) return true;
+            handledSocialMsgIds.add(id);
+            if (handledSocialMsgIds.size > 2000) {
+                const first = handledSocialMsgIds.values().next().value;
+                handledSocialMsgIds.delete(first);
+            }
+            return false;
+        };
+
+        const handleShareEvent = (data) => {
+            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_share_${Date.now()}` : null);
+            if (msgId && markSocialHandled(msgId)) return;
+            const count = Math.max(1, Number(data?.shareCount) || 1);
+            totalShares += count;
+            scheduleThrottledSync();
+        };
+
+        const handleFollowEvent = (data) => {
+            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_follow_${Date.now()}` : null);
+            if (msgId && markSocialHandled(msgId)) return;
+            newFollowers++;
+            scheduleThrottledSync();
+        };
+
+        connection.on('roomUser', (data) => {
             currentViewers = data.viewerCount || parseInt(data.total) || parseInt(data.userCount) || currentViewers;
             if (currentViewers > peakViewers) peakViewers = currentViewers;
-            await userRef.set({ tiktokLiveAPI: { currentViewers, peakViewers } }, { merge: true });
+            scheduleThrottledSync();
         });
         
-        connection.on('like', async (data) => {
-            const rawTotal = typeof data.total === 'number' ? data.total : parseInt(data.total);
-            const rawCount = typeof data.count === 'number' ? data.count : parseInt(data.count);
-            const totalLikesVal = (!isNaN(rawTotal) && rawTotal > 0) ? rawTotal : (typeof data.totalLikeCount === 'number' ? data.totalLikeCount : parseInt(data.totalLikeCount));
-            const countVal = (!isNaN(rawCount) && rawCount > 0) ? rawCount : (typeof data.likeCount === 'number' ? data.likeCount : parseInt(data.likeCount)) || 1;
+        connection.on('like', (data) => {
+            const rawTotal = typeof data?.total === 'number' ? data.total : parseInt(data?.total || data?.totalLikeCount || 0);
+            const rawCount = typeof data?.count === 'number' ? data.count : parseInt(data?.count || data?.likeCount || 1);
 
-            if (totalLikesVal && !isNaN(totalLikesVal) && totalLikesVal > 0) {
-                totalLikes = Math.max(totalLikes, totalLikesVal);
+            if (!isNaN(rawTotal) && rawTotal > 0) {
+                totalLikes = Math.max(totalLikes, rawTotal);
+            } else if (!isNaN(rawCount) && rawCount > 0) {
+                totalLikes += rawCount;
             } else {
-                totalLikes += countVal;
+                totalLikes += 1;
             }
-            await userRef.set({ tiktokLiveAPI: { likes: totalLikes } }, { merge: true });
+            scheduleThrottledSync();
         });
 
-        connection.on('social', async (data) => {
-            const text = String(data.displayType || data.label || data.action || '').toLowerCase();
-            if (text.includes('share') || text.includes('partagé')) totalShares++;
-            if (text.includes('follow') || text.includes('abonné')) newFollowers++;
-            await userRef.set({ tiktokLiveAPI: { shares: totalShares, followers: newFollowers } }, { merge: true });
-        });
+        connection.on('share', handleShareEvent);
+        connection.on('follow', handleFollowEvent);
 
-        connection.on('share', async (data) => {
-            totalShares++;
-            await userRef.set({ tiktokLiveAPI: { shares: totalShares } }, { merge: true });
-        });
-
-        connection.on('follow', async (data) => {
-            newFollowers++;
-            await userRef.set({ tiktokLiveAPI: { followers: newFollowers } }, { merge: true });
+        connection.on('social', (data) => {
+            const text = String(data?.displayType || data?.label || data?.action || '').toLowerCase();
+            if (text.includes('share') || text.includes('partagé') || data?.shareType || data?.shareTarget) {
+                handleShareEvent(data);
+            } else if (text.includes('follow') || text.includes('abonné') || data?.followType) {
+                handleFollowEvent(data);
+            }
         });
 
         let topQuestions = existingData.topQuestions || [];
@@ -1122,7 +1199,6 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             const lower = text.toLowerCase();
             const nowTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             
-            // 1. Ajouter au flux direct des commentaires récents
             recentComments.unshift({
                 id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 6),
                 nickname: nickname || 'Spectateur',
@@ -1131,7 +1207,6 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             });
             if (recentComments.length > 50) recentComments = recentComments.slice(0, 50);
 
-            // 2. Détection de questions ou de commentaires répétés
             const isQuestion = lower.includes('?') || 
                 ['comment', 'pourquoi', 'combien', 'est ce', 'est-ce', 'c quoi', "c'est quoi", 'quel', 'quelle', 'quels', 'quelles', 'qui', 'où', 'ou', 'quand', 'tu penses', 'tu fais', 'tu conseil', 'tu conseille', 'tu recommandes', 'avis sur', 'peux tu', 'peux-tu', 'tu peux', 'c normal', "c'est normal", 'tu vis', 'tu gagnes'].some(k => lower.startsWith(k) || lower.includes(' ' + k));
                 
@@ -1145,7 +1220,6 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                 topQuestions.sort((a, b) => (b.count || 1) - (a.count || 1));
                 topQuestions = topQuestions.slice(0, 15);
             } else {
-                // Commentaires & Réactions répétés
                 const existingC = topComments.find(c => (c.text || c.original || '').toLowerCase() === lower || (c.text && c.text.length > 6 && lower === c.text.toLowerCase()));
                 if (existingC) {
                     existingC.count = (existingC.count || 1) + 1;
@@ -1157,7 +1231,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             }
         }
 
-        connection.on('chat', async (data) => {
+        connection.on('chat', (data) => {
             totalComments++;
             const commentText = data.content || data.comment || '';
             const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname;
@@ -1165,45 +1239,49 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             if (nickname) {
                 topContributorsMap[nickname] = (topContributorsMap[nickname] || 0) + 1;
             }
-            
             if (commentText) {
                 processLiveMessage(commentText, nickname);
             }
-            
-            const updates = { 
-                comments: totalComments,
-                topQuestions: topQuestions,
-                topComments: topComments,
-                recentComments: recentComments
-            };
-            
-            await userRef.set({ tiktokLiveAPI: updates }, { merge: true });
+            scheduleThrottledSync();
         });
 
-        connection.on('questionNew', async (data) => {
+        connection.on('questionNew', (data) => {
             const qText = data.details?.questionText || data.questionText || data.question || '';
             const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname || 'Spectateur';
             if (qText) {
                 processLiveMessage(qText, nickname);
-                await userRef.set({ tiktokLiveAPI: { topQuestions: topQuestions, recentComments: recentComments } }, { merge: true });
+                scheduleThrottledSync();
             }
         });
 
-        connection.on('gift', async (data) => {
+        connection.on('gift', (data) => {
             if (data.giftType === 1 && !data.repeatEnd) return;
             const diamondCount = (data.diamondCount || 0) * (data.repeatCount || 1);
             totalDiamonds += diamondCount;
-            await userRef.collection('liveGifts').add({
+            userRef.collection('liveGifts').add({
                 giftId: data.giftId, giftName: data.giftName, diamondCount, senderName: data.nickname, timestamp: FieldValue.serverTimestamp()
-            });
-            await userRef.set({ tiktokLiveAPI: { diamonds: totalDiamonds } }, { merge: true });
+            }).catch(() => {});
+            scheduleThrottledSync();
         });
 
         let ticks = 0;
         const heartbeatInterval = setInterval(async () => {
             if (!isConnected) return;
             ticks++;
-            const updates = { workerLastHeartbeat: FieldValue.serverTimestamp() };
+            const updates = { 
+                workerLastHeartbeat: FieldValue.serverTimestamp(),
+                likes: totalLikes,
+                totalLikes: totalLikes,
+                shares: totalShares,
+                totalShares: totalShares,
+                followers: newFollowers,
+                newFollowers: newFollowers,
+                diamonds: totalDiamonds,
+                totalDiamonds: totalDiamonds,
+                comments: totalComments,
+                currentViewers: currentViewers,
+                peakViewers: peakViewers
+            };
             
             // Push history every 5 minutes (5 ticks)
             if (ticks % 5 === 0) {
@@ -1213,7 +1291,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             
             await userRef.set({
                tiktokLiveAPI: updates
-            }, { merge: true });
+            }, { merge: true }).catch(() => {});
         }, 60000);
 
         return new Promise((resolve) => {

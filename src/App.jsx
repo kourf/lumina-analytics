@@ -85,23 +85,33 @@ function App() {
               avatar_url: firebaseData.tiktokAPI?.avatar_url || firebaseData.tiktok?.avatar_url || baseData.tiktok?.avatar_url || "https://www.tiktok.com/api/img/?userId=7030929632657638405&location=2&aid=1988"
             };
 
+            const liveRaw = firebaseData.tiktokLiveAPI || {};
             const tiktokLiveClean = {
-              isLive: Boolean(firebaseData.tiktokLiveAPI?.isLive === true && Boolean(firebaseData.tiktokLiveAPI?.roomId)),
-              currentViewers: Number(firebaseData.tiktokLiveAPI?.currentViewers || 0),
-              peakViewers: Number(firebaseData.tiktokLiveAPI?.peakViewers || 0),
-              likes: Number(firebaseData.tiktokLiveAPI?.likes || 0),
-              shares: Number(firebaseData.tiktokLiveAPI?.shares || 0),
-              followers: Number(firebaseData.tiktokLiveAPI?.followers || 0),
-              diamonds: Number(firebaseData.tiktokLiveAPI?.diamonds || 0),
-              roomId: firebaseData.tiktokLiveAPI?.roomId || '',
-              title: firebaseData.tiktokLiveAPI?.title || '',
-              startedAt: firebaseData.tiktokLiveAPI?.startedAt || null,
-              started_at: firebaseData.tiktokLiveAPI?.started_at || null,
-              history: firebaseData.tiktokLiveAPI?.history || [],
+              isLive: Boolean(liveRaw.isLive === true && Boolean(liveRaw.roomId)),
+              currentViewers: Number(liveRaw.currentViewers || 0),
+              peakViewers: Number(liveRaw.peakViewers || 0),
+              likes: Number(liveRaw.likes ?? liveRaw.totalLikes ?? liveRaw.likeCount ?? 0),
+              totalLikes: Number(liveRaw.totalLikes ?? liveRaw.likes ?? liveRaw.likeCount ?? 0),
+              shares: Number(liveRaw.shares ?? liveRaw.totalShares ?? liveRaw.shareCount ?? 0),
+              totalShares: Number(liveRaw.totalShares ?? liveRaw.shares ?? liveRaw.shareCount ?? 0),
+              followers: Number(liveRaw.followers ?? liveRaw.newFollowers ?? liveRaw.followCount ?? 0),
+              newFollowers: Number(liveRaw.newFollowers ?? liveRaw.followers ?? liveRaw.followCount ?? 0),
+              diamonds: Number(liveRaw.diamonds ?? liveRaw.totalDiamonds ?? 0),
+              totalDiamonds: Number(liveRaw.totalDiamonds ?? liveRaw.diamonds ?? 0),
+              comments: Number(liveRaw.comments ?? liveRaw.totalComments ?? 0),
+              roomId: liveRaw.roomId || '',
+              title: liveRaw.title || '',
+              startedAt: liveRaw.startedAt || liveRaw.started_at || null,
+              started_at: liveRaw.started_at || liveRaw.startedAt || null,
+              history: liveRaw.history || [],
               historyArchives: historyArchivesList,
-              topQuestions: firebaseData.tiktokLiveAPI?.topQuestions || [],
-              topContributors: firebaseData.tiktokLiveAPI?.topContributors || [],
-              recentComments: firebaseData.tiktokLiveAPI?.recentComments || []
+              topQuestions: liveRaw.topQuestions || [],
+              topContributors: liveRaw.topContributors || [],
+              topContributor: liveRaw.topContributor || null,
+              topDonator: liveRaw.topDonator || null,
+              recentComments: liveRaw.recentComments || [],
+              lastDetected: liveRaw.lastDetected || null,
+              workerLastHeartbeat: liveRaw.workerLastHeartbeat || null
             };
 
             const mergedData = {

@@ -190,7 +190,79 @@ io.on('connection', (socket) => {
     });
 });
 
-// 7. BROADCASTING WEBSOCKET EN TEMPS RÉEL
+// 7. BROADCASTING WEBSOCKET EN TEMPS RÉEL & SYNCHRONISATION FIRESTORE THROTTLÉE
+let firestoreSyncTimer = null;
+let firestoreIsSyncing = false;
+let firestorePendingSync = false;
+
+const syncMetricsToFirestore = async () => {
+    if (!isConnected || !currentSessionId) return;
+    if (firestoreIsSyncing) {
+        firestorePendingSync = true;
+        return;
+    }
+
+    firestoreIsSyncing = true;
+    firestorePendingSync = false;
+
+    try {
+        await db.collection('users').doc(TARGET_FIRESTORE_USER).set({
+            tiktokLiveAPI: {
+                isLive: true,
+                session_id: currentSessionId,
+                roomId: currentRoomId,
+                title: currentConnection?.roomInfo?.data?.title || 'Live TikTok en direct',
+                startedAt: liveStartTime ? liveStartTime.toISOString() : null,
+                started_at: liveStartTime ? liveStartTime.toISOString() : null,
+                currentViewers: viewersCount,
+                peakViewers: peakViewers,
+                likes: totalLikes,
+                totalLikes: totalLikes,
+                shares: totalShares,
+                totalShares: totalShares,
+                followers: newFollowers,
+                newFollowers: newFollowers,
+                diamonds: totalDiamonds,
+                totalDiamonds: totalDiamonds,
+                comments: totalComments,
+                topContributor: topContributor,
+                topDonator: topDonator,
+                topQuestions: questionClusters.slice(0, 4),
+                lastDetected: FieldValue.serverTimestamp(),
+                workerLastHeartbeat: FieldValue.serverTimestamp()
+            }
+        }, { merge: true });
+
+        // Mise à jour de la session d'archivage en parallèle
+        db.collection('tiktokLiveSessions').doc(currentSessionId).set({
+            peakViewers,
+            currentViewers: viewersCount,
+            totalLikes,
+            totalComments,
+            totalShares,
+            newFollowers,
+            totalDiamonds,
+            lastUpdated: FieldValue.serverTimestamp()
+        }, { merge: true }).catch(() => {});
+
+    } catch (err) {
+        console.warn('[Firestore Sync] Erreur mise à jour live metrics:', err.message);
+    } finally {
+        firestoreIsSyncing = false;
+        if (firestorePendingSync) {
+            scheduleFirestoreSync(1000);
+        }
+    }
+};
+
+const scheduleFirestoreSync = (delayMs = 2500) => {
+    if (firestoreSyncTimer) return;
+    firestoreSyncTimer = setTimeout(() => {
+        firestoreSyncTimer = null;
+        syncMetricsToFirestore();
+    }, delayMs);
+};
+
 const broadcastMetrics = () => {
     const elapsedSecs = liveStartTime ? Math.floor((Date.now() - liveStartTime.getTime()) / 1000) : 0;
     const uptimeStr = liveStartTime ? formatDuration(liveStartTime.getTime(), Date.now()) : '00:00:00';
@@ -210,6 +282,9 @@ const broadcastMetrics = () => {
         topDonator,
         topQuestions: questionClusters.slice(0, 4)
     });
+
+    // Déclenchement de la synchronisation groupée Firestore (sub-3s)
+    scheduleFirestoreSync();
 };
 
 // 8. COEUR DU TRACKER : DÉMARRAGE DU LIVE TIKTOK
@@ -359,21 +434,62 @@ const startLiveTracker = async () => {
             broadcastMetrics();
         });
 
-        // Likes de session
+        // Tracking dédoublonné pour éviter les doubles incrémentations entre 'social' et 'share'/'follow'
+        const handledSocialMsgIds = new Set();
+        const markSocialHandled = (id) => {
+            if (!id) return false;
+            if (handledSocialMsgIds.has(id)) return true;
+            handledSocialMsgIds.add(id);
+            if (handledSocialMsgIds.size > 2000) {
+                const first = handledSocialMsgIds.values().next().value;
+                handledSocialMsgIds.delete(first);
+            }
+            return false;
+        };
+
+        const handleShareEvent = (data) => {
+            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_share_${Date.now()}` : null);
+            if (msgId && markSocialHandled(msgId)) return;
+            const count = Math.max(1, Number(data?.shareCount) || 1);
+            totalShares += count;
+            console.log(`[TikTok Event] 🔄 Partage détecté (+${count}, total: ${totalShares})`);
+            broadcastMetrics();
+        };
+
+        const handleFollowEvent = (data) => {
+            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_follow_${Date.now()}` : null);
+            if (msgId && markSocialHandled(msgId)) return;
+            newFollowers++;
+            console.log(`[TikTok Event] ➕ Nouvel abonné détecté (total live: ${newFollowers})`);
+            broadcastMetrics();
+        };
+
+        // Likes de session (cumulatif automatique ou batch)
         currentConnection.on('like', (data) => {
-            const count = Math.max(1, Number(data?.likeCount) || 1);
-            totalLikes += count;
+            const rawTotal = typeof data?.total === 'number' ? data.total : parseInt(data?.total || data?.totalLikeCount || 0);
+            const rawCount = typeof data?.count === 'number' ? data.count : parseInt(data?.count || data?.likeCount || 1);
+            
+            if (!isNaN(rawTotal) && rawTotal > 0) {
+                totalLikes = Math.max(totalLikes, rawTotal);
+            } else if (!isNaN(rawCount) && rawCount > 0) {
+                totalLikes += rawCount;
+            } else {
+                totalLikes += 1;
+            }
             broadcastMetrics();
         });
 
-        // Partages & Abonnements
+        // Partages & Abonnements (écouteurs dédiés + fallback social)
+        currentConnection.on('share', handleShareEvent);
+        currentConnection.on('follow', handleFollowEvent);
+
         currentConnection.on('social', (data) => {
-            if (data?.displayType === 'pm_mt_guidance_share') {
-                totalShares++;
-            } else if (data?.displayType === 'pm_main_follow_message_viewer_2') {
-                newFollowers++;
+            const displayType = String(data?.displayType || data?.label || data?.action || '').toLowerCase();
+            if (displayType.includes('share') || displayType.includes('partagé') || data?.shareType || data?.shareTarget) {
+                handleShareEvent(data);
+            } else if (displayType.includes('follow') || displayType.includes('abonné') || data?.followType) {
+                handleFollowEvent(data);
             }
-            broadcastMetrics();
         });
 
         // Cadeaux (Gifts / Diamonds)

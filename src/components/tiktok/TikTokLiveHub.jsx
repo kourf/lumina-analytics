@@ -98,7 +98,41 @@ const LiveClock = ({ startedAt }) => {
     return () => clearInterval(interval);
   }, [startedAt]);
 
-  return <span className="font-mono">{uptime}</span>;
+  return <span className="font-mono tabular-nums">{uptime}</span>;
+};
+
+// Compteur animé ultra-fluide avec tabular-nums (zéro saut de mise en page) et micro-pulse Google Stitch
+const AnimatedCounter = ({ value, formatter = formatNumber, className = "", pulseColor = "rgba(254,44,85,0.4)" }) => {
+  const [displayValue, setDisplayValue] = useState(value);
+  const [isPulsing, setIsPulsing] = useState(false);
+  const prevValueRef = React.useRef(value);
+
+  React.useEffect(() => {
+    if (value !== prevValueRef.current) {
+      if (value > prevValueRef.current) {
+        setIsPulsing(true);
+        const timer = setTimeout(() => setIsPulsing(false), 800);
+        prevValueRef.current = value;
+        setDisplayValue(value);
+        return () => clearTimeout(timer);
+      }
+      prevValueRef.current = value;
+      setDisplayValue(value);
+    }
+  }, [value]);
+
+  return (
+    <span 
+      className={cn(
+        "font-mono tabular-nums inline-block transition-all duration-300", 
+        isPulsing && "scale-105", 
+        className
+      )}
+      style={isPulsing ? { textShadow: `0 0 12px ${pulseColor}` } : undefined}
+    >
+      {formatter(displayValue)}
+    </span>
+  );
 };
 
 // Archives initiales vides (zéro fausse donnée)
@@ -159,10 +193,10 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
         peakViewers: Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0)),
         currentViewers: Number(liveData?.currentViewers || 0),
         avgViewers: Number(liveData?.currentViewers || 0),
-        likes: Number(liveData?.likes || 0),
-        shares: Number(liveData?.shares || 0),
-        followers: Number(liveData?.followers || 0),
-        comments: Number(liveData?.comments || 0),
+        likes: Number(liveData?.likes ?? liveData?.totalLikes ?? liveData?.likeCount ?? 0),
+        shares: Number(liveData?.shares ?? liveData?.totalShares ?? liveData?.shareCount ?? 0),
+        followers: Number(liveData?.followers ?? liveData?.newFollowers ?? liveData?.followCount ?? 0),
+        comments: Number(liveData?.comments ?? liveData?.totalComments ?? 0),
         topQuestions: liveData?.topQuestions || [],
         topContributors: liveData?.topContributors || [],
         recentComments: liveData?.recentComments || []
@@ -191,14 +225,14 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
     ? Math.max(0, Math.round(peakViewers * 0.75)) 
     : Number(activeSession?.avgViewers || 0);
   const sessionLikes = isLive 
-    ? Number(liveData?.likes || 0) 
-    : Number(activeSession?.totalLikes || activeSession?.likes || 0);
+    ? Number(liveData?.likes ?? liveData?.totalLikes ?? liveData?.likeCount ?? 0) 
+    : Number(activeSession?.totalLikes ?? activeSession?.likes ?? 0);
   const sessionShares = isLive 
-    ? Number(liveData?.shares || 0) 
-    : Number(activeSession?.shares || 0);
+    ? Number(liveData?.shares ?? liveData?.totalShares ?? liveData?.shareCount ?? 0) 
+    : Number(activeSession?.totalShares ?? activeSession?.shares ?? 0);
   const sessionFollowers = isLive 
-    ? Number(liveData?.followers || 0) 
-    : Number(activeSession?.followers || 0);
+    ? Number(liveData?.followers ?? liveData?.newFollowers ?? liveData?.followCount ?? 0) 
+    : Number(activeSession?.newFollowers ?? activeSession?.followers ?? 0);
 
   const topQuestions = (isLive && liveData?.topQuestions?.length > 0)
     ? liveData.topQuestions
@@ -398,10 +432,12 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                 <Users size={16} className="text-[#25F4EE]" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                  {formatNumber(isLive ? currentViewers : peakViewers)}
-                </span>
-                <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 font-mono">
+                <AnimatedCounter 
+                  value={isLive ? currentViewers : peakViewers} 
+                  className="text-2xl font-black text-slate-900 dark:text-white"
+                  pulseColor="rgba(37,244,238,0.5)"
+                />
+                <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 font-mono tabular-nums">
                   {isLive ? `(Pic: ${peakViewers})` : `(Moy: ${avgViewers})`}
                 </span>
               </div>
@@ -416,26 +452,32 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
                 <span className="text-xs font-bold uppercase tracking-wider">Likes de Session</span>
                 <Heart size={16} className="text-[#FE2C55]" />
               </div>
-              <div className="text-2xl font-black text-[#FE2C55] font-mono">
-                {formatNumber(sessionLikes)}
+              <div className="text-2xl font-black text-[#FE2C55]">
+                <AnimatedCounter 
+                  value={sessionLikes} 
+                  className="text-2xl font-black text-[#FE2C55]"
+                  pulseColor="rgba(254,44,85,0.6)"
+                />
               </div>
               <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
                 Mentions J'aime reçues en direct
               </p>
             </div>
 
-            {/* CARTE 4 : PARTAGES & NOUS ABONNÉS */}
+            {/* CARTE 4 : PARTAGES & NOUVEAUX ABONNÉS */}
             <div className="bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-2xl p-5 relative overflow-hidden group hover:border-[#25F4EE]/30 transition-all">
               <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 mb-3">
                 <span className="text-xs font-bold uppercase tracking-wider">Partages & Abonnés</span>
                 <Share2 size={16} className="text-emerald-400" />
               </div>
               <div className="flex items-baseline gap-2">
-                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                  {formatNumber(sessionShares)}
-                </span>
-                <span className="text-xs font-bold text-emerald-400 font-mono">
-                  +{sessionFollowers} abos
+                <AnimatedCounter 
+                  value={sessionShares} 
+                  className="text-2xl font-black text-slate-900 dark:text-white"
+                  pulseColor="rgba(52,211,153,0.5)"
+                />
+                <span className="text-xs font-bold text-emerald-400 font-mono tabular-nums flex items-center">
+                  +<AnimatedCounter value={sessionFollowers} formatter={(n) => n} pulseColor="rgba(52,211,153,0.6)" /> abos
                 </span>
               </div>
               <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
