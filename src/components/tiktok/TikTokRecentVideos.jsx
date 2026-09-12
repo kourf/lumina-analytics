@@ -55,13 +55,24 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
                 <Video className="w-5 h-5 text-teal-600 dark:text-[#25F4EE]" />
               </div>
               <div>
-                <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                  Catalogue Vidéos TikTok
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-[#25F4EE]/10 text-teal-700 dark:text-[#25F4EE] border border-teal-200 dark:border-[#25F4EE]/20">
-                    {recentVideos.length} vidéos
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
+                    Catalogue Vidéos TikTok
+                    <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-teal-100 dark:bg-[#25F4EE]/10 text-teal-700 dark:text-[#25F4EE] border border-teal-200 dark:border-[#25F4EE]/20 font-mono">
+                      {recentVideos.length} vidéos
+                    </span>
+                  </h2>
+                  <span className="inline-flex items-center gap-1.5 text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 font-bold">
+                    <span className="relative flex h-1.5 w-1.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
+                    </span>
+                    Sync Automatique Active
                   </span>
-                </h2>
-                <p className="text-xs text-slate-600 dark:text-gray-400 mt-0.5">Performance et analyse détaillée de vos publications</p>
+                </div>
+                <p className="text-xs text-slate-600 dark:text-gray-400 mt-1">
+                  Synchronisation continue et autonome 24/7 (toutes les 1 à 2h) • 100% à jour
+                </p>
               </div>
             </div>
           </div>
@@ -118,11 +129,12 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
               <tbody className="text-sm">
                 {sortedVideos.map((video, index) => {
                   const isTop = (video.views || 0) >= 30000;
+                  const isNew = (Date.now() - new Date(video.date).getTime()) < (14 * 86400000);
                   return (
                     <tr 
                       key={video.id || index} 
                       className="border-b border-slate-100 dark:border-white/5 hover:bg-slate-50 dark:hover:bg-white/5 transition-colors group cursor-pointer"
-                      onClick={() => window.open(`https://www.tiktok.com/@karam.drame/video/${video.id}`, '_blank')}
+                      onClick={() => window.open(video.shareUrl || `https://www.tiktok.com/@karam.drame/video/${video.id}`, '_blank')}
                     >
                       <td className="py-3.5 px-4 text-slate-900 dark:text-white font-medium flex items-center gap-4">
                         <div className="relative w-14 h-[75px] rounded-xl overflow-hidden border border-slate-200 dark:border-white/10 group-hover:border-[#25F4EE]/50 transition-colors shrink-0 shadow-sm">
@@ -137,8 +149,13 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
                             <PlayCircle className="text-white w-6 h-6 drop-shadow-md" />
                           </div>
                           {isTop && (
-                            <span className="absolute top-1 left-1 bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.2 rounded shadow-sm">
+                            <span className="absolute top-1 left-1 bg-amber-500 text-black text-[9px] font-black px-1.5 py-0.5 rounded shadow-sm z-10">
                               TOP
+                            </span>
+                          )}
+                          {isNew && !isTop && (
+                            <span className="absolute top-1 left-1 bg-[#FE2C55] text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow-md animate-pulse z-10">
+                              NOUVEAU
                             </span>
                           )}
                         </div>
@@ -156,25 +173,25 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5 text-slate-900 dark:text-white font-bold font-mono text-xs md:text-sm">
+                        <div className="flex items-center justify-end gap-1.5 text-slate-900 dark:text-white font-bold font-mono tabular-nums text-xs md:text-sm">
                           <PlayCircle className="w-3.5 h-3.5 text-slate-400 dark:text-gray-500" />
                           {new Intl.NumberFormat('fr-FR').format(video.views || 0)}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5 text-slate-700 dark:text-gray-300 font-semibold font-mono text-xs md:text-sm">
+                        <div className="flex items-center justify-end gap-1.5 text-slate-700 dark:text-gray-300 font-semibold font-mono tabular-nums text-xs md:text-sm">
                           <Heart className="w-3.5 h-3.5 text-slate-400 dark:text-gray-500 group-hover:text-[#FE2C55] transition-colors" />
                           {new Intl.NumberFormat('fr-FR').format(video.likes || 0)}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5 text-slate-700 dark:text-gray-300 font-semibold font-mono text-xs md:text-sm">
+                        <div className="flex items-center justify-end gap-1.5 text-slate-700 dark:text-gray-300 font-semibold font-mono tabular-nums text-xs md:text-sm">
                           <Share2 className="w-3.5 h-3.5 text-slate-400 dark:text-gray-500 group-hover:text-teal-500 transition-colors" />
                           {new Intl.NumberFormat('fr-FR').format(video.shares || 0)}
                         </div>
                       </td>
                       <td className="py-3.5 px-4 text-right">
-                        <div className="flex items-center justify-end gap-1.5 text-slate-700 dark:text-gray-300 font-semibold font-mono text-xs md:text-sm">
+                        <div className="flex items-center justify-end gap-1.5 text-slate-700 dark:text-gray-300 font-semibold font-mono tabular-nums text-xs md:text-sm">
                           <MessageCircle className="w-3.5 h-3.5 text-slate-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors" />
                           {new Intl.NumberFormat('fr-FR').format(video.comments || 0)}
                         </div>

@@ -560,6 +560,144 @@ exports.forceSyncTikTok = functions.https.onRequest(async (req, res) => {
   }
 });
 
+/**
+ * Synchronisation Périodique Automatique du Catalogue TikTok (Toutes les 2 heures)
+ * 100% Autonome, sans action manuelle requise, 0,00 € de coût.
+ */
+exports.syncTikTokCatalogScheduled = onSchedule({ schedule: "every 2 hours", timeoutSeconds: 300, memory: "256MiB" }, async (event) => {
+  try {
+    console.log("[Scheduler] 🔄 Synchronisation automatique du catalogue TikTok lancée...");
+    const db = getFirestore();
+    const userRef = db.collection('users').doc('karamokho');
+    const docSnap = await userRef.get();
+    if (!docSnap.exists) return;
+
+    const authData = docSnap.data()?.tiktokAuth;
+    if (!authData || !authData.refreshToken) {
+      console.warn("[Scheduler] Aucun refreshToken disponible pour TikTok.");
+      return;
+    }
+
+    const clientKey = (await getSecret('TIKTOK_CLIENT_KEY')) || process.env.TIKTOK_CLIENT_KEY;
+    const clientSecret = (await getSecret('TIKTOK_CLIENT_SECRET')) || process.env.TIKTOK_CLIENT_SECRET;
+    if (!clientKey || !clientSecret) {
+      console.warn("[Scheduler] Clés client TikTok manquantes.");
+      return;
+    }
+
+    const params = new URLSearchParams();
+    params.append('client_key', clientKey);
+    params.append('client_secret', clientSecret);
+    params.append('grant_type', 'refresh_token');
+    params.append('refresh_token', authData.refreshToken);
+
+    const refreshRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+
+    const refreshData = await refreshRes.json();
+    if (!refreshData.access_token) {
+      console.warn("[Scheduler] Échec rafraîchissement token:", refreshData);
+      return;
+    }
+
+    const accessToken = refreshData.access_token;
+    const newRefreshToken = refreshData.refresh_token || authData.refreshToken;
+
+    let allVideos = [];
+    let hasMore = true;
+    let cursor = 0;
+    let attempts = 0;
+
+    while (hasMore && attempts < 15) {
+      attempts++;
+      const payload = { max_count: 20 };
+      if (cursor !== 0) payload.cursor = cursor;
+
+      const vRes = await fetch('https://open.tiktokapis.com/v2/video/list/?fields=id,create_time,cover_image_url,share_url,video_description,duration,title,like_count,comment_count,share_count,view_count', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const vJson = await vRes.json();
+      if (vJson.data && vJson.data.videos) {
+        const batch = vJson.data.videos.map(v => ({
+          id: v.id,
+          title: v.title || v.video_description || "Vidéo TikTok",
+          video_description: v.video_description || v.title || "",
+          date: new Date(v.create_time * 1000).toISOString(),
+          durationMins: Math.round(v.duration / 60) || (v.duration > 0 ? 1 : 0),
+          durationSec: v.duration || 0,
+          views: v.view_count || 0,
+          likes: v.like_count || 0,
+          comments: v.comment_count || 0,
+          shares: v.share_count || 0,
+          coverUrl: v.cover_image_url || "",
+          shareUrl: v.share_url || `https://www.tiktok.com/@karam.drame/video/${v.id}`
+        }));
+        allVideos = allVideos.concat(batch);
+        hasMore = vJson.data.has_more === true;
+        cursor = vJson.data.cursor;
+      } else {
+        hasMore = false;
+      }
+    }
+
+    if (allVideos.length > 0) {
+      allVideos.sort((a, b) => new Date(b.date) - new Date(a.date));
+      const totalViews = allVideos.reduce((acc, v) => acc + (v.views || 0), 0);
+      const totalLikes = allVideos.reduce((acc, v) => acc + (v.likes || 0), 0);
+      const totalComments = allVideos.reduce((acc, v) => acc + (v.comments || 0), 0);
+      const totalShares = allVideos.reduce((acc, v) => acc + (v.shares || 0), 0);
+
+      const videoAnalytics = {
+        avgViews: Math.round(totalViews / allVideos.length),
+        avgLikes: Math.round(totalLikes / allVideos.length),
+        avgComments: Math.round(totalComments / allVideos.length),
+        avgShares: Math.round(totalShares / allVideos.length),
+        totalVideosAnalyzed: allVideos.length
+      };
+
+      await userRef.set({
+        tiktokAPI: {
+          recentVideos: allVideos,
+          views: totalViews,
+          shares: totalShares,
+          totalLikes: totalLikes,
+          totalComments: totalComments,
+          videoAnalytics: videoAnalytics,
+          lastSync: FieldValue.serverTimestamp(),
+          lastAutoSync: new Date().toISOString()
+        },
+        tiktok: {
+          ...docSnap.data().tiktok,
+          recentVideos: allVideos,
+          views: totalViews,
+          shares: totalShares,
+          totalLikes: totalLikes
+        },
+        recentVideos: allVideos,
+        tiktokAuth: {
+          ...authData,
+          accessToken: accessToken,
+          refreshToken: newRefreshToken,
+          updatedAt: FieldValue.serverTimestamp()
+        }
+      }, { merge: true });
+
+      console.log(`[Scheduler] ✅ Catalogue TikTok synchronisé automatiquement : ${allVideos.length} vidéos.`);
+    }
+  } catch (e) {
+    console.warn("[Scheduler] Erreur syncTikTokCatalogScheduled:", e.message);
+  }
+});
+
 // Ancienne section de scraping supprimée - Déplacé vers Cloud Run Worker
 // --- SCRAPER MAISON TIKTOK ---
 
