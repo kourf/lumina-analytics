@@ -110,13 +110,114 @@ async function syncAllVideos() {
   }
 
   const userData = snap.data();
-  const videos = userData.tiktokAPI?.recentVideos || [];
-  console.log('Analyse de ' + videos.length + ' videos dans le catalogue...');
+  console.log('Analyse du catalogue de videos...');
 
   let liveFollowers = userData.tiktokAPI?.followers || 6163;
   let liveTotalLikes = userData.tiktokAPI?.totalLikes || 16000;
   let liveAvatar = userData.tiktokAPI?.avatar_url || '';
   
+  let allVideos = userData.tiktokAPI?.recentVideos || [];
+
+  // ==========================================
+  // SYNC OFFICIELLE API TIKTOK (OAUTH V2)
+  // ==========================================
+  let apiSuccess = false;
+  try {
+    const authData = userData.tiktokAuth;
+    if (authData && authData.refreshToken) {
+      console.log('Jeton d\'authentification trouve. Tentative de rafraichissement du token via l\'API officielle...');
+
+      const clientKey = process.env.TIKTOK_CLIENT_KEY || 'awvtvw7x4d0t2f69';
+      const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+
+      if (clientKey && clientSecret) {
+        // Refresh token
+        const params = new URLSearchParams();
+        params.append('client_key', clientKey);
+        params.append('client_secret', clientSecret);
+        params.append('grant_type', 'refresh_token');
+        params.append('refresh_token', authData.refreshToken);
+
+        const refreshRes = await fetch('https://open.tiktokapis.com/v2/oauth/token/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: params.toString()
+        });
+
+        const refreshData = await refreshRes.json();
+        if (refreshData.access_token) {
+           console.log("Jeton d'acces rafraichi avec succes !");
+           const accessToken = refreshData.access_token;
+
+           // Fetch toutes les vidéos (Pagination)
+           let newVideos = [];
+           let hasMore = true;
+           let cursor = 0;
+           let attempts = 0;
+
+           while (hasMore && attempts < 15) {
+             attempts++;
+             const payload = { max_count: 20 };
+             if (cursor !== 0) payload.cursor = cursor;
+
+             const vRes = await fetch('https://open.tiktokapis.com/v2/video/list/?fields=id,create_time,cover_image_url,share_url,video_description,duration,title,like_count,comment_count,share_count,view_count', {
+               method: 'POST',
+               headers: {
+                 'Authorization': `Bearer ${accessToken}`,
+                 'Content-Type': 'application/json'
+               },
+               body: JSON.stringify(payload)
+             });
+
+             const vJson = await vRes.json();
+             if (vJson.data && vJson.data.videos) {
+               const batch = vJson.data.videos.map(v => ({
+                 id: v.id,
+                 title: v.title || v.video_description || "Video TikTok",
+                 date: new Date(v.create_time * 1000).toISOString(),
+                 durationMins: Math.round(v.duration / 60) || (v.duration > 0 ? 1 : 0),
+                 views: v.view_count || 0,
+                 likes: v.like_count || 0,
+                 comments: v.comment_count || 0,
+                 shares: v.share_count || 0,
+                 coverUrl: v.cover_image_url || "",
+                 shareUrl: v.share_url || `https://www.tiktok.com/@karam.drame/video/${v.id}`
+               }));
+               newVideos = newVideos.concat(batch);
+               hasMore = vJson.data.has_more === true;
+               cursor = vJson.data.cursor;
+             } else {
+               hasMore = false;
+             }
+           }
+
+           if (newVideos.length > 0) {
+              allVideos = newVideos.sort((a, b) => new Date(b.date) - new Date(a.date));
+              apiSuccess = true;
+              console.log(`✅ API Officielle : ${allVideos.length} videos recuperees.`);
+
+              // Mettre a jour les tokens
+              await updateDoc(userDocRef, {
+                 'tiktokAuth.accessToken': accessToken,
+                 'tiktokAuth.refreshToken': refreshData.refresh_token || authData.refreshToken,
+                 'tiktokAuth.updatedAt': new Date().toISOString()
+              });
+           }
+        } else {
+           console.warn("Echec du rafraichissement du token:", refreshData);
+        }
+      } else {
+         console.log("Client Key/Secret manquants. Utilisation de la recuperation en mode public (Fallback).");
+      }
+    }
+  } catch (err) {
+    console.warn("Erreur API officielle:", err.message);
+  }
+
+  if (!apiSuccess) {
+     console.log("L'API officielle n'a pas pu aboutir. Utilisation des dernieres videos connues (Mode Degradé).");
+  }
+
   // LIVE TIKTOK VARIABLES
   let isTikTokLive = false;
   let liveRoomId = null;
@@ -228,35 +329,40 @@ async function syncAllVideos() {
     await sendDiscordLiveNotification('YouTube', 'Karamokho est en direct sur YouTube !', 'https://www.youtube.com/@karamdrm/live');
   }
 
-  const updatedVideos = [...videos];
-  const BATCH_SIZE = 5;
+  const updatedVideos = [...allVideos];
   
-  for (let i = 0; i < updatedVideos.length; i += BATCH_SIZE) {
-    const batch = updatedVideos.slice(i, i + BATCH_SIZE);
-    const promises = batch.map(async (v, index) => {
-      const realIndex = i + index;
-      const liveStats = await fetchLiveVideoStats(v.id);
-      if (liveStats) {
-        updatedVideos[realIndex] = {
-          ...v,
-          views: liveStats.views,
-          likes: liveStats.likes,
-          comments: liveStats.comments,
-          shares: liveStats.shares,
-          coverUrl: liveStats.coverUrl || v.coverUrl,
-          title: liveStats.title || v.title
-        };
-      }
-    });
+  // Mettre à jour les statistiques individuelles si l'API officielle n'a pas pu être utilisée
+  if (!apiSuccess) {
+    const BATCH_SIZE = 5;
+    for (let i = 0; i < updatedVideos.length; i += BATCH_SIZE) {
+      const batch = updatedVideos.slice(i, i + BATCH_SIZE);
+      const promises = batch.map(async (v, index) => {
+        const realIndex = i + index;
+        const liveStats = await fetchLiveVideoStats(v.id);
+        if (liveStats) {
+          updatedVideos[realIndex] = {
+            ...v,
+            views: liveStats.views,
+            likes: liveStats.likes,
+            comments: liveStats.comments,
+            shares: liveStats.shares,
+            coverUrl: liveStats.coverUrl || v.coverUrl,
+            title: liveStats.title || v.title
+          };
+        }
+      });
 
-    await Promise.all(promises);
-    await new Promise(r => setTimeout(r, 150));
+      await Promise.all(promises);
+      await new Promise(r => setTimeout(r, 150));
+    }
   }
 
-  const totalViews = updatedVideos.reduce((acc, v) => acc + (v.views || 0), 0);
-  const totalLikes = liveTotalLikes || updatedVideos.reduce((acc, v) => acc + (v.likes || 0), 0);
-  const totalComments = updatedVideos.reduce((acc, v) => acc + (v.comments || 0), 0);
-  const totalShares = updatedVideos.reduce((acc, v) => acc + (v.shares || 0), 0);
+  const totalViews = updatedVideos.reduce((acc, v) => acc + (Number(v.views) || 0), 0);
+  const totalLikes = (apiSuccess && updatedVideos.length > 0)
+      ? updatedVideos.reduce((acc, v) => acc + (Number(v.likes) || 0), 0)
+      : (liveTotalLikes || updatedVideos.reduce((acc, v) => acc + (Number(v.likes) || 0), 0));
+  const totalComments = updatedVideos.reduce((acc, v) => acc + (Number(v.comments) || 0), 0);
+  const totalShares = updatedVideos.reduce((acc, v) => acc + (Number(v.shares) || 0), 0);
   const engagementRate = totalViews > 0 ? (((totalLikes + totalComments + totalShares) / totalViews) * 100).toFixed(1) + '%' : '6.1%';
 
   const videoAnalytics = {
