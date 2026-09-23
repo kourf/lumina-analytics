@@ -22,4 +22,7 @@ jobs:
         run: npm install firebase
 
       - name: Execute Live TikTok Sync to Firestore
+        env:
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
         run: node scripts/sync-tiktok.mjs
