@@ -34,6 +34,14 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
         return (b.comments || 0) - (a.comments || 0);
       } else if (sortBy === 'comments_asc') {
         return (a.comments || 0) - (b.comments || 0);
+      } else if (sortBy === 'engagement_desc') {
+        const engA = a.views > 0 ? (((a.likes || 0) + (a.comments || 0) + (a.shares || 0)) / a.views) * 100 : 0;
+        const engB = b.views > 0 ? (((b.likes || 0) + (b.comments || 0) + (b.shares || 0)) / b.views) * 100 : 0;
+        return engB - engA;
+      } else if (sortBy === 'engagement_asc') {
+        const engA = a.views > 0 ? (((a.likes || 0) + (a.comments || 0) + (a.shares || 0)) / a.views) * 100 : 0;
+        const engB = b.views > 0 ? (((b.likes || 0) + (b.comments || 0) + (b.shares || 0)) / b.views) * 100 : 0;
+        return engA - engB;
       }
       return 0;
     });
@@ -124,6 +132,17 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
                   <th className="pb-3 pt-2 px-4 font-semibold text-slate-500 dark:text-gray-400 text-xs tracking-wider uppercase text-right">Likes</th>
                   <th className="pb-3 pt-2 px-4 font-semibold text-slate-500 dark:text-gray-400 text-xs tracking-wider uppercase text-right">Partages</th>
                   <th className="pb-3 pt-2 px-4 font-semibold text-slate-500 dark:text-gray-400 text-xs tracking-wider uppercase text-right">Commentaires</th>
+                  <th
+                    className="pb-3 pt-2 px-4 font-semibold text-slate-500 dark:text-gray-400 text-xs tracking-wider uppercase text-right cursor-pointer hover:text-slate-700 dark:hover:text-white transition-colors group"
+                    onClick={() => setSortBy(sortBy === 'engagement_desc' ? 'engagement_asc' : 'engagement_desc')}
+                    title="Taux d'Engagement : ((Likes + Commentaires + Partages) / Vues) * 100"
+                  >
+                    <div className="flex items-center justify-end gap-1">
+                      Engagement
+                      {sortBy === 'engagement_desc' && <span>↓</span>}
+                      {sortBy === 'engagement_asc' && <span>↑</span>}
+                    </div>
+                  </th>
                 </tr>
               </thead>
               <tbody className="text-sm">
@@ -195,6 +214,23 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
                           <MessageCircle className="w-3.5 h-3.5 text-slate-400 dark:text-gray-500 group-hover:text-blue-500 transition-colors" />
                           {new Intl.NumberFormat('fr-FR').format(video.comments || 0)}
                         </div>
+                      </td>
+                      <td className="py-3.5 px-4 text-right">
+                        {(() => {
+                          if (!video.views || video.views === 0) return <span className="text-slate-500">—</span>;
+                          const engRate = (((video.likes || 0) + (video.comments || 0) + (video.shares || 0)) / video.views) * 100;
+                          let badgeColor = "bg-slate-100 text-slate-600 dark:bg-gray-800 dark:text-gray-400 border-slate-200 dark:border-gray-700"; // Neutral <= 3%
+                          if (engRate > 6) {
+                            badgeColor = "bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-400 border-emerald-200 dark:border-emerald-500/20"; // Vibrant Green > 6%
+                          } else if (engRate > 3) {
+                            badgeColor = "bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-400 border-blue-200 dark:border-blue-500/20"; // Blue > 3%
+                          }
+                          return (
+                            <span className={`inline-flex px-2 py-0.5 text-xs font-semibold rounded-full border ${badgeColor} font-mono tabular-nums`}>
+                              {engRate.toFixed(1)}%
+                            </span>
+                          );
+                        })()}
                       </td>
                     </tr>
                   );

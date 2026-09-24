@@ -76,11 +76,22 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
+      const metricLabel = {
+        views: 'Vues',
+        median: 'Médiane',
+        engagement: 'Engagement (%)',
+        shares: 'Partages'
+      }[activeMetric];
+
+      const value = activeMetric === 'engagement'
+        ? `${payload[0].value}%`
+        : new Intl.NumberFormat('fr-FR').format(payload[0].value);
+
       return (
         <div className="bg-[#111827]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/10 max-w-[200px] animate-in fade-in zoom-in duration-200">
           <p className="font-semibold text-white mb-2 line-clamp-2">{payload[0].payload.title}</p>
           <p className="text-teal-700 dark:text-[#25F4EE] font-bold">
-            {new Intl.NumberFormat('fr-FR').format(payload[0].value)} Vues
+            {value} {metricLabel}
           </p>
         </div>
       );
@@ -90,7 +101,17 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
   return (
     <div className="w-full mt-8">
-      {/* Title/Header moved to unified parent block */}
+      <div className="flex items-center justify-between mb-8">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+            <TrendingUp className="w-8 h-8 text-blue-500" />
+            Analyse Stratégique du Contenu
+          </h2>
+          <p className="text-slate-500 dark:text-gray-400 mt-1">
+            Période analysée : depuis la publication de votre première vidéo jusqu'à aujourd'hui (calculé sur l'ensemble du catalogue de {recentVideos.length} vidéos)
+          </p>
+        </div>
+      </div>
 
       {/* Ligne 1 : KPIs (6 colonnes sur 2 lignes) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
@@ -265,26 +286,74 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
       {/* Ligne 2 : Graphiques */}
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Graphique Vues */}
+        {/* Graphique Interactif */}
         <div className="flex-1 bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-6 tracking-wide uppercase">Évolution des vues</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide uppercase">Évolution des performances</h3>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
+                <button
+                  onClick={() => setActiveMetric('views')}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'views' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >Vues</button>
+                <button
+                  onClick={() => setActiveMetric('median')}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'median' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >Médiane</button>
+                <button
+                  onClick={() => setActiveMetric('engagement')}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'engagement' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >Engagement</button>
+                <button
+                  onClick={() => setActiveMetric('shares')}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'shares' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >Partages</button>
+              </div>
+
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
+                <button
+                  onClick={() => setChartType('bar')}
+                  className={`p-1.5 rounded-md transition-all ${chartType === 'bar' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  title="Histogramme"
+                >
+                  <BarChart2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setChartType('line')}
+                  className={`p-1.5 rounded-md transition-all ${chartType === 'line' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  title="Courbe linéaire"
+                >
+                  <TrendingUpIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
           <div className="h-[300px] w-full mt-auto">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
-                <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(37, 244, 238, 0.05)'}} />
-                <Bar dataKey="views" radius={[6, 6, 0, 0]}>
-                  {chartData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill="url(#colorViews)" />
-                  ))}
-                </Bar>
-                <defs>
-                  <linearGradient id="colorViews" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#25F4EE" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#25F4EE" stopOpacity={0.2}/>
-                  </linearGradient>
-                </defs>
-              </BarChart>
+              {chartType === 'bar' ? (
+                <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
+                  <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(37, 244, 238, 0.05)'}} />
+                  <Bar dataKey={activeMetric} radius={[6, 6, 0, 0]}>
+                    {chartData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill="url(#colorMetric)" />
+                    ))}
+                  </Bar>
+                  <defs>
+                    <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#25F4EE" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#25F4EE" stopOpacity={0.2}/>
+                    </linearGradient>
+                  </defs>
+                </BarChart>
+              ) : (
+                <LineChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line type="monotone" dataKey={activeMetric} stroke="#25F4EE" strokeWidth={3} dot={{r: 4, fill: '#111827', stroke: '#25F4EE', strokeWidth: 2}} activeDot={{r: 6}} />
+                </LineChart>
+              )}
             </ResponsiveContainer>
           </div>
         </div>
