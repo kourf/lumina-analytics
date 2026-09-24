@@ -257,6 +257,7 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
   // Si le live est hors ligne, on affiche un bandeau très épuré (Dynamic Banner)
   if (!isLive) {
     return (
+      <>
       <div className="w-full bg-slate-50/80 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-[20px] px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:bg-slate-100 dark:hover:bg-white/5 shadow-sm">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-white/5 border border-slate-300 dark:border-white/10 flex items-center justify-center text-slate-500 dark:text-gray-400 shrink-0">
@@ -285,17 +286,25 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
               <span>{isRefreshing ? "Vérification..." : "Vérifier"}</span>
             </button>
           )}
-          <a
-            href={profileUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider bg-slate-900 dark:bg-white/10 hover:bg-black dark:hover:bg-white/15 text-white border border-slate-800 dark:border-white/10 transition-all shadow-sm"
+          <button
+            onClick={() => setIsDrawerOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#FE2C55] hover:bg-[#E0264C] text-white shadow-md shadow-[#FE2C55]/20 transition-all active:scale-95"
           >
-            <TikTokIcon className="w-3 h-3 fill-current" />
-            <span>Ouvrir TikTok</span>
-          </a>
+            <Calendar size={13} />
+            <span>Consulter l'historique des lives</span>
+          </button>
         </div>
       </div>
+      <TikTokLiveHistoryDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => {
+          setIsDrawerOpen(false);
+          setSelectedLiveForDrawer(null);
+        }}
+        archives={historyArchives}
+        initialSelectedSession={selectedLiveForDrawer}
+      />
+      </>
     );
   }
 

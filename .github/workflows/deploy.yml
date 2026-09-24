@@ -2,9 +2,9 @@ name: CI/CD Pipeline - Lumina Analytics
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ principal ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ principal ]
 
 env:
   PROJECT_ID: lumina-analytics-kd-2026
@@ -50,7 +50,7 @@ jobs:
   deploy:
     name: Deploy to GCP & Firebase
     needs: lint-and-test
-    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/principal'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code

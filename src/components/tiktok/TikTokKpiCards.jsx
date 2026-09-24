@@ -70,24 +70,28 @@ export const TikTokKpiCards = ({ tiktokData }) => {
 
   const renderPopover = (id, title, explanation, source) => (
     <div 
-      className="absolute top-4 right-4 z-30"
+      className="absolute top-4 right-4 z-50"
     >
       <button
-        className="text-gray-500 hover:text-white transition-colors cursor-pointer"
+        className="text-gray-500 hover:text-white transition-colors cursor-pointer p-1"
         onClick={(e) => {
           e.stopPropagation();
           setActivePopover(activePopover === id ? null : id);
         }}
+        aria-label="Information"
       >
         <Info size={16} />
       </button>
       {activePopover === id && (
-        <div ref={popoverRef} className="absolute right-0 top-6 w-56 bg-gray-900/95 backdrop-blur-2xl text-white text-xs rounded-xl p-4 shadow-[0_20px_50px_rgba(0,0,0,0.5)] border border-gray-700 z-[100] animate-in fade-in zoom-in duration-200">
+        <div ref={popoverRef} className="absolute right-0 top-6 w-64 bg-slate-900/95 border border-slate-700/80 shadow-2xl backdrop-blur-md rounded-xl p-3.5 z-50 animate-in fade-in zoom-in duration-200">
           <p className="font-bold mb-2 text-white text-[13px]">{title}</p>
-          <p className="mb-3 text-gray-300 leading-relaxed">{explanation}</p>
-          <div className="bg-black/50 p-2 rounded-lg border border-gray-700">
-            <span className="font-semibold text-gray-400 block mb-1">Source :</span>
-            <span className="text-gray-300 italic">{source}</span>
+          <p className="mb-3 text-slate-300 leading-relaxed text-xs">
+            <span className="block font-semibold text-slate-400 mb-1">Ce que mesure ce chiffre :</span>
+            {explanation}
+          </p>
+          <div className="bg-black/40 p-2 rounded-lg border border-slate-700/50 text-xs">
+            <span className="font-semibold text-slate-400 block mb-1">Origine de la donnée :</span>
+            <span className="text-slate-300 italic">{source}</span>
           </div>
         </div>
       )}
@@ -104,7 +108,7 @@ export const TikTokKpiCards = ({ tiktokData }) => {
         
         {/* Total Vidéos */}
         <div className={cardStyle}>
-          {renderPopover('total_videos', 'Total Vidéos', 'Combien de vidéos vous avez publiées sur votre compte.', 'Calculé automatiquement depuis vos vidéos du catalogue.')}
+          {renderPopover('total_videos', 'Total Vidéos', 'Le nombre total de vidéos actuellement publiées sur votre compte.', 'Récupéré en direct depuis l\'API officielle TikTok.')}
           <div className="flex items-start justify-between mb-4 relative z-10">
             <div className={cn(iconStyle, "bg-blue-500/10 border-blue-500/20")}>
               <Video className="text-blue-600 dark:text-blue-400" size={20} />
@@ -119,7 +123,7 @@ export const TikTokKpiCards = ({ tiktokData }) => {
 
         {/* Vues Totales */}
         <div className={cardStyle}>
-          {renderPopover('vues', 'Vues Totales', 'Le cumul de toutes les vues générées par vos vidéos.', 'Remonté en direct par l\'API officielle TikTok.')}
+          {renderPopover('vues', 'Vues Totales', 'Le cumul de toutes les vues générées par l\'ensemble de vos vidéos.', 'Récupéré en direct depuis l\'API officielle TikTok.')}
           <div className="flex items-start justify-between mb-4 relative z-10">
             <div className={cn(iconStyle, "bg-[#25F4EE]/10 border-[#25F4EE]/20")}>
               <Eye className="text-teal-700 dark:text-[#25F4EE]" size={20} />
@@ -133,7 +137,7 @@ export const TikTokKpiCards = ({ tiktokData }) => {
 
         {/* Total Abonnés */}
         <div className={cardStyle}>
-          {renderPopover('abonnes', 'Total Abonnés', 'Le nombre de personnes abonnées à votre compte.', 'Remonté en direct par l\'API officielle TikTok.')}
+          {renderPopover('abonnes', 'Total Abonnés', 'Le nombre de personnes abonnées à votre compte.', 'Récupéré en direct depuis l\'API officielle TikTok.')}
           <div className="flex items-start justify-between mb-4 relative z-10">
             <div className={cn(iconStyle, "bg-orange-500/10 border-orange-500/20")}>
               <Users className="text-orange-400" size={20} />
@@ -147,7 +151,7 @@ export const TikTokKpiCards = ({ tiktokData }) => {
 
         {/* Total Likes */}
         <div className={cardStyle}>
-          {renderPopover('likes', 'Total Likes', 'Le nombre total de "J\'aime" reçus sur vos vidéos.', 'Remonté en direct par l\'API officielle TikTok.')}
+          {renderPopover('likes', 'Total Likes', 'Le nombre total de "J\'aime" reçus sur l\'ensemble de vos vidéos.', 'Récupéré en direct depuis l\'API officielle TikTok.')}
           <div className="flex items-start justify-between mb-4 relative z-10">
             <div className={cn(iconStyle, "bg-[#FE2C55]/10 border-[#FE2C55]/20")}>
               <ThumbsUp className="text-[#FE2C55]" size={20} />
@@ -161,7 +165,7 @@ export const TikTokKpiCards = ({ tiktokData }) => {
 
         {/* Partages */}
         <div className={cardStyle}>
-          {renderPopover('partages', 'Partages', 'Le nombre de fois que vos vidéos ont été partagées.', 'Remonté en direct par l\'API officielle TikTok.')}
+          {renderPopover('partages', 'Partages', 'Le nombre de fois que l\'ensemble de vos vidéos ont été partagées.', 'Récupéré en direct depuis l\'API officielle TikTok.')}
           <div className="flex items-start justify-between mb-4 relative z-10">
             <div className={cn(iconStyle, "bg-green-500/10 border-green-500/20")}>
               <Share2 className="text-green-400" size={20} />
