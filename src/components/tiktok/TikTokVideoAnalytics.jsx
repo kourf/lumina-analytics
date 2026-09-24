@@ -3,12 +3,24 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users } from 'lucide-react';
 
 export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], followers = 0 }) => {
-  if (!recentVideos || recentVideos.length === 0) {
+  if (!recentVideos || recentVideos.length === 0 || followers === null || followers === 0) {
     return (
-      <div className="w-full text-center py-10 space-y-2">
-        <TrendingUp className="w-8 h-8 text-slate-400 dark:text-gray-500 mx-auto" />
-        <h3 className="text-base font-bold text-slate-800 dark:text-white">Analyse Stratégique</h3>
-        <p className="text-xs text-slate-500 dark:text-gray-400">Indexation des publications en cours...</p>
+      <div className="w-full relative z-[60] bg-red-500/10 border border-red-500/20 rounded-2xl p-6 text-red-400 mt-4">
+        <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-red-500" />
+          Analyse Stratégique : Données Insuffisantes
+        </h3>
+        <p className="text-sm opacity-90 mb-4">
+          Impossible de calculer les taux stratégiques (Engagement, Reach, Conversion). Le catalogue de vidéos est vide ou le nombre d'abonnés est introuvable.
+        </p>
+        <div className="bg-black/40 p-4 rounded-xl font-mono text-xs border border-red-500/10 overflow-x-auto">
+          <code>
+            // Technical Error Context (copy to developer):<br/>
+            - Videos Count: {recentVideos?.length || 0}<br/>
+            - Followers Reference: {followers === null ? 'NULL (Error)' : followers}<br/>
+            - Required: followers &gt; 0 AND recentVideos.length &gt; 0
+          </code>
+        </div>
       </div>
     );
   }
@@ -77,17 +89,8 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
   };
 
   return (
-    <div className="w-full">
-      {/* En-tête de section */}
-      <div className="flex items-center gap-3 mb-8">
-        <div className="w-12 h-12 rounded-xl bg-blue-500/10 border border-blue-500/20 flex items-center justify-center shadow-inner">
-          <TrendingUp className="w-6 h-6 text-blue-600 dark:text-blue-400" />
-        </div>
-        <div>
-          <h2 className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight">Analyse Stratégique</h2>
-          <p className="text-sm text-slate-500 dark:text-gray-400 mt-1">Performance et impact de vos publications</p>
-        </div>
-      </div>
+    <div className="w-full mt-8">
+      {/* Title/Header moved to unified parent block */}
 
       {/* Ligne 1 : KPIs (6 colonnes sur 2 lignes) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">

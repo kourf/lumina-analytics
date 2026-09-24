@@ -98,8 +98,53 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
         />
       </div>
 
-      {/* SECTION 1 : HUB LIVE STREAMING UNIQUE (Centralisé, 100% Automatique, Zéro Doublon) */}
+      {/* SECTION 1 : BLOC UNIFIÉ (KPI & ANALYSE STRATÉGIQUE) */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.15s' }}>
+        <div className="bg-white dark:bg-[#111827]/80 border border-slate-200 dark:border-[#1F2937] backdrop-blur-xl rounded-[24px] p-6 md:p-8 shadow-sm dark:shadow-none relative overflow-hidden group">
+          {/* Subtle Glow Background */}
+          <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-[#25F4EE]/5 via-blue-500/5 to-purple-500/5 blur-3xl -mr-32 -mt-32 rounded-full pointer-events-none group-hover:opacity-100 opacity-60 transition-opacity duration-700"></div>
+
+          <div className="relative z-10">
+            {/* Unifed Header */}
+            <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-8">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#111827] to-slate-900 border border-slate-700 dark:border-white/10 flex items-center justify-center shadow-lg">
+                  <ShieldAlert className="w-7 h-7 text-[#25F4EE]" />
+                </div>
+                <div>
+                  <h2 className="text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-3">
+                    Pilotage Stratégique & KPI
+                    <span className="bg-emerald-100 dark:bg-[#10B981]/15 text-emerald-800 dark:text-[#10B981] px-3 py-1 rounded-full text-[11px] font-bold border border-emerald-300 dark:border-[#10B981]/30 tracking-widest uppercase">
+                      API Connectée
+                    </span>
+                  </h2>
+                  <p className="text-sm text-slate-500 dark:text-gray-400 mt-1.5 max-w-2xl leading-relaxed">
+                    Les métriques globales (haut) proviennent directement de l'API officielle TikTok. Les taux de performance et graphiques (bas) sont calculés dynamiquement à partir des vidéos de votre catalogue.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <TikTokKpiCards tiktokData={unifiedData} />
+
+            <div className="w-full h-[1px] bg-gradient-to-r from-transparent via-slate-200 dark:via-white/10 to-transparent my-8"></div>
+
+            <TikTokVideoAnalytics
+              videoAnalytics={unifiedData.videoAnalytics}
+              recentVideos={unifiedData.recentVideos}
+              followers={unifiedData.followers}
+            />
+          </div>
+        </div>
+      </section>
+
+      {/* SECTION 2 : VEILLE CONCURRENTIELLE */}
+      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.25s' }}>
+        <TikTokCompetitorAnalysis myData={unifiedData} />
+      </section>
+
+      {/* SECTION 3 : HUB LIVE STREAMING (Bannière Dynamique / Hub) */}
+      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.3s' }}>
         <TikTokLiveHub 
           liveData={{
             ...(liveData || {}),
@@ -139,28 +184,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
         />
       </section>
 
-      {/* SECTION 2 : KPI GLOBAUX DU COMPTE (@karam.drame) */}
-      <section className="animate-fade-in-up" style={{ animationDelay: '0.2s' }}>
-        <TikTokKpiCards tiktokData={unifiedData} />
-      </section>
-
-      {/* SECTION 4 : GRAPHIQUES & PERFORMANCE */}
-      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.3s' }}>
-        <div className="bg-white dark:bg-[#111827]/80 border border-slate-200 dark:border-[#1F2937] backdrop-blur-xl rounded-[24px] p-6 shadow-sm dark:shadow-none">
-          <TikTokVideoAnalytics 
-            videoAnalytics={unifiedData.videoAnalytics} 
-            recentVideos={unifiedData.recentVideos} 
-            followers={unifiedData.followers} 
-          />
-        </div>
-      </section>
-
-      {/* SECTION 5 : VEILLE CONCURRENTIELLE */}
-      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.35s' }}>
-        <TikTokCompetitorAnalysis myData={unifiedData} />
-      </section>
-
-      {/* SECTION 6 : CATALOGUE VIDEO */}
+      {/* SECTION 4 : CATALOGUE VIDEO */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.4s' }}>
         <TikTokRecentVideos recentVideos={unifiedData.recentVideos} />
       </section>

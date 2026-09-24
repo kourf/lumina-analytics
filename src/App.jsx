@@ -65,24 +65,25 @@ function App() {
         unsubscribe = onSnapshot(docRef, (docSnap) => {
           if (docSnap.exists()) {
             const firebaseData = docSnap.data();
-            const historyArchivesList = firebaseData.historyArchives || firebaseData.tiktokLiveAPI?.historyArchives || baseData.tiktokLiveAPI?.historyArchives || [];
+            // Purge mock data: Only use real Firestore/API data, no baseData fallbacks for lists/archives
+            const historyArchivesList = firebaseData.historyArchives || firebaseData.tiktokLiveAPI?.historyArchives || [];
             
             const realRecentVideos = (firebaseData.tiktokAPI?.recentVideos && firebaseData.tiktokAPI.recentVideos.length > 0)
               ? firebaseData.tiktokAPI.recentVideos
               : (firebaseData.recentVideos && firebaseData.recentVideos.length > 0)
                 ? firebaseData.recentVideos
-                : (baseData.tiktok?.recentVideos || []);
+                : [];
 
             const tiktokCombined = {
-              ...(baseData.tiktok || {}),
               ...(firebaseData.tiktok || {}),
               ...(firebaseData.tiktokAPI || {}),
               isLive: Boolean(firebaseData.tiktokLiveAPI?.isLive === true && (firebaseData.tiktokLiveAPI?.status === 2 || firebaseData.tiktokLiveAPI?.roomId)),
               recentVideos: realRecentVideos,
-              followers: firebaseData.tiktokAPI?.followers || firebaseData.tiktok?.followers || baseData.tiktok?.followers || 6158,
-              likes: firebaseData.tiktokAPI?.likes || firebaseData.tiktok?.likes || baseData.tiktok?.likes || 15955,
-              totalLikes: firebaseData.tiktokAPI?.totalLikes || firebaseData.tiktok?.totalLikes || baseData.tiktok?.totalLikes || 15955,
-              avatar_url: firebaseData.tiktokAPI?.avatar_url || firebaseData.tiktok?.avatar_url || baseData.tiktok?.avatar_url || "https://www.tiktok.com/api/img/?userId=7030929632657638405&location=2&aid=1988"
+              followers: firebaseData.tiktokAPI?.followers || firebaseData.tiktok?.followers || null,
+              likes: firebaseData.tiktokAPI?.likes || firebaseData.tiktok?.likes || null,
+              totalLikes: firebaseData.tiktokAPI?.totalLikes || firebaseData.tiktok?.totalLikes || null,
+              views: firebaseData.tiktokAPI?.views || firebaseData.tiktok?.views || null,
+              avatar_url: firebaseData.tiktokAPI?.avatar_url || firebaseData.tiktok?.avatar_url || "https://www.tiktok.com/api/img/?userId=7030929632657638405&location=2&aid=1988"
             };
 
             const liveRaw = firebaseData.tiktokLiveAPI || {};
