@@ -14,6 +14,29 @@ export const TikTokKpiCards = ({ tiktokData }) => {
 
   if (!tiktokData) return null;
 
+  if (tiktokData.isDataMissing) {
+    return (
+      <div className="w-full relative z-[60] bg-red-500/10 border border-red-500/20 rounded-2xl p-6 mb-8 text-red-400">
+        <h3 className="font-bold text-lg mb-2 flex items-center gap-2">
+          <ShieldCheck className="w-5 h-5 text-red-500" />
+          Synchronisation API TikTok : Données Manquantes
+        </h3>
+        <p className="text-sm opacity-90 mb-4">
+          Impossible de récupérer les KPIs globaux (followers, vues, etc.). Le retour de l'API TikTok ou de la base de données (Firestore) est vide, invalide ou incomplet.
+        </p>
+        <div className="bg-black/40 p-4 rounded-xl font-mono text-xs border border-red-500/10 overflow-x-auto">
+          <code>
+            // Technical Error Context (copy to developer):<br/>
+            - Followers: {tiktokData.followers === null ? 'NULL (Error)' : tiktokData.followers}<br/>
+            - Total Views: {tiktokData.views === null ? 'NULL (Error)' : tiktokData.views}<br/>
+            - Videos Parsed: {tiktokData.recentVideos?.length || 0}<br/>
+            - Firestore Sync Path: 'users/karamokho' -&gt; 'tiktokAPI' / 'tiktok'
+          </code>
+        </div>
+      </div>
+    );
+  }
+
   const videosList = tiktokData.recentVideos || [];
   const totalVideos = tiktokData.videoAnalytics?.totalVideosAnalyzed || videosList.length || 0;
   
@@ -66,15 +89,7 @@ export const TikTokKpiCards = ({ tiktokData }) => {
 
   return (
     <div className="w-full relative z-[60]">
-      {/* Header Section */}
-      <div className="flex items-center gap-3 mb-6 px-1">
-        <ShieldCheck className="w-6 h-6 text-[#10B981]" />
-        <h2 className="text-lg font-bold text-slate-900 dark:text-white tracking-tight">API Officielle Connectée</h2>
-        <span className="bg-emerald-100 dark:bg-[#10B981]/10 text-emerald-800 dark:text-[#10B981] px-3 py-1 rounded-full text-xs font-semibold border border-emerald-300 dark:border-[#10B981]/20">
-          Certifié
-        </span>
-      </div>
-
+      {/* KPI Cards (Title/Header moved to unified parent block) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 relative">
         
         {/* Total Vidéos */}

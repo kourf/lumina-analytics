@@ -11,18 +11,22 @@ export function useTikTokUnifiedData(rawTikTokData, liveData) {
     const derivedTotalComments = videosList.reduce((acc, v) => acc + (Number(v.comments) || 0), 0);
     const derivedTotalShares = videosList.reduce((acc, v) => acc + (Number(v.shares) || 0), 0);
 
-    const totalViews = derivedTotalViews > 0 ? derivedTotalViews : (Number(data.views) || 275700);
-    const totalLikes = derivedTotalLikes > 0 ? derivedTotalLikes : (Number(data.likes) || Number(data.totalLikes) || 15955);
-    const totalComments = derivedTotalComments > 0 ? derivedTotalComments : (Number(data.comments) || Number(data.totalComments) || 4200);
-    const totalShares = derivedTotalShares > 0 ? derivedTotalShares : (Number(data.shares) || 748);
-    const followers = Number(data.followers) || 6158;
-    const totalVideos = videosList.length || Number(data.videoAnalytics?.totalVideosAnalyzed) || 71;
+    // Purge mock data: Only use real data or explicit null to trigger error states
+    const totalViews = derivedTotalViews > 0 ? derivedTotalViews : (Number(data.views) || null);
+    const totalLikes = derivedTotalLikes > 0 ? derivedTotalLikes : (Number(data.likes) || Number(data.totalLikes) || null);
+    const totalComments = derivedTotalComments > 0 ? derivedTotalComments : (Number(data.comments) || Number(data.totalComments) || null);
+    const totalShares = derivedTotalShares > 0 ? derivedTotalShares : (Number(data.shares) || null);
+    const followers = Number(data.followers) || null;
+    const totalVideos = videosList.length || Number(data.videoAnalytics?.totalVideosAnalyzed) || 0;
 
-    const totalInteractions = totalLikes + totalComments + totalShares;
-    const engagementRateNum = totalViews > 0 ? Number(((totalInteractions / totalViews) * 100).toFixed(1)) : 5.8;
-    const engagementRateStr = engagementRateNum.toString() + '%';
+    const totalInteractions = (totalLikes || 0) + (totalComments || 0) + (totalShares || 0);
+    const engagementRateNum = totalViews > 0 ? Number(((totalInteractions / totalViews) * 100).toFixed(1)) : null;
+    const engagementRateStr = engagementRateNum !== null ? engagementRateNum.toString() + '%' : null;
 
-    const avgViews = totalVideos > 0 ? Math.round(totalViews / totalVideos) : 0;
+    const avgViews = totalVideos > 0 ? Math.round((totalViews || 0) / totalVideos) : 0;
+
+    // Detect data missing/error state
+    const isDataMissing = followers === null || totalViews === null;
 
     const resolvedAvatar = data.avatar_large_url 
       || data.avatar_url_100 
@@ -57,11 +61,12 @@ export function useTikTokUnifiedData(rawTikTokData, liveData) {
         ...(data.videoAnalytics || {}),
         totalVideosAnalyzed: totalVideos,
         avgViews,
-        avgLikes: totalVideos > 0 ? Math.round(totalLikes / totalVideos) : 0,
-        avgComments: totalVideos > 0 ? Math.round(totalComments / totalVideos) : 0,
+        avgLikes: totalVideos > 0 ? Math.round((totalLikes || 0) / totalVideos) : 0,
+        avgComments: totalVideos > 0 ? Math.round((totalComments || 0) / totalVideos) : 0,
         engagementRate: engagementRateStr
       },
-      isLive: isVerifiedLive
+      isLive: isVerifiedLive,
+      isDataMissing // Flag to trigger UI error states
     };
   }, [rawTikTokData, liveData]);
 }

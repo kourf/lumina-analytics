@@ -254,6 +254,51 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
     return activeSession?.recentComments || [];
   }, [isLive, liveData?.chatMessages, activeSession]);
 
+  // Si le live est hors ligne, on affiche un bandeau très épuré (Dynamic Banner)
+  if (!isLive) {
+    return (
+      <div className="w-full bg-slate-50/80 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-[20px] px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:bg-slate-100 dark:hover:bg-white/5 shadow-sm">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-white/5 border border-slate-300 dark:border-white/10 flex items-center justify-center text-slate-500 dark:text-gray-400 shrink-0">
+            <Radio className="w-5 h-5 opacity-60" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold text-slate-800 dark:text-gray-200">
+              Hub Live Streaming <span className="font-mono text-[10px] bg-slate-200 dark:bg-white/10 px-1.5 py-0.5 rounded text-slate-600 dark:text-gray-400 ml-1">{cleanHandle}</span>
+            </h2>
+            <p className="text-xs text-slate-500 dark:text-gray-500 mt-0.5 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-gray-600"></span>
+              Aucun live en cours - En attente de diffusion en direct
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+          {onRefresh && (
+            <button
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-mono font-bold bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-gray-400 border-slate-200 dark:border-white/10 transition-all active:scale-95 shadow-sm"
+              title="Vérifier l'état du Live TikTok en direct"
+            >
+              <RefreshCw size={12} className={cn("transition-transform", isRefreshing ? "animate-spin text-[#25F4EE]" : "")} />
+              <span>{isRefreshing ? "Vérification..." : "Vérifier"}</span>
+            </button>
+          )}
+          <a
+            href={profileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[11px] font-bold uppercase tracking-wider bg-slate-900 dark:bg-white/10 hover:bg-black dark:hover:bg-white/15 text-white border border-slate-800 dark:border-white/10 transition-all shadow-sm"
+          >
+            <TikTokIcon className="w-3 h-3 fill-current" />
+            <span>Ouvrir TikTok</span>
+          </a>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
       {/* Tiroir Latéral Plein Écran pour les Archives Complètes */}
@@ -267,27 +312,21 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
         initialSelectedLive={selectedLiveForDrawer}
       />
 
-      {/* CONTENEUR PRINCIPAL UNIQUE : HUB LIVE STREAMING */}
+      {/* CONTENEUR PRINCIPAL UNIQUE : HUB LIVE STREAMING EN DIRECT */}
       <div className={cn(
         "w-full rounded-[28px] border transition-all duration-500 relative overflow-hidden backdrop-blur-2xl shadow-xl",
-        isLive 
-          ? "bg-[#140812] dark:bg-[#160A14]/95 border-[#FE2C55]/40 shadow-[0_0_50px_rgba(254,44,85,0.18)]" 
-          : "bg-white dark:bg-[#111827]/85 border-slate-200 dark:border-white/10"
+        "bg-[#140812] dark:bg-[#160A14]/95 border-[#FE2C55]/40 shadow-[0_0_50px_rgba(254,44,85,0.18)]"
       )}>
         
         {/* Glow néon ambient si en direct */}
-        {isLive && (
-          <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#FE2C55]/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
-        )}
+        <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#FE2C55]/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
 
         {/* ======================================================== */}
         {/* 1. BARRE D'ÉTAT & DÉTECTION 100% AUTOMATIQUE             */}
         {/* ======================================================== */}
         <div className={cn(
           "px-6 py-5 border-b flex flex-col md:flex-row items-center justify-between gap-4 transition-colors",
-          isLive 
-            ? "bg-[#2A0815]/60 border-[#FE2C55]/25" 
-            : "bg-slate-50/80 dark:bg-black/30 border-slate-200 dark:border-white/5"
+          "bg-[#2A0815]/60 border-[#FE2C55]/25"
         )}>
           {/* Côté Gauche : Titre du Hub & Badge d'État Automatique */}
           <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
