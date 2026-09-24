@@ -36,7 +36,8 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
     uptimeFormatted: '00:00:00',
     topContributor: fallbackData?.topContributor || { nickname: '', count: 0 },
     topDonator: fallbackData?.topDonator || { nickname: '', diamonds: 0 },
-    topQuestions: fallbackData?.topQuestions || []
+    topQuestions: fallbackData?.topQuestions || [],
+    topContributors: fallbackData?.topContributors || []
   });
 
   // Flux de tchat en direct (tampon glissant des 50 derniers messages)
@@ -117,7 +118,8 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
         uptimeFormatted: data.uptimeFormatted || prev.uptimeFormatted,
         topContributor: data.topContributor || prev.topContributor,
         topDonator: data.topDonator || prev.topDonator,
-        topQuestions: Array.isArray(data.topQuestions) && data.topQuestions.length > 0 ? data.topQuestions : prev.topQuestions
+        topQuestions: Array.isArray(data.topQuestions) && data.topQuestions.length > 0 ? data.topQuestions : prev.topQuestions,
+        topContributors: Array.isArray(data.topContributors) && data.topContributors.length > 0 ? data.topContributors : prev.topContributors
       }));
     });
 
@@ -154,7 +156,8 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
         uptimeFormatted: '00:00:00',
         topContributor: { nickname: '', count: 0 },
         topDonator: { nickname: '', diamonds: 0 },
-        topQuestions: []
+        topQuestions: [],
+        topContributors: []
       });
       setChatMessages([]);
       setLiveTimeline([]);
