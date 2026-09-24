@@ -115,6 +115,7 @@ let totalLikes = 0;
 let totalComments = 0;
 let totalShares = 0;
 let newFollowers = 0;
+let initialFollowersSnapshot = null;
 let totalDiamonds = 0;
 
 // Tracking Contributeurs & IA
@@ -162,10 +163,10 @@ io.on('connection', (socket) => {
         newFollowers: newFollowers,
         totalDiamonds: totalDiamonds,
         topQuestions: questionClusters.slice(0, 4),
-        topContributors: [
-            { rank: 1, name: topContributor.nickname, count: topContributor.count },
-            { rank: 2, name: topDonator.nickname, diamonds: topDonator.diamonds }
-        ].filter(c => c.name && c.name !== 'Aucun'),
+        topContributors: Object.values(userMessagesCount)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5) // Top 5 contributors
+            .map((entry, index) => ({ rank: index + 1, name: entry.nickname, badge: "Top Fan", comments: entry.count })),
         timeline: liveTimelinePoints
     });
 
@@ -332,7 +333,26 @@ const startLiveTracker = async () => {
         totalLikes = Number(initialStats.like_count || 0);
         totalComments = Number(initialStats.comment_count || 0);
         totalShares = Number(initialStats.share_count || 0);
-        newFollowers = Number(initialStats.follow_count || 0);
+
+        // Follower snapshot
+        const hostProfileRes = await fetch(`https://www.tiktok.com/@${TIKTOK_USERNAME}`, {
+             headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        });
+        if (hostProfileRes.ok) {
+            const html = await hostProfileRes.text();
+            const idx = html.indexOf('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+            if (idx !== -1) {
+                const tagClose = html.indexOf('>', idx);
+                const endTag = html.indexOf('</script>', tagClose);
+                const json = JSON.parse(html.substring(tagClose + 1, endTag));
+                const userDetail = json.__DEFAULT_SCOPE__?.['webapp.user-detail'];
+                if (userDetail?.userInfo?.stats?.followerCount) {
+                    initialFollowersSnapshot = userDetail.userInfo.stats.followerCount;
+                }
+            }
+        }
+
+        newFollowers = 0; // Will be calculated at the end based on the snapshot difference or fall back to cumulative count
         totalDiamonds = Number(initialStats.fan_ticket || 0);
         userMessagesCount = {};
         userGiftsTotal = {};
@@ -459,7 +479,7 @@ const startLiveTracker = async () => {
         const handleFollowEvent = (data) => {
             const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_follow_${Date.now()}` : null);
             if (msgId && markSocialHandled(msgId)) return;
-            newFollowers++;
+            newFollowers++; // Increment runtime tracker
             console.log(`[TikTok Event] ➕ Nouvel abonné détecté (total live: ${newFollowers})`);
             broadcastMetrics();
         };
@@ -623,6 +643,32 @@ const handleAutoReconnect = () => {
 
 // 11. ARRÊT & ARCHIVAGE COMPLET DE LA SESSION (streamEnd)
 const stopLiveTracker = async () => {
+    // End of stream - Fetch final follower snapshot to calculate precise net gained followers
+    if (initialFollowersSnapshot !== null) {
+        try {
+             const finalProfileRes = await fetch(`https://www.tiktok.com/@${TIKTOK_USERNAME}`, {
+                  headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+             });
+             if (finalProfileRes.ok) {
+                 const html = await finalProfileRes.text();
+                 const idx = html.indexOf('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+                 if (idx !== -1) {
+                     const tagClose = html.indexOf('>', idx);
+                     const endTag = html.indexOf('</script>', tagClose);
+                     const json = JSON.parse(html.substring(tagClose + 1, endTag));
+                     const userDetail = json.__DEFAULT_SCOPE__?.['webapp.user-detail'];
+                     if (userDetail?.userInfo?.stats?.followerCount) {
+                         const finalFollowersSnapshot = userDetail.userInfo.stats.followerCount;
+                         const trueNewFollowers = finalFollowersSnapshot - initialFollowersSnapshot;
+                         newFollowers = Math.max(newFollowers, trueNewFollowers); // Use true difference if positive
+                     }
+                 }
+             }
+        } catch (e) {
+             console.warn("Could not fetch final follower snapshot", e.message);
+        }
+    }
+
     if (timelineInterval) {
         clearInterval(timelineInterval);
         timelineInterval = null;
@@ -669,10 +715,10 @@ const stopLiveTracker = async () => {
         diamonds: totalDiamonds,
         title: `Live TikTok • Session @${TIKTOK_USERNAME} (${durationFormatted})`,
         topQuestions: questionClusters.slice(0, 4),
-        topContributors: [
-            { rank: 1, name: topContributor.nickname, badge: "Top Fan", comments: topContributor.count },
-            { rank: 2, name: topDonator.nickname, badge: "VIP", diamonds: topDonator.diamonds }
-        ].filter(c => c.name && c.name !== 'Aucun'),
+        topContributors: Object.values(userMessagesCount)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5) // Top 5 contributors
+            .map((entry, index) => ({ rank: index + 1, name: entry.nickname, badge: "Top Fan", comments: entry.count })),
         timeline: liveTimelinePoints.length > 0 ? liveTimelinePoints : [
             { time: '0m', viewers: 0 },
             { time: durationFormatted, viewers: peakViewers }
