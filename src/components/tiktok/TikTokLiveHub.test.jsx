@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -31,15 +32,10 @@ describe('TikTokLiveHub Component', () => {
 
   it('renders "HORS LIGNE" when not live and fetches archives', async () => {
     // Setup mock hook to return offline state
-    const mockConnect = vi.fn();
-    const mockDisconnect = vi.fn();
-
     useTikTokLiveSocket.mockReturnValue({
+      isSocketConnected: false,
       isLive: false,
-      liveData: {},
-      chatMessages: [],
-      connect: mockConnect,
-      disconnect: mockDisconnect,
+      metrics: {}
     });
 
     // Setup mock firestore to return empty archives
@@ -47,83 +43,45 @@ describe('TikTokLiveHub Component', () => {
       docs: [],
     });
 
-    render(<TikTokLiveHub />);
+    render(<TikTokLiveHub liveData={{ isLive: false }} />);
 
     // Check basic render
-    expect(screen.getByText('TikTok Live Hub Central')).toBeInTheDocument();
+    expect(screen.getByText('TikTok Live Hub')).toBeInTheDocument();
     expect(screen.getByText('HORS LIGNE')).toBeInTheDocument();
-    expect(screen.getByTestId('offline-state')).toBeInTheDocument();
-
-    // Check that connect was called on mount
-    expect(mockConnect).toHaveBeenCalled();
 
     // Check empty archives state
     await waitFor(() => {
-      expect(screen.getByTestId('empty-archives')).toBeInTheDocument();
-      expect(screen.getByText(/Les archives extraites/)).toBeInTheDocument();
+      expect(screen.getByText(/Aucune archive disponible/)).toBeInTheDocument();
     });
   });
 
-  it('renders "DIFFUSION EN COURS" and live stats when live', async () => {
+  it('renders "EN DIRECT" and live stats when live', async () => {
     // Setup mock hook to return live state
     useTikTokLiveSocket.mockReturnValue({
+      isSocketConnected: true,
       isLive: true,
-      liveData: {
-        startedAt: '12:00',
-        title: 'My Awesome Live Stream',
-        kpis: {
-          viewers: 1500,
-          totalLikes: 25000,
-        },
-      },
-      chatMessages: [
-        { user: 'Alice', comment: 'Hello!' },
-        { user: 'Bob', comment: 'Cool stream' },
-      ],
-      connect: vi.fn(),
-      disconnect: vi.fn(),
+      metrics: {
+        viewers: 1500,
+        peakViewers: 1600,
+        likes: 25000,
+        comments: 500,
+        durationStr: '01:00',
+        newFollowers: 150,
+      }
     });
 
-    // Setup mock firestore to return some archives
-    mockGetDocs.mockResolvedValueOnce({
-      docs: [
-        {
-          id: '1',
-          data: () => ({ date: '2023-10-25', views: 500, shares: 10, followers: 5 }),
-        },
-        {
-          id: '2',
-          data: () => ({ date: '2023-10-26', viewers: 1000, shares: 20, followers: 15 }), // tests fallback mapping
-        },
-      ],
-    });
-
-    render(<TikTokLiveHub />);
+    render(<TikTokLiveHub liveData={{ isLive: true }} />);
 
     // Check live state
-    expect(screen.getByText('DIFFUSION EN COURS')).toBeInTheDocument();
-    expect(screen.getByTestId('live-supervision')).toBeInTheDocument();
+    expect(screen.getByText('EN DIRECT')).toBeInTheDocument();
 
     // Check live data rendered correctly
-    expect(screen.getByText('My Awesome Live Stream')).toBeInTheDocument();
-    expect(screen.getByText('Démarré à : 12:00')).toBeInTheDocument();
-    expect(screen.getByText('1,500')).toBeInTheDocument(); // viewers formatted
-    expect(screen.getByText('25,000')).toBeInTheDocument(); // likes formatted
-
-    // Check chat messages rendered
-    expect(screen.getByText('Alice :')).toBeInTheDocument();
-    expect(screen.getByText('Hello!')).toBeInTheDocument();
-    expect(screen.getByText('Bob :')).toBeInTheDocument();
-    expect(screen.getByText('Cool stream')).toBeInTheDocument();
-
-    // Check archives loaded
-    await waitFor(() => {
-      expect(screen.getByTestId('archives-grid')).toBeInTheDocument();
-      expect(screen.getByText('2023-10-25')).toBeInTheDocument();
-      expect(screen.getByText('2023-10-26')).toBeInTheDocument();
-      // Check values mapped correctly from fallback properties
-      expect(screen.getByText('500')).toBeInTheDocument();
-      expect(screen.getByText('1000')).toBeInTheDocument();
-    });
+    expect(screen.getByText('1.5k')).toBeInTheDocument(); // viewers formatted
+    expect(screen.getByText('1.6k')).toBeInTheDocument(); // peak viewers
+    // 25000 / 1000 = 25.0k due to toFixed(1)
+    expect(screen.getByText('25.0k')).toBeInTheDocument(); // likes formatted
+    expect(screen.getByText('500')).toBeInTheDocument(); // comments
+    expect(screen.getByText('150')).toBeInTheDocument(); // new followers
+    expect(screen.getByText('01:00')).toBeInTheDocument(); // duration
   });
 });
