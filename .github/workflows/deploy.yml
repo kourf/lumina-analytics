@@ -38,4 +38,4 @@ jobs:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
           firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_LUMINA_ANALYTICS }}'
           channelId: live
-          projectId: lumina-analytics
+          projectId: lumina-analytics-kd-2026
