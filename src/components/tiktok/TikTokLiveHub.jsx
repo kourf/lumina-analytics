@@ -6,7 +6,6 @@ import {
   Sparkles, 
   MessageSquare, 
   RefreshCw, 
-  Sliders, 
   Award, 
   TrendingUp, 
   Clock, 
@@ -96,6 +95,7 @@ export function TikTokLiveHub({ liveStreamData = null }) {
         </div>
 
         <div className="flex items-center space-x-3">
+          {/* Commutateur de simulation SVG natif */}
           <button
             onClick={() => setUseSimulation(!useSimulation)}
             className={`flex items-center space-x-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all border ${
@@ -104,7 +104,17 @@ export function TikTokLiveHub({ liveStreamData = null }) {
                 : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400 shadow-sm'
             }`}
           >
-            <Sliders className="w-3.5 h-3.5" />
+            <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14" />
+              <line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" />
+              <line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="1" y1="14" x2="7" y2="14" />
+              <line x1="9" y1="8" x2="15" y2="8" />
+              <line x1="17" y1="16" x2="23" y2="16" />
+            </svg>
             <span>{useSimulation ? 'Mode Simulation V1' : 'Flux API Temps Réel'}</span>
           </button>
 
@@ -118,10 +128,10 @@ export function TikTokLiveHub({ liveStreamData = null }) {
         </div>
       </div>
 
-      {/* Grille Bento Unifiée */}
+      {/* Grille Bento */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
         
-        {/* Bento 1 : Statut du Live */}
+        {/* Bento 1 : Statut du direct */}
         <div className="md:col-span-2 p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <Radio className="w-32 h-32 text-red-500" />
@@ -161,7 +171,7 @@ export function TikTokLiveHub({ liveStreamData = null }) {
           </div>
         </div>
 
-        {/* Bento 3 : Mentions J'aime */}
+        {/* Bento 3 : Likes */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium uppercase tracking-wider">Mentions J'aime</span>
@@ -176,7 +186,7 @@ export function TikTokLiveHub({ liveStreamData = null }) {
           <div className="text-[11px] text-slate-500">Flux d'interaction en progression positive</div>
         </div>
 
-        {/* Bento 4 : Abonnés générés */}
+        {/* Bento 4 : Abonnés */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium uppercase tracking-wider">Abonnés Générés</span>
@@ -191,7 +201,7 @@ export function TikTokLiveHub({ liveStreamData = null }) {
           <div className="text-[11px] text-slate-500">Nouveaux followers issus de la suggestion For You</div>
         </div>
 
-        {/* Bento 5 : Diamants récoltés */}
+        {/* Bento 5 : Diamants */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium uppercase tracking-wider">Diamants Récoltés</span>
@@ -235,7 +245,7 @@ export function TikTokLiveHub({ liveStreamData = null }) {
           </div>
         </div>
 
-        {/* Bento 7 : Recommandations Lumina AI */}
+        {/* Bento 7 : Recommandations Lumina Growth */}
         <div className="md:col-span-2 lg:col-span-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900 to-purple-950/40 border border-indigo-900/50 shadow-lg">
           <div className="flex items-center space-x-2 mb-3">
             <Sparkles className="w-4 h-4 text-indigo-400" />
