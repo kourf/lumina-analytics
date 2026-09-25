@@ -53,7 +53,7 @@ const MOCK_LIVE_DATA = {
   ]
 };
 
-export default function TikTokLiveHub({ liveStreamData = null }) {
+export function TikTokLiveHub({ liveStreamData = null }) {
   const [useSimulation, setUseSimulation] = useState(!liveStreamData?.isLive);
   const [data, setData] = useState(MOCK_LIVE_DATA);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -75,6 +75,7 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
 
   return (
     <div className="space-y-6 w-full text-slate-100">
+      {/* Barre de contrôle supérieure */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-md">
         <div className="flex items-center space-x-3">
           <div className="relative">
@@ -117,8 +118,10 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
         </div>
       </div>
 
+      {/* Grille Bento Unifiée */}
       <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4">
         
+        {/* Bento 1 : Statut du Live */}
         <div className="md:col-span-2 p-5 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-950 border border-slate-800/80 shadow-lg relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10">
             <Radio className="w-32 h-32 text-red-500" />
@@ -137,6 +140,7 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
           <p className="text-xs text-slate-400">Diffusion ciblée : France, Suisse, Belgique • Algorithme For You actif</p>
         </div>
 
+        {/* Bento 2 : Spectateurs en direct */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium uppercase tracking-wider">Audience Direct</span>
@@ -157,6 +161,7 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
           </div>
         </div>
 
+        {/* Bento 3 : Mentions J'aime */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium uppercase tracking-wider">Mentions J'aime</span>
@@ -171,6 +176,7 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
           <div className="text-[11px] text-slate-500">Flux d'interaction en progression positive</div>
         </div>
 
+        {/* Bento 4 : Abonnés générés */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium uppercase tracking-wider">Abonnés Générés</span>
@@ -185,6 +191,7 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
           <div className="text-[11px] text-slate-500">Nouveaux followers issus de la suggestion For You</div>
         </div>
 
+        {/* Bento 5 : Diamants récoltés */}
         <div className="p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col justify-between">
           <div className="flex items-center justify-between text-slate-400">
             <span className="text-xs font-medium uppercase tracking-wider">Diamants Récoltés</span>
@@ -199,6 +206,7 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
           <div className="text-[11px] text-slate-500">Distribution par 3 contributeurs majeurs</div>
         </div>
 
+        {/* Bento 6 : Chat modéré */}
         <div className="md:col-span-2 p-5 rounded-2xl bg-slate-900/90 border border-slate-800 shadow-lg flex flex-col">
           <div className="flex items-center justify-between pb-3 border-b border-slate-800 mb-3">
             <div className="flex items-center space-x-2">
@@ -227,6 +235,7 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
           </div>
         </div>
 
+        {/* Bento 7 : Recommandations Lumina AI */}
         <div className="md:col-span-2 lg:col-span-4 p-5 rounded-2xl bg-gradient-to-r from-indigo-950/40 via-slate-900 to-purple-950/40 border border-indigo-900/50 shadow-lg">
           <div className="flex items-center space-x-2 mb-3">
             <Sparkles className="w-4 h-4 text-indigo-400" />
@@ -246,3 +255,5 @@ export default function TikTokLiveHub({ liveStreamData = null }) {
     </div>
   );
 }
+
+export default TikTokLiveHub;
