@@ -1,108 +1,41 @@
-name: CI/CD Pipeline - Lumina Analytics
+name: Pipeline CI/CD - Lumina Analytics
 
 on:
   push:
-    branches: [ principal ]
+    branches:
+      - main
   pull_request:
-    branches: [ principal ]
+    branches:
+      - main
+  workflow_dispatch:
 
-env:
-  PROJECT_ID: lumina-analytics-kd-2026
-  REGION: europe-west1
-  REPOSITORY: lumina-analytics
-  SERVICE: live-metrics-runner
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  lint-and-test:
-    name: Lint & Test
+  build-and-deploy:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Repository
+      - name: Récupération du code source
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Configuration de Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
+          cache: 'npm'
 
-      - name: Install Frontend Dependencies
-        run: npm ci || npm install
+      - name: Installation des dépendances
+        run: npm ci
 
-      - name: Build Web App
+      - name: Compilation Vite
         run: npm run build
 
-      - name: Syntax Check Functions
-        run: |
-          cd functions
-          npm ci || npm install
-          node -c index.js
-          node -c secrets.js
-          node -c tiktokLiveWebhook.js
-          node -c youtubeLivePush.js
-
-      - name: Syntax Check Worker
-        run: |
-          cd worker
-          npm ci || npm install
-          node -c index.js
-
-  deploy:
-    name: Deploy to GCP & Firebase
-    needs: lint-and-test
-    if: github.ref == 'refs/heads/principal'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Déploiement sur Firebase Hosting
+        uses: FirebaseExtended/action-hosting-deploy@v0
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ env.PROJECT_ID }}
-
-      - name: Setup Node.js for Frontend & Firebase
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-
-      - name: Install Dependencies & Build Web App
-        run: |
-          npm ci || npm install
-          npm run build
-
-      - name: Deploy to Firebase Hosting
-        run: |
-          npx firebase-tools deploy --only hosting --project ${{ env.PROJECT_ID }}
-
-      - name: Configure Docker for GCP (Worker)
-        continue-on-error: true
-        run: gcloud auth configure-docker --quiet
-
-      - name: Build & Push Cloud Run Worker Image
-        continue-on-error: true
-        run: |
-          IMAGE_TAG="europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/worker:$GITHUB_SHA"
-          docker build -t $IMAGE_TAG ./worker
-          docker push $IMAGE_TAG
-        env:
-          PROJECT_ID: lumina-analytics-kd-2026
-
-      - name: Deploy to Cloud Run (Optional Background Poller)
-        continue-on-error: true
-        run: |
-          IMAGE_TAG=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/worker:$GITHUB_SHA
-          gcloud run deploy tiktok-live-worker \
-            --image $IMAGE_TAG \
-            --region europe-west1 \
-            --platform managed \
-            --allow-unauthenticated \
-            --set-env-vars PROJECT_ID=$PROJECT_ID
-        env:
-          PROJECT_ID: lumina-analytics-kd-2026
+          repoToken: '${{ secrets.GITHUB_TOKEN }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_LUMINA_ANALYTICS }}'
+          channelId: live
+          projectId: lumina-analytics
