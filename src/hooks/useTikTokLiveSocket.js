@@ -185,6 +185,28 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
     }
   }, []);
 
+  const connect = useCallback(() => {
+    if (socketRef.current && !socketRef.current.connected) {
+      socketRef.current.connect();
+    }
+  }, []);
+
+  const disconnect = useCallback(() => {
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.disconnect();
+    }
+  }, []);
+
+  const liveData = {
+    isLive,
+    startedAt,
+    title: sessionId ? `Live session ${sessionId}` : '', // fallback title
+    kpis: {
+      viewers: metrics.viewers,
+      totalLikes: metrics.likes,
+    }
+  };
+
   return {
     isSocketConnected,
     isLive,
@@ -194,6 +216,9 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
     chatMessages,
     liveTimeline,
     lastArchivedSession,
-    requestSync
+    requestSync,
+    connect,
+    disconnect,
+    liveData
   };
 }
