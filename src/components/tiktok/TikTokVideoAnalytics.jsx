@@ -1,8 +1,11 @@
-import React from 'react';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users } from 'lucide-react';
+import React, { useState } from 'react';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon } from 'lucide-react';
 
 export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], followers = 0 }) => {
+  const [activeMetric, setActiveMetric] = useState('views');
+  const [chartType, setChartType] = useState('bar');
+
   if (!recentVideos || recentVideos.length === 0 || followers === null || followers === 0) {
     return (
       <div className="w-full relative z-[60] bg-red-500/10 border border-red-500/20 rounded-2xl p-6 text-red-400 mt-4">
@@ -53,11 +56,21 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
   const viewsPerSub = followers > 0 ? Math.round(totalViews / followers) : 0;
 
   // Préparer les données pour le graphique des dernières vidéos
-  const chartData = [...recentVideos].reverse().map((video, index) => ({
-    name: `Vid ${index + 1}`,
-    views: video.views,
-    title: video.title
-  }));
+  const chartData = [...recentVideos].reverse().map((video, index) => {
+    const views = Number(video.views || 0);
+    const likes = Number(video.likes || 0);
+    const comments = Number(video.comments || 0);
+    const shares = Number(video.shares || 0);
+    const engagement = views > 0 ? Number((((likes + comments + shares) / views) * 100).toFixed(2)) : 0;
+    return {
+      name: `Vid ${index + 1}`,
+      views,
+      median: medianViews,
+      engagement,
+      shares,
+      title: video.title || video.desc || `Vidéo ${index + 1}`
+    };
+  });
 
   // Préparer les données pour les vidéos publiées par mois
   const videosPerMonth = {};

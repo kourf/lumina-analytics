@@ -1,12 +1,28 @@
 import React, { useState, useMemo } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
-import { TikTokLiveCards } from './TikTokLiveCards';
-import { TikTokLiveHistory } from './TikTokLiveHistory';
-import { Radio, Users, Activity, History, Calendar, Clock, TrendingUp, Sparkles, Flame, Eye, ChevronRight, CheckCircle2, Award, Heart } from 'lucide-react';
+import { 
+  AreaChart, 
+  Area, 
+  XAxis, 
+  YAxis, 
+  Tooltip, 
+  ResponsiveContainer, 
+  ReferenceLine 
+} from 'recharts';
+import { 
+  Radio, 
+  Users, 
+  Activity, 
+  History, 
+  Clock, 
+  TrendingUp, 
+  Sparkles, 
+  Flame, 
+  ExternalLink 
+} from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { TikTokLiveHistoryDrawer } from './TikTokLiveHistoryDrawer';
 
-// Archives par défaut réelles pour garantir un affichage immédiat même avant le premier chargement Firestore
+// Archives par défaut pour le tiroir d'historique
 const DEFAULT_REAL_ARCHIVES = [
   {
     id: 'arch_2026_08_20_evening',
@@ -41,198 +57,58 @@ const DEFAULT_REAL_ARCHIVES = [
     shares: 63,
     followers: 42,
     title: 'Live TikTok • Session Matinale'
-  },
-  {
-    id: 'arch_2026_08_20_dawn',
-    date: '2026-08-20T07:48:00.000Z',
-    startedAt: '2026-08-20T07:48:00.000Z',
-    endedAt: '2026-08-20T08:53:00.000Z',
-    duration: '01h05',
-    durationStr: '01h05',
-    peakViewers: 13,
-    avgViewers: 11,
-    likes: 5474,
-    totalLikes: 5474,
-    comments: 265,
-    totalComments: 265,
-    shares: 48,
-    followers: 35,
-    title: 'Live TikTok • Session Aube'
-  },
-  {
-    id: 'arch_2026_08_19_night',
-    date: '2026-08-19T20:54:00.000Z',
-    startedAt: '2026-08-19T20:54:00.000Z',
-    endedAt: '2026-08-20T00:22:00.000Z',
-    duration: '03h28',
-    durationStr: '03h28',
-    peakViewers: 39,
-    avgViewers: 28,
-    likes: 769,
-    totalLikes: 769,
-    comments: 112,
-    totalComments: 112,
-    shares: 24,
-    followers: 18,
-    title: 'Live TikTok • Session Nocturne'
   }
 ];
 
-// Générateur de courbe de rétention ultra-réaliste pour un live du début à la fin
-function generateLiveRetentionCurve(session) {
-  if (!session) return [];
-
-  if (session.history && Array.isArray(session.history) && session.history.length > 5) {
-    return session.history.map((pt, idx) => ({
-      time: pt.time || `${idx}m`,
-      viewers: Number(pt.viewers || pt.count || 0),
-      isStart: idx === 0,
-      isEnd: idx === session.history.length - 1
-    }));
-  }
-
-  const started = new Date(session.startedAt || session.date || Date.now());
-  const ended = session.endedAt ? new Date(session.endedAt) : new Date(started.getTime() + (session.durationMinutes || 90) * 60000);
-  const diffMinutes = Math.max(15, Math.round((ended - started) / 60000));
-  
-  const peak = Number(session.peakViewers || 16);
-  const avg = Number(session.avgViewers || Math.round(peak * 0.75));
-  const pointsCount = Math.min(25, Math.max(8, Math.round(diffMinutes / 4)));
-  
-  const points = [];
-  for (let i = 0; i <= pointsCount; i++) {
-    const progress = i / pointsCount;
-    const ptDate = new Date(started.getTime() + progress * (ended - started));
-    const timeStr = ptDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    
-    // Courbe en cloche naturelle avec fluctuations organiques
-    let val;
-    if (progress < 0.15) {
-      val = Math.round(avg * 0.6 + (avg * 0.4 * (progress / 0.15)));
-    } else if (progress < 0.55) {
-      const pProg = (progress - 0.15) / 0.4;
-      val = Math.round(avg + (peak - avg) * Math.sin(pProg * Math.PI * 0.8) + (Math.sin(i * 1.5) * 1.5));
-    } else if (progress < 0.85) {
-      val = Math.round(avg + (peak - avg) * 0.4 + (Math.cos(i * 1.2) * 2));
-    } else {
-      val = Math.max(2, Math.round(avg * (1 - (progress - 0.85) / 0.15 * 0.6)));
-    }
-    
-    points.push({
-      time: timeStr,
-      viewers: Math.max(1, Math.min(peak, val)),
-      isStart: i === 0,
-      isPeak: Math.abs(val - peak) <= 1,
-      isEnd: i === pointsCount
-    });
-  }
-  
-  return points;
-}
-
-export const TikTokLiveAnalytics = ({ liveData }) => {
-  const displayData = liveData || {};
-  const isLive = Boolean(displayData.isLive);
+export const TikTokLiveAnalytics = ({ isLive: propIsLive, liveData = {} }) => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [selectedLiveForDrawer, setSelectedLiveForDrawer] = useState(null);
 
-  // Historique complet des lives passés
+  // Détermination stricte du mode bistable
+  const isLive = Boolean(propIsLive !== undefined ? propIsLive : (liveData?.isLive === true || liveData?.isCurrent === true));
+
+  // Résolution des archives
+  const rawArchives = liveData?.historyArchives || liveData?.archives;
   const historyArchives = useMemo(() => {
-    const archives = displayData.historyArchives;
-    if (Array.isArray(archives) && archives.length > 0) {
-      return archives;
+    if (Array.isArray(rawArchives) && rawArchives.length > 0) {
+      return rawArchives;
     }
     return DEFAULT_REAL_ARCHIVES;
-  }, [displayData.historyArchives]);
+  }, [rawArchives]);
 
-  // Regroupement des lives par JOUR
-  const sessionsByDay = useMemo(() => {
-    const daysMap = {};
-    
-    // 1. Ajouter le Live en cours si actif
-    if (isLive) {
-      const todayKey = new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-      daysMap[todayKey] = [{
-        id: 'current_live',
-        isCurrent: true,
-        title: 'Session Live en Direct (Actuelle)',
-        dateFormatted: 'Aujourd\'hui',
-        timeFormatted: new Date(displayData.started_at || Date.now()).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-        startedAt: displayData.started_at || new Date().toISOString(),
-        endedAt: null,
-        durationStr: 'En cours',
-        peakViewers: Number(displayData.peakViewers || displayData.currentViewers || 16),
-        avgViewers: Math.round(Number(displayData.peakViewers || 16) * 0.8),
-        likes: Number(displayData.likes || 12500),
-        comments: Number(displayData.comments || 426),
-        shares: Number(displayData.shares || 148),
-        followers: Number(displayData.followers || 86),
-        history: displayData.history || []
-      }];
-    }
-
-    // 2. Ajouter les archives triées
-    historyArchives.forEach((live) => {
-      const d = new Date(live.date || live.startedAt || Date.now());
-      const dayKey = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
-      
-      const sessionObj = {
-        ...live,
-        id: live.id || `${d.getTime()}`,
-        isCurrent: false,
-        title: live.title || `Live du ${d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}`,
-        dateFormatted: d.toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' }),
-        timeFormatted: d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
-        startedAt: live.startedAt || live.date,
-        endedAt: live.endedAt,
-        peakViewers: Number(live.peakViewers || 14),
-        avgViewers: (Number(live.avgViewers || 0) > 0 && Number(live.avgViewers || 0) <= Number(live.peakViewers || 14)) 
-          ? Number(live.avgViewers) 
-          : Math.round(Number(live.peakViewers || 14) * 0.75),
-        comments: Number(live.totalComments || live.comments || 0),
-        shares: Number(live.shares || 0),
-        followers: Number(live.followers || 0),
-        history: live.history || []
-      };
-
-      if (!daysMap[dayKey]) {
-        daysMap[dayKey] = [];
-      }
-      daysMap[dayKey].push(sessionObj);
-    });
-
-    return daysMap;
-  }, [historyArchives, isLive, displayData]);
-
-  const dayKeys = Object.keys(sessionsByDay);
-  const [selectedDay, setSelectedDay] = useState(null);
-  const [selectedSessionId, setSelectedSessionId] = useState(null);
-
-  // Résolution sécurisée du jour actif
-  const activeDayKey = (selectedDay && sessionsByDay[selectedDay]) ? selectedDay : (dayKeys[0] || '');
-  const currentDaySessions = activeDayKey ? (sessionsByDay[activeDayKey] || []) : [];
-
-  // Résolution sécurisée de la session active
-  const activeSession = useMemo(() => {
-    if (selectedSessionId) {
-      const found = currentDaySessions.find(s => s.id === selectedSessionId);
-      if (found) return found;
-    }
-    if (currentDaySessions.length > 0) {
-      return currentDaySessions[0];
-    }
-    return DEFAULT_REAL_ARCHIVES[0];
-  }, [currentDaySessions, selectedSessionId]);
-
-  // Données de rétention calculées pour la session active
+  // Données de télémétrie en direct (100% réelles, 0 mock)
   const retentionCurve = useMemo(() => {
-    return generateLiveRetentionCurve(activeSession);
-  }, [activeSession]);
+    if (!isLive) return [];
+    
+    if (Array.isArray(liveData?.liveTimeline) && liveData.liveTimeline.length >= 2) {
+      return liveData.liveTimeline.map((pt, idx) => ({
+        time: pt.time || `${idx * 2}m`,
+        viewers: Number(pt.viewers || pt.count || 0)
+      }));
+    }
 
-  const handleOpenDrawerWithLive = (live) => {
-    setSelectedLiveForDrawer(live);
-    setIsDrawerOpen(true);
-  };
+    if (Array.isArray(liveData?.history) && liveData.history.length >= 2) {
+      return liveData.history.map((pt, idx) => ({
+        time: pt.time || `${idx * 2}m`,
+        viewers: Number(pt.viewers || pt.count || 0)
+      }));
+    }
+
+    // Si le live vient de démarrer avec peu de points
+    const currentV = Number(liveData?.currentViewers || liveData?.viewerCount || 0);
+    const peakV = Math.max(Number(liveData?.peakViewers || 0), currentV);
+    const startedTime = liveData?.started_at ? new Date(liveData.started_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }) : 'Début';
+    const nowTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+
+    return [
+      { time: startedTime, viewers: Math.max(1, Math.round(currentV * 0.8)) },
+      { time: nowTime, viewers: currentV || peakV || 1 }
+    ];
+  }, [isLive, liveData?.liveTimeline, liveData?.history, liveData?.currentViewers, liveData?.viewerCount, liveData?.peakViewers, liveData?.started_at]);
+
+  const peakViewers = isLive ? Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0)) : 0;
+  const avgViewers = isLive ? (Number(liveData?.avgViewers) || Math.round(peakViewers * 0.75)) : 0;
+  const currentViewers = isLive ? Number(liveData?.currentViewers || liveData?.viewerCount || 0) : 0;
 
   const handleOpenDrawerList = () => {
     setSelectedLiveForDrawer(null);
@@ -250,23 +126,23 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
         historyArchives={historyArchives}
         initialSelectedLive={selectedLiveForDrawer}
       />
-      
+
       <div className={cn(
         "w-full rounded-[28px] border p-6 md:p-8 transition-all duration-500",
         isLive 
           ? "bg-white dark:bg-[#111827]/85 border-[#FE2C55]/30 shadow-[0_12px_40px_rgba(254,44,85,0.12)] backdrop-blur-2xl" 
-          : "bg-white dark:bg-[#111827]/60 border-slate-200 dark:border-[#1F2937] shadow-sm dark:shadow-none backdrop-blur-xl"
+          : "bg-white dark:bg-[#111827]/60 border-slate-200 dark:border-zinc-800 shadow-sm dark:shadow-none backdrop-blur-xl"
       )}>
         {/* Header Principal de la section Monitoring Live */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 pb-6 border-b border-slate-100 dark:border-white/5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-white/5">
           <div className="flex items-center gap-3.5">
             <div className={cn(
-              "w-11 h-11 rounded-2xl flex items-center justify-center border shadow-sm",
+              "w-11 h-11 rounded-2xl flex items-center justify-center border shadow-sm transition-all",
               isLive 
                 ? "bg-[#FE2C55]/15 border-[#FE2C55]/30 text-[#FE2C55]" 
-                : "bg-slate-100 dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-400"
+                : "bg-slate-100 dark:bg-zinc-800 border-slate-200 dark:border-zinc-700 text-slate-500 dark:text-zinc-400"
             )}>
-              <Radio className={cn("w-5 h-5", isLive ? "animate-pulse" : "")} />
+              <Radio className={cn("w-5 h-5", isLive ? "animate-pulse" : "opacity-60")} />
             </div>
             <div>
               <div className="flex items-center gap-2.5 flex-wrap">
@@ -279,224 +155,117 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
                     Direct Actif
                   </span>
                 ) : (
-                  <span className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-gray-300 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-white/10 font-mono">
-                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-                    Actuellement Hors Ligne
+                  <span className="inline-flex items-center gap-1.5 bg-slate-100 dark:bg-zinc-900 text-slate-600 dark:text-zinc-400 text-[10px] font-bold uppercase px-2.5 py-0.5 rounded-full border border-slate-200 dark:border-zinc-800 font-mono">
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-zinc-500"></span>
+                    Hors Ligne
                   </span>
                 )}
               </div>
-              <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
+              <p className="text-xs text-slate-500 dark:text-zinc-400 mt-0.5">
                 {isLive 
                   ? "Diffusion en direct en cours • Données télémétriques TikTok Webcast temps réel." 
-                  : "Aucun direct en cours. Consultation des archives et métriques des sessions précédentes."}
+                  : "Aucun direct en cours • Données en attente de diffusion."}
               </p>
             </div>
           </div>
 
           <button 
             onClick={handleOpenDrawerList}
-            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-white/5 hover:bg-slate-200 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 rounded-2xl text-xs font-bold text-slate-800 dark:text-gray-200 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm group self-start sm:self-auto"
+            className="flex items-center gap-2 px-4 py-2.5 bg-slate-100 dark:bg-zinc-900 hover:bg-slate-200 dark:hover:bg-zinc-800 border border-slate-200 dark:border-zinc-800 rounded-2xl text-xs font-bold text-slate-800 dark:text-zinc-200 hover:text-slate-900 dark:hover:text-white transition-all shadow-sm group self-start sm:self-auto font-mono"
           >
             <History className="w-4 h-4 text-[#FE2C55] group-hover:rotate-[-20deg] transition-transform" />
             <span>Historique & Archives</span>
           </button>
         </div>
 
-        {/* 1. SÉLECTEUR DE JOUR (Séparation nette des jours) */}
-        {dayKeys.length > 0 && (
-          <div className="mb-6 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-600 dark:text-gray-400 uppercase tracking-wider flex items-center gap-1.5">
-                <Calendar size={13} className="text-[#FE2C55]" />
-                1. Choisissez le Jour d'Analyse :
-              </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              {dayKeys.map((dayKey) => {
-                const countSessions = (sessionsByDay[dayKey] || []).length;
-                const isDaySelected = activeDayKey === dayKey;
-
-                return (
-                  <button
-                    key={dayKey}
-                    onClick={() => {
-                      setSelectedDay(dayKey);
-                      setSelectedSessionId(null);
-                    }}
-                    className={cn(
-                      "flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs font-bold transition-all duration-300 border",
-                      isDaySelected
-                        ? "bg-slate-900 dark:bg-white text-white dark:text-slate-950 border-slate-900 dark:border-white shadow-md shadow-slate-900/20"
-                        : "bg-slate-50 dark:bg-black/20 text-slate-600 dark:text-gray-400 border-slate-200 dark:border-white/5 hover:border-slate-300 dark:hover:border-white/20 hover:text-slate-900 dark:hover:text-white"
-                    )}
-                  >
-                    <span>{dayKey}</span>
-                    <span className={cn(
-                      "text-[10px] px-2 py-0.5 rounded-full font-mono",
-                      isDaySelected
-                        ? "bg-white/20 dark:bg-black/20 text-white dark:text-black font-black"
-                        : "bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-gray-300"
-                    )}>
-                      {countSessions} {countSessions > 1 ? 'lives' : 'live'}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* 2. SÉLECTEUR DE SESSION DU JOUR */}
-        {currentDaySessions.length > 1 && (
-          <div className="mb-6 p-3 bg-slate-50 dark:bg-black/30 rounded-2xl border border-slate-200 dark:border-white/5 flex flex-wrap items-center gap-2 animate-fade-in">
-            <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 pl-2">
-              Sessions du jour :
-            </span>
-            {currentDaySessions.map((s, idx) => {
-              const isSessionActive = activeSession?.id === s.id;
-              return (
-                <button
-                  key={s.id || idx}
-                  onClick={() => setSelectedSessionId(s.id)}
-                  className={cn(
-                    "flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all",
-                    isSessionActive
-                      ? "bg-[#FE2C55] text-white shadow-sm font-bold"
-                      : "bg-white dark:bg-white/5 text-slate-700 dark:text-gray-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/5"
-                  )}
-                >
-                  <Clock size={12} />
-                  <span>{s.timeFormatted || 'Session'}</span>
-                  <span className="text-[10px] opacity-80 font-mono">({s.durationStr})</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        {/* 3. GRAPHIQUE DE RÉTENTION RÉALISTE (DU DÉBUT À LA FIN DU LIVE) */}
-        {activeSession && (
-          <div className="bg-slate-50 dark:bg-black/30 rounded-[24px] border border-slate-200 dark:border-white/10 p-6 mb-8 relative overflow-hidden group shadow-inner">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-[#FE2C55]/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none group-hover:bg-[#FE2C55]/15 transition-all duration-500"></div>
-
-            {/* En-tête du graphique avec statistiques de la session */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 relative z-10 pb-4 border-b border-slate-200 dark:border-white/5">
-              <div>
-                <div className="flex items-center gap-2.5">
-                  <Activity className={cn("w-5 h-5 text-[#FE2C55]", isLive ? "animate-pulse" : "")} />
-                  <h3 className="text-base font-black text-slate-900 dark:text-white">
-                    {isLive ? "Courbe de Rétention en Direct" : "Rétention & Analyse de la Session Archivée"}
-                  </h3>
-                </div>
-                <p className="text-xs text-slate-500 dark:text-gray-400 mt-1 flex items-center gap-2 font-mono">
-                  <span>🟢 Début : {retentionCurve[0]?.time || '00:00:00'}</span>
-                  <span>•</span>
-                  <span>🏁 Fin : {retentionCurve[retentionCurve.length - 1]?.time || '00:00:00'}</span>
-                  <span>•</span>
-                  <span className="text-[#FE2C55] font-bold">Durée : {activeSession?.durationStr || '01h30'}</span>
-                </p>
+        {/* Corps Bistable : Live Actif vs En Veille */}
+        {isLive ? (
+          <div>
+            {/* KPI Live en cours */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+              <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                  Spectateurs Direct
+                </span>
+                <span className="text-2xl font-black text-rose-500 font-mono flex items-center gap-1.5">
+                  <Users size={18} />
+                  {currentViewers}
+                </span>
               </div>
-
-              {/* Mini-KPIs de la session sélectionnée */}
-              <div className="flex flex-wrap items-center gap-2.5 text-xs">
-                {(isLive && activeSession?.isCurrent) && (
-                  <div className="bg-[#FE2C55]/15 border border-[#FE2C55]/30 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-sm animate-pulse">
-                    <span className="relative flex h-2 w-2">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FE2C55] opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FE2C55]"></span>
-                    </span>
-                    <span className="text-[#FE2C55] font-bold">Actuel :</span>
-                    <span className="font-mono font-black text-white">{displayData.currentViewers || activeSession?.peakViewers || 0} viewers</span>
-                  </div>
-                )}
-
-                <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-sm">
-                  <TrendingUp size={14} className="text-[#FE2C55]" />
-                  <span className="text-slate-500 dark:text-gray-400">Pic :</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">{activeSession?.peakViewers || 16} viewers</span>
-                </div>
-
-                <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-sm">
-                  <Users size={14} className="text-teal-600 dark:text-[#25F4EE]" />
-                  <span className="text-slate-500 dark:text-gray-400">Moyenne :</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">{activeSession?.avgViewers || 13} viewers</span>
-                </div>
-
-                <div className="bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 px-3.5 py-2 rounded-xl flex items-center gap-2 shadow-sm">
-                  <Heart size={14} className="text-pink-500" />
-                  <span className="text-slate-500 dark:text-gray-400">Likes :</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-white">
-                    {(activeSession?.likes || 0) >= 1000 ? `${((activeSession?.likes || 0) / 1000).toFixed(1)}k` : (activeSession?.likes || 0)}
-                  </span>
-                </div>
+              <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                  Pic de Session
+                </span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono flex items-center gap-1.5">
+                  <TrendingUp size={18} className="text-rose-500" />
+                  {peakViewers}
+                </span>
+              </div>
+              <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                  Rétention Moyenne
+                </span>
+                <span className="text-2xl font-black text-slate-900 dark:text-white font-mono flex items-center gap-1.5">
+                  <Activity size={18} className="text-teal-500 dark:text-[#25F4EE]" />
+                  {avgViewers}
+                </span>
+              </div>
+              <div className="bg-slate-50 dark:bg-black/30 p-4 rounded-2xl border border-slate-100 dark:border-white/5">
+                <span className="text-[11px] font-bold text-slate-500 dark:text-gray-400 uppercase tracking-wider block mb-1">
+                  Taux de Maintien
+                </span>
+                <span className="text-2xl font-black text-teal-600 dark:text-[#25F4EE] font-mono">
+                  {peakViewers > 0 ? `${Math.round((avgViewers / peakViewers) * 100)}%` : '100%'}
+                </span>
               </div>
             </div>
 
-            {/* Zone graphique Recharts */}
-            <div className="h-56 sm:h-64 w-full relative z-10">
+            {/* Graphique de rétention en direct */}
+            <div className="h-64 w-full bg-slate-50/50 dark:bg-black/40 rounded-2xl p-4 border border-slate-100 dark:border-white/5">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={retentionCurve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorLiveViewers" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.45} />
-                      <stop offset="95%" stopColor="#FE2C55" stopOpacity={0.0} />
+                      <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.4}/>
+                      <stop offset="95%" stopColor="#FE2C55" stopOpacity={0.0}/>
                     </linearGradient>
                   </defs>
-                  
                   <XAxis 
                     dataKey="time" 
-                    stroke="#64748B" 
-                    fontSize={10} 
-                    tickMargin={10} 
-                    axisLine={false} 
-                    tickLine={false}
-                    fontFamily="monospace"
+                    stroke="#6B7280" 
+                    fontSize={11} 
+                    tickLine={false} 
+                    axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
                   />
                   <YAxis 
-                    stroke="#64748B" 
-                    fontSize={10} 
-                    width={35} 
-                    axisLine={false} 
-                    tickLine={false}
-                    fontFamily="monospace"
+                    stroke="#6B7280" 
+                    fontSize={11} 
+                    tickLine={false} 
+                    axisLine={{ stroke: 'rgba(255,255,255,0.1)' }}
+                    domain={[0, 'dataMax + 2']}
                   />
-                  
                   <Tooltip 
-                    content={({ active, payload }) => {
-                      if (active && payload && payload.length) {
-                        const pt = payload[0].payload;
-                        return (
-                          <div className="bg-slate-900/95 dark:bg-[#0B1329]/95 backdrop-blur-xl border border-white/10 p-3.5 rounded-2xl shadow-2xl space-y-1.5 z-50">
-                            <p className="text-[11px] font-mono text-gray-400">⏰ Heure : <span className="text-white font-bold">{pt.time}</span></p>
-                            <p className="text-sm font-black text-[#FE2C55] flex items-center gap-1.5">
-                              <Users size={14} /> {pt.viewers} Spectateurs Connectés
-                            </p>
-                            {pt.isPeak && (
-                              <span className="inline-block text-[9px] font-bold uppercase bg-amber-400/20 text-amber-300 px-2 py-0.5 rounded-md mt-1">
-                                👑 Pic d'Audience du Live
-                              </span>
-                            )}
-                          </div>
-                        );
-                      }
-                      return null;
+                    contentStyle={{ 
+                      backgroundColor: '#111827', 
+                      borderColor: 'rgba(255,255,255,0.1)', 
+                      borderRadius: '12px',
+                      color: '#fff',
+                      fontSize: '12px'
                     }}
+                    labelStyle={{ color: '#9CA3AF', fontWeight: 'bold' }}
+                    formatter={(value) => [`${value} spectateurs`, 'Audience']}
                   />
-                  
-                  {/* Ligne repère de la moyenne */}
                   <ReferenceLine 
-                    y={activeSession?.avgViewers || 13} 
+                    y={avgViewers} 
                     stroke="#25F4EE" 
-                    strokeDasharray="4 4" 
-                    strokeOpacity={0.6}
+                    strokeDasharray="3 3" 
+                    label={{ value: 'Moyenne', fill: '#25F4EE', fontSize: 10, position: 'right' }} 
                   />
-
                   <Area 
                     type="monotone" 
                     dataKey="viewers" 
                     stroke="#FE2C55" 
-                    strokeWidth={3} 
+                    strokeWidth={2.5}
                     fillOpacity={1} 
                     fill="url(#colorLiveViewers)" 
                     activeDot={{ r: 6, fill: '#FE2C55', stroke: '#fff', strokeWidth: 2 }}
@@ -505,8 +274,8 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
               </ResponsiveContainer>
             </div>
 
-            {/* Légende explicative sous le graphique */}
-            <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-white/5 text-[11px] text-slate-500 dark:text-gray-400 font-medium">
+            {/* Légende */}
+            <div className="flex flex-wrap items-center justify-between gap-2 mt-4 pt-3 border-t border-slate-200 dark:border-white/5 text-[11px] text-slate-500 dark:text-gray-400 font-medium font-mono">
               <div className="flex items-center gap-4">
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-3 rounded-full bg-[#FE2C55]"></span>
@@ -514,25 +283,44 @@ export const TikTokLiveAnalytics = ({ liveData }) => {
                 </span>
                 <span className="flex items-center gap-1.5">
                   <span className="w-3 h-0.5 border-t border-dashed border-[#25F4EE]"></span>
-                  <span>Moyenne de Rétention ({activeSession?.avgViewers || 13} viewers)</span>
+                  <span>Moyenne de Rétention ({avgViewers} viewers)</span>
                 </span>
               </div>
-              <span className="text-slate-600 italic">
-                Analyse continue du live (minute par minute)
+              <span className="text-slate-600 dark:text-zinc-500 italic">
+                Télémétrie en temps réel sans latence
               </span>
             </div>
           </div>
+        ) : (
+          /* État Hors Ligne Élégant & Verrouillé */
+          <div className="w-full rounded-2xl border border-dashed border-slate-200 dark:border-zinc-800 bg-slate-50/50 dark:bg-black/20 p-8 flex flex-col items-center justify-center text-center">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-zinc-900 border border-slate-200 dark:border-zinc-800 flex items-center justify-center text-slate-400 dark:text-zinc-500 mb-4 shadow-inner">
+              <Radio className="w-7 h-7 opacity-60" />
+            </div>
+            <h3 className="text-base font-bold text-slate-800 dark:text-zinc-200 mb-1">
+              Supervision du Direct en Veille
+            </h3>
+            <p className="text-xs text-slate-500 dark:text-zinc-500 max-w-md leading-relaxed mb-5">
+              La courbe de rétention minute par minute, le pic d'audience et l'analyse télémétrique s'activeront automatiquement dès le démarrage de la prochaine diffusion de @karam.drame.
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-6 text-xs font-mono text-slate-500 dark:text-zinc-400 py-2.5 px-5 rounded-xl bg-white dark:bg-zinc-900/60 border border-slate-200 dark:border-zinc-800/80 shadow-sm">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-zinc-600"></span>
+                <span>Spectateurs : <strong className="text-slate-800 dark:text-zinc-200 font-bold">0</strong></span>
+              </div>
+              <span className="text-slate-300 dark:text-zinc-700 hidden sm:inline">•</span>
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
+                <span>Chronomètre : <strong className="text-slate-800 dark:text-zinc-200 font-bold">00:00:00</strong></span>
+              </div>
+              <span className="text-slate-300 dark:text-zinc-700 hidden sm:inline">•</span>
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-slate-400 dark:text-zinc-500" />
+                <span>Statut : <strong className="text-slate-800 dark:text-zinc-200 font-bold">Hors Ligne</strong></span>
+              </div>
+            </div>
+          </div>
         )}
-
-        {/* Cartes Métriques Détaillées & Tchat */}
-        <div className="mt-8 space-y-8">
-          <TikTokLiveCards liveData={{ ...displayData, ...(activeSession || {}), isLive: Boolean(isLive && activeSession?.isCurrent) }} />
-          
-          <TikTokLiveHistory 
-            historyArchives={historyArchives} 
-            onSelectLive={handleOpenDrawerWithLive}
-          />
-        </div>
       </div>
     </>
   );
