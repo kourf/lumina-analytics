@@ -1,919 +1,412 @@
-import React, { useState, useMemo } from 'react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  Tooltip, 
-  ResponsiveContainer, 
-  ReferenceLine 
-} from 'recharts';
-import { 
-  Radio, 
-  Users, 
-  Activity, 
-  Calendar, 
-  Clock, 
-  TrendingUp, 
-  Sparkles, 
-  Flame, 
-  Heart, 
-  Share2, 
-  UserPlus, 
-  MessageSquare, 
-  HelpCircle, 
-  Repeat, 
-  ChevronDown, 
-  ChevronUp, 
+import { useState, useEffect } from 'react';
+import {
+  Radio,
+  Users,
+  Heart,
+  Share2,
+  Clock,
+  Activity,
+  Sparkles,
+  MessageSquare,
+  History,
+  RefreshCw,
   ExternalLink, 
-  RefreshCw, 
-  ShieldCheck, 
-  Crown, 
-  Award, 
-  WifiOff, 
-  Info,
-  Archive
+  Calendar,
+  AlertCircle
 } from 'lucide-react';
-import { cn } from '../../lib/utils';
-import { TikTokIcon } from '../SocialIcons';
-import { TikTokLiveHistoryDrawer } from './TikTokLiveHistoryDrawer';
 
-// Formatage des nombres
-const formatNumber = (num) => {
-  if (!num || isNaN(num)) return '0';
-  if (num >= 1000000) return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M';
-  if (num >= 1000) return (num / 1000).toFixed(1).replace(/\.0$/, '') + 'K';
-  return Number(num).toLocaleString('fr-FR');
-};
+export function TikTokLiveHub({ liveData, onRefresh, isRefreshing }) {
+  const isLive = Boolean(liveData?.isLive);
+  const [activeChatTab, setActiveChatTab] = useState('questions');
+  const [elapsedTime, setElapsedTime] = useState('00:00:00');
+  const [showAllArchives, setShowAllArchives] = useState(false);
 
-// Formatage local des dates et heures selon le fuseau de l'utilisateur (UTC vers local)
-const formatLocalDateTime = (dateStr, options = {}) => {
-  if (!dateStr) return '';
-  const date = new Date(dateStr);
-  if (isNaN(date.getTime())) return '';
-  return new Intl.DateTimeFormat(navigator.language || 'fr-FR', {
-    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
-    day: '2-digit',
-    month: 'short',
-    hour: '2-digit',
-    minute: '2-digit',
-    ...options
-  }).format(date);
-};
-
-// Chronomètre en direct pour la session live (supporte ISO string, epoch ms, et Firestore Timestamp)
-const LiveClock = ({ startedAt }) => {
-  const parseStartTime = (val) => {
-    if (!val) return null;
-    if (typeof val === 'number') return val;
-    if (typeof val?.toMillis === 'function') return val.toMillis();
-    if (typeof val?.seconds === 'number') return val.seconds * 1000;
-    if (typeof val?._seconds === 'number') return val._seconds * 1000;
-    const t = new Date(val).getTime();
-    return isNaN(t) || t <= 0 ? null : t;
-  };
-
-  const calculateUptime = (startTimeMs) => {
-    if (!startTimeMs) return '00:00:00';
-    const diff = Math.max(0, Date.now() - startTimeMs);
-    const h = Math.floor(diff / 3600000).toString().padStart(2, '0');
-    const m = Math.floor((diff % 3600000) / 60000).toString().padStart(2, '0');
-    const s = Math.floor((diff % 60000) / 1000).toString().padStart(2, '0');
-    return `${h}:${m}:${s}`;
-  };
-
-  const startTimeMs = parseStartTime(startedAt);
-  const [uptime, setUptime] = useState(() => calculateUptime(startTimeMs));
-
-  React.useEffect(() => {
-    const ms = parseStartTime(startedAt);
-    if (!ms) {
-      setUptime('00:00:00');
+  // Chronomètre sécurisé calculé sur le startedAt réel
+  useEffect(() => {
+    if (!isLive || !liveData?.started_at) {
+      setElapsedTime('00:00:00');
       return;
     }
-    setUptime(calculateUptime(ms));
-    const interval = setInterval(() => {
-      setUptime(calculateUptime(ms));
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [startedAt]);
 
-  return <span className="font-mono tabular-nums">{uptime}</span>;
-};
+    const startTimestamp = typeof liveData.started_at === 'number'
+      ? liveData.started_at
+      : new Date(liveData.started_at).getTime();
 
-// Compteur animé ultra-fluide avec tabular-nums (zéro saut de mise en page) et micro-pulse Google Stitch
-const AnimatedCounter = ({ value, formatter = formatNumber, className = "", pulseColor = "rgba(254,44,85,0.4)" }) => {
-  const [displayValue, setDisplayValue] = useState(value);
-  const [isPulsing, setIsPulsing] = useState(false);
-  const prevValueRef = React.useRef(value);
-
-  React.useEffect(() => {
-    if (value !== prevValueRef.current) {
-      if (value > prevValueRef.current) {
-        setIsPulsing(true);
-        const timer = setTimeout(() => setIsPulsing(false), 800);
-        prevValueRef.current = value;
-        setDisplayValue(value);
-        return () => clearTimeout(timer);
-      }
-      prevValueRef.current = value;
-      setDisplayValue(value);
+    if (isNaN(startTimestamp) || startTimestamp > Date.now()) {
+      setElapsedTime('00:00:00');
+      return;
     }
-  }, [value]);
+
+    const updateTimer = () => {
+      const diffMs = Math.max(0, Date.now() - startTimestamp);
+      const totalSeconds = Math.floor(diffMs / 1000);
+      const hours = String(Math.floor(totalSeconds / 3600)).padStart(2, '0');
+      const minutes = String(Math.floor((totalSeconds % 3600) / 60)).padStart(2, '0');
+      const seconds = String(totalSeconds % 60).padStart(2, '0');
+      setElapsedTime(`${hours}:${minutes}:${seconds}`);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [isLive, liveData?.started_at]);
+
+  const handleManualRefresh = async () => {
+    if (onRefresh) {
+      await onRefresh();
+    }
+  };
+
+  const formatNumber = (num) => {
+    if (!num || isNaN(num)) return '0';
+    if (num >= 1000000) return (num / 1000000).toFixed(1) + 'M';
+    if (num >= 1000) return (num / 1000).toFixed(1) + 'k';
+    return String(num);
+  };
+
+  // Extraction des données réelles
+  const currentViewers = isLive ? (liveData?.currentViewers || 0) : 0;
+  const peakViewers = isLive ? (liveData?.peakViewers || currentViewers) : 0;
+  const currentLikes = isLive ? (liveData?.likes || 0) : 0;
+  const currentShares = isLive ? (liveData?.shares || 0) : 0;
+  const newFollowers = isLive ? (liveData?.followers || 0) : 0;
+  const retentionPoints = liveData?.liveTimeline || [];
+  const chatQuestions = liveData?.topQuestions || [];
+  const topChatters = liveData?.topContributor ? [liveData.topContributor] : [];
+  const archives = liveData?.historyArchives || [];
 
   return (
-    <span 
-      className={cn(
-        "font-mono tabular-nums inline-block transition-all duration-300", 
-        isPulsing && "scale-105", 
-        className
-      )}
-      style={isPulsing ? { textShadow: `0 0 12px ${pulseColor}` } : undefined}
-    >
-      {formatter(displayValue)}
-    </span>
-  );
-};
+    <section className="relative overflow-hidden rounded-[28px] border border-zinc-800/80 bg-zinc-950 p-5 sm:p-7 shadow-2xl backdrop-blur-xl">
 
-// Archives initiales vides (zéro fausse donnée)
-const DEFAULT_REAL_ARCHIVES = [];
-
-
-// Générateur de courbe de rétention minute par minute (100% basée sur des données réelles)
-function generateRetentionCurve(session) {
-  if (!session) return [];
-  if (session.history && Array.isArray(session.history) && session.history.length > 0) {
-    return session.history.map((pt, idx) => ({
-      time: pt.time || `${idx * 2}m`,
-      viewers: Number(pt.viewers || pt.count || 0)
-    }));
-  }
-  if (session.timeline && Array.isArray(session.timeline) && session.timeline.length > 0) {
-    return session.timeline.map((pt, idx) => ({
-      time: pt.time || `${idx * 2}m`,
-      viewers: Number(pt.viewers || pt.count || 0)
-    }));
-  }
-  return [];
-}
-
-/**
- * Hub Live Streaming Unique (Centralisé, 100% Automatique, Sans Doublons)
- * Conforme aux directives UI/UX Pro Max et Google Stitch.
- */
-export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }) => {
-  const [chatTab, setChatTab] = useState('questions'); // 'questions' | 'top3' | 'feed'
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [isArchivesAccordionOpen, setIsArchivesAccordionOpen] = useState(false);
-  const [selectedLiveForDrawer, setSelectedLiveForDrawer] = useState(null);
-
-  // Résolution stricte de l'état Live (0 manipulation manuelle)
-  const isLive = Boolean(liveData?.isLive === true);
-  const username = 'karam.drame';
-  const cleanHandle = '@karam.drame';
-  const liveUrl = `https://www.tiktok.com/${cleanHandle}/live`;
-  const profileUrl = `https://www.tiktok.com/${cleanHandle}`;
-
-  // Résolution des archives 100% réelles
-  const rawArchives = liveData?.historyArchives || liveData?.archives || [];
-  const historyArchives = useMemo(() => {
-    return Array.isArray(rawArchives) ? rawArchives : [];
-  }, [rawArchives]);
-
-  // Session active sélectionnée
-  const [selectedSessionId, setSelectedSessionId] = useState(historyArchives[0]?.id || null);
-  const activeSession = useMemo(() => {
-    if (isLive) {
-      return {
-        id: 'current_live',
-        title: liveData?.title || 'Live TikTok en direct',
-        isCurrent: true,
-        startedAt: liveData?.started_at || liveData?.startedAt || null,
-        durationStr: 'En cours',
-        peakViewers: Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0)),
-        currentViewers: Number(liveData?.currentViewers || 0),
-        avgViewers: Number(liveData?.currentViewers || 0),
-        likes: Number(liveData?.likes ?? liveData?.totalLikes ?? liveData?.likeCount ?? 0),
-        shares: Number(liveData?.shares ?? liveData?.totalShares ?? liveData?.shareCount ?? 0),
-        followers: Number(liveData?.followers ?? liveData?.newFollowers ?? liveData?.followCount ?? 0),
-        comments: Number(liveData?.comments ?? liveData?.totalComments ?? 0),
-        topQuestions: liveData?.topQuestions || [],
-        topContributors: liveData?.topContributors || [],
-        recentComments: liveData?.recentComments || []
-      };
-    }
-    if (historyArchives.length > 0) {
-      const found = historyArchives.find(s => s.id === selectedSessionId);
-      return found || historyArchives[0] || null;
-    }
-    return null;
-  }, [isLive, liveData, selectedSessionId, historyArchives]);
-
-  const retentionCurve = useMemo(() => {
-    if (isLive && Array.isArray(liveData?.liveTimeline) && liveData.liveTimeline.length >= 2) {
-      return liveData.liveTimeline;
-    }
-    return activeSession ? generateRetentionCurve(activeSession) : [];
-  }, [isLive, liveData?.liveTimeline, activeSession]);
-
-  // Audience & métriques courantes - Strictement réelles, 0 si hors-ligne sans session
-  const currentViewers = isLive ? Number(liveData?.currentViewers || 0) : 0;
-  const peakViewers = isLive 
-    ? Math.max(Number(liveData?.peakViewers || 0), currentViewers) 
-    : Number(activeSession?.peakViewers || 0);
-  const avgViewers = isLive 
-    ? Math.max(0, Math.round(peakViewers * 0.75)) 
-    : Number(activeSession?.avgViewers || 0);
-  const sessionLikes = isLive 
-    ? Number(liveData?.likes ?? liveData?.totalLikes ?? liveData?.likeCount ?? 0) 
-    : Number(activeSession?.totalLikes ?? activeSession?.likes ?? 0);
-  const sessionShares = isLive 
-    ? Number(liveData?.shares ?? liveData?.totalShares ?? liveData?.shareCount ?? 0) 
-    : Number(activeSession?.totalShares ?? activeSession?.shares ?? 0);
-  const sessionFollowers = isLive 
-    ? Number(liveData?.followers ?? liveData?.newFollowers ?? liveData?.followCount ?? 0) 
-    : Number(activeSession?.newFollowers ?? activeSession?.followers ?? 0);
-
-  const topQuestions = (isLive && liveData?.topQuestions?.length > 0)
-    ? liveData.topQuestions
-    : (activeSession?.topQuestions || []);
-
-  const topContributors = (isLive && liveData?.topContributors?.length > 0)
-    ? liveData.topContributors
-    : (activeSession?.topContributors || []);
-
-  const recentComments = useMemo(() => {
-    if (isLive && Array.isArray(liveData?.chatMessages) && liveData.chatMessages.length > 0) {
-      return liveData.chatMessages.map(m => ({
-        nickname: m.user || m.nickname || 'Spectateur',
-        comment: m.text || m.comment || '',
-        time: m.timestamp ? formatLocalDateTime(m.timestamp, { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : 'À l\'instant',
-        isQuestion: Boolean(m.isQuestion)
-      }));
-    }
-    return activeSession?.recentComments || [];
-  }, [isLive, liveData?.chatMessages, activeSession]);
-
-  // Si le live est hors ligne, on affiche un bandeau très épuré (Dynamic Banner)
-  if (!isLive) {
-    return (
-      <>
-      <div className="w-full bg-slate-50/80 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-[20px] px-6 py-4 flex flex-col md:flex-row items-center justify-between gap-4 transition-all hover:bg-slate-100 dark:hover:bg-white/5 shadow-sm">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-white/5 border border-slate-300 dark:border-white/10 flex items-center justify-center text-slate-500 dark:text-gray-400 shrink-0">
-            <Radio className="w-5 h-5 opacity-60" />
+      {/* 1. BARRE DE COMMANDE & ÉTAT BISTABLE */}
+      <div className="flex flex-col gap-4 border-b border-zinc-800/80 pb-6 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex items-center gap-3.5">
+          <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border transition-all ${
+            isLive
+              ? 'border-rose-500/40 bg-rose-500/10 text-rose-400 shadow-[0_0_20px_rgba(244,63,94,0.3)]'
+              : 'border-zinc-800 bg-zinc-900 text-zinc-500'
+          }`}>
+            <Radio className={`h-5 w-5 ${isLive ? 'animate-pulse' : ''}`} />
           </div>
           <div>
-            <h2 className="text-sm font-bold text-slate-800 dark:text-gray-200">
-              Hub Live Streaming <span className="font-mono text-[10px] bg-slate-200 dark:bg-white/10 px-1.5 py-0.5 rounded text-slate-600 dark:text-gray-400 ml-1">{cleanHandle}</span>
-            </h2>
-            <p className="text-xs text-slate-500 dark:text-gray-500 mt-0.5 flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-gray-600"></span>
-              Aucun live en cours - En attente de diffusion en direct
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-bold tracking-tight text-white sm:text-xl">
+                Centre de Contrôle Live
+              </h2>
+              <span className="rounded-md border border-zinc-800 bg-zinc-900 px-2 py-0.5 text-[11px] font-medium text-zinc-400">
+                @karam.drame
+              </span>
+            </div>
+            <p className="text-xs text-zinc-400">
+              Monitoring en direct, rétention d'audience, IA de modération et archives réelles.
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              disabled={isRefreshing}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-[11px] font-mono font-bold bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-gray-400 border-slate-200 dark:border-white/10 transition-all active:scale-95 shadow-sm"
-              title="Vérifier l'état du Live TikTok en direct"
-            >
-              <RefreshCw size={12} className={cn("transition-transform", isRefreshing ? "animate-spin text-[#25F4EE]" : "")} />
-              <span>{isRefreshing ? "Vérification..." : "Vérifier"}</span>
-            </button>
+        <div className="flex flex-wrap items-center gap-2.5 sm:gap-3">
+          {/* Badge Bistable */}
+          {isLive ? (
+            <div className="flex items-center gap-2 rounded-full border border-rose-500/50 bg-rose-500/15 px-3 py-1 shadow-[0_0_15px_rgba(244,63,94,0.25)]">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-75"></span>
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500"></span>
+              </span>
+              <span className="text-xs font-bold tracking-wider text-rose-300">EN DIRECT</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 rounded-full border border-zinc-800 bg-zinc-900 px-3 py-1">
+              <span className="h-2 w-2 rounded-full bg-zinc-600"></span>
+              <span className="text-xs font-semibold tracking-wider text-zinc-400">HORS LIGNE</span>
+            </div>
           )}
+
+          {/* Synchronisation manuelle */}
           <button
-            onClick={() => setIsDrawerOpen(true)}
-            className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#FE2C55] hover:bg-[#E0264C] text-white shadow-md shadow-[#FE2C55]/20 transition-all active:scale-95"
+            onClick={handleManualRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/90 px-3 py-1.5 text-xs font-medium text-zinc-300 transition-all hover:border-zinc-700 hover:bg-zinc-800 disabled:opacity-50"
+            title="Vérifier l'état du live"
           >
-            <Calendar size={13} />
-            <span>Consulter l'historique des lives</span>
+            <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin text-rose-400' : ''}`} />
+            <span className="hidden sm:inline">Vérifier</span>
           </button>
+
+          {/* Lien externe vers TikTok */}
+          <a
+            href="https://www.tiktok.com/@karam.drame/live"
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex items-center gap-1.5 rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-all ${
+              isLive
+                ? 'bg-rose-600 text-white shadow-lg shadow-rose-600/30 hover:bg-rose-500'
+                : 'border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700 hover:text-white'
+            }`}
+          >
+            <span>Rejoindre</span>
+            <ExternalLink className="h-3 w-3"/>
+          </a>
         </div>
       </div>
-      <TikTokLiveHistoryDrawer
-        isOpen={isDrawerOpen}
-        onClose={() => {
-          setIsDrawerOpen(false);
-          setSelectedLiveForDrawer(null);
-        }}
-        archives={historyArchives}
-        initialSelectedSession={selectedLiveForDrawer}
-      />
-      </>
-    );
-  }
 
-  return (
-    <>
-      {/* Tiroir Latéral Plein Écran pour les Archives Complètes */}
-      <TikTokLiveHistoryDrawer 
-        isOpen={isDrawerOpen} 
-        onClose={() => {
-          setIsDrawerOpen(false);
-          setSelectedLiveForDrawer(null);
-        }} 
-        historyArchives={historyArchives}
-        initialSelectedLive={selectedLiveForDrawer}
-      />
+      {/* 2. GRILLE BENTO PRINCIPALE */}
+      <div className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
 
-      {/* CONTENEUR PRINCIPAL UNIQUE : HUB LIVE STREAMING EN DIRECT */}
-      <div className={cn(
-        "w-full rounded-[28px] border transition-all duration-500 relative overflow-hidden backdrop-blur-2xl shadow-xl",
-        "bg-[#140812] dark:bg-[#160A14]/95 border-[#FE2C55]/40 shadow-[0_0_50px_rgba(254,44,85,0.18)]"
-      )}>
-        
-        {/* Glow néon ambient si en direct */}
-        <div className="absolute -top-32 -right-32 w-96 h-96 bg-[#FE2C55]/20 rounded-full blur-3xl pointer-events-none animate-pulse" />
-
-        {/* ======================================================== */}
-        {/* 1. BARRE D'ÉTAT & DÉTECTION 100% AUTOMATIQUE             */}
-        {/* ======================================================== */}
-        <div className={cn(
-          "px-6 py-5 border-b flex flex-col md:flex-row items-center justify-between gap-4 transition-colors",
-          "bg-[#2A0815]/60 border-[#FE2C55]/25"
-        )}>
-          {/* Côté Gauche : Titre du Hub & Badge d'État Automatique */}
-          <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-start">
-            <div className="flex items-center gap-3">
-              <div className={cn(
-                "w-11 h-11 rounded-2xl flex items-center justify-center border transition-all",
-                isLive 
-                  ? "bg-[#FE2C55] text-white border-white/20 shadow-[0_0_20px_rgba(254,44,85,0.6)] animate-pulse" 
-                  : "bg-slate-200 dark:bg-white/5 border-slate-300 dark:border-white/10 text-slate-600 dark:text-gray-400"
-              )}>
-                <Radio className={cn("w-5 h-5", isLive ? "animate-spin" : "")} />
-              </div>
-              
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-lg font-black text-slate-900 dark:text-white tracking-tight">
-                    Hub Live Streaming
-                  </h2>
-                  <span className="text-[11px] font-mono px-2 py-0.5 rounded-full bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-gray-300 font-semibold">
-                    {cleanHandle}
-                  </span>
-                  {liveData?.isSocketConnected && (
-                    <span className="inline-flex items-center gap-1.5 text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 shadow-sm animate-fade-in">
-                      <span className="relative flex h-1.5 w-1.5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-emerald-500"></span>
-                      </span>
-                      WS Actif
-                    </span>
-                  )}
-                </div>
-                <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
-                  Détection automatique 24/7 en temps réel (zéro latence, webhook officiel & SWR).
-                </p>
-              </div>
-            </div>
-
-            {/* Badge d'État Automatique */}
-            {isLive ? (
-              <div className="flex items-center gap-2 bg-[#FE2C55] text-white px-3.5 py-1.5 rounded-full shadow-[0_0_20px_rgba(254,44,85,0.5)] animate-pulse">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-white opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-white"></span>
-                </span>
-                <span className="text-xs font-black uppercase tracking-wider font-mono">
-                  🔴 EN DIRECT
-                </span>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2 bg-slate-200/80 dark:bg-black/50 border border-slate-300 dark:border-white/10 px-3.5 py-1.5 rounded-full text-slate-600 dark:text-gray-400">
-                <span className="w-2 h-2 rounded-full bg-slate-400 dark:bg-gray-500"></span>
-                <span className="text-xs font-bold uppercase tracking-wider font-mono">
-                  ⚪ HORS LIGNE
-                </span>
-              </div>
-            )}
+        {/* KPI 1 : Durée */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Durée du Direct</span>
+            <Clock className={`h-4 w-4 ${isLive ? 'text-rose-400' : 'text-zinc-600'}`} />
           </div>
-
-          {/* Côté Droit : Compteur Spectateurs Temps Réel & Action Directe */}
-          <div className="flex items-center gap-3 w-full md:w-auto justify-end">
-            {/* Compteur Spectateurs */}
-            <div className={cn(
-              "flex items-center gap-2 px-3.5 py-2 rounded-xl border text-xs font-mono font-bold transition-all",
-              isLive 
-                ? "bg-[#FE2C55]/15 border-[#FE2C55]/30 text-[#FE2C55]" 
-                : "bg-white dark:bg-white/5 border-slate-200 dark:border-white/10 text-slate-600 dark:text-gray-400"
-            )}>
-              <Users size={14} className={isLive ? "animate-pulse" : ""} />
-              <span>{isLive ? `${formatNumber(currentViewers)} spectateurs` : "0 spectateur en direct"}</span>
-            </div>
-
-            {/* Bouton de Synchronisation Directe (Vérification Réseau Réelle) */}
-            {onRefresh && (
-              <button
-                onClick={onRefresh}
-                disabled={isRefreshing}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border text-[11px] font-mono font-bold bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-600 dark:text-gray-300 border-slate-200 dark:border-white/10 transition-all active:scale-95 shadow-sm"
-                title="Vérifier l'état du Live TikTok en direct"
-              >
-                <RefreshCw size={13} className={cn("transition-transform", isRefreshing ? "animate-spin text-[#25F4EE]" : "")} />
-                <span>{isRefreshing ? "Vérification..." : "Vérifier"}</span>
-              </button>
-            )}
-
-            {/* Bouton Contextuel Unique (Rejoindre si Live, Profil si Offline) */}
-            <a
-              href={isLive ? liveUrl : profileUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className={cn(
-                "flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 shadow-md",
-                isLive
-                  ? "bg-[#FE2C55] hover:bg-[#E0264C] text-white shadow-[0_0_25px_rgba(254,44,85,0.6)] animate-pulse"
-                  : "bg-slate-900 dark:bg-white/10 hover:bg-black dark:hover:bg-white/15 text-white border border-slate-800 dark:border-white/10"
-              )}
-            >
-              {isLive ? (
-                <>
-                  <Radio size={14} className="animate-spin" />
-                  <span>Rejoindre le Live</span>
-                  <ExternalLink size={13} />
-                </>
-              ) : (
-                <>
-                  <TikTokIcon className="w-3.5 h-3.5 fill-current" />
-                  <span>Ouvrir TikTok</span>
-                  <ExternalLink size={12} />
-                </>
-              )}
-            </a>
+          <div className="mt-2.5">
+            <div className="font-mono text-2xl font-bold tracking-tight text-white">{elapsedTime}</div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              {isLive ? 'Chronomètre en cours' : 'Diffusion inactive'}
+            </p>
           </div>
         </div>
 
-        {/* ======================================================== */}
-        {/* 2. MÉTRIQUES DE SESSION ACTIVE (BENTO GRID 4 CARTES)     */}
-        {/* ======================================================== */}
-        <div className="p-6 md:p-8 space-y-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            
-            {/* CARTE 1 : DURÉE / CHRONOMÈTRE */}
-            <div className="bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-2xl p-5 relative overflow-hidden group hover:border-[#FE2C55]/30 transition-all">
-              <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider">Durée du Direct</span>
-                <Clock size={16} className="text-[#FE2C55]" />
-              </div>
-              <div className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                {isLive ? (
-                  <LiveClock startedAt={activeSession?.startedAt} />
-                ) : (
-                  activeSession ? (activeSession.durationStr || activeSession.duration || '00h00') : '00h00'
-                )}
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
-                {isLive ? "Diffusion en cours minute par minute" : (activeSession ? "Durée de la dernière session" : "Aucun direct en cours")}
-              </p>
-            </div>
-
-            {/* CARTE 2 : AUDIENCE & PIC */}
-            <div className="bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-2xl p-5 relative overflow-hidden group hover:border-[#FE2C55]/30 transition-all">
-              <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider">Audience & Rétention</span>
-                <Users size={16} className="text-[#25F4EE]" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <AnimatedCounter 
-                  value={isLive ? currentViewers : peakViewers} 
-                  className="text-2xl font-black text-slate-900 dark:text-white"
-                  pulseColor="rgba(37,244,238,0.5)"
-                />
-                <span className="text-xs font-semibold text-slate-500 dark:text-gray-400 font-mono tabular-nums">
-                  {isLive ? `(Pic: ${peakViewers})` : `(Moy: ${avgViewers})`}
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
-                {isLive ? "Spectateurs connectés actuellement" : "Pic d'audience atteint en session"}
-              </p>
-            </div>
-
-            {/* CARTE 3 : LIKES DE SESSION */}
-            <div className="bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-2xl p-5 relative overflow-hidden group hover:border-[#FE2C55]/30 transition-all">
-              <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider">Likes de Session</span>
-                <Heart size={16} className="text-[#FE2C55]" />
-              </div>
-              <div className="text-2xl font-black text-[#FE2C55]">
-                <AnimatedCounter 
-                  value={sessionLikes} 
-                  className="text-2xl font-black text-[#FE2C55]"
-                  pulseColor="rgba(254,44,85,0.6)"
-                />
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
-                Mentions J'aime reçues en direct
-              </p>
-            </div>
-
-            {/* CARTE 4 : PARTAGES & NOUVEAUX ABONNÉS */}
-            <div className="bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-2xl p-5 relative overflow-hidden group hover:border-[#25F4EE]/30 transition-all">
-              <div className="flex items-center justify-between text-slate-500 dark:text-gray-400 mb-3">
-                <span className="text-xs font-bold uppercase tracking-wider">Partages & Abonnés</span>
-                <Share2 size={16} className="text-emerald-400" />
-              </div>
-              <div className="flex items-baseline gap-2">
-                <AnimatedCounter 
-                  value={sessionShares} 
-                  className="text-2xl font-black text-slate-900 dark:text-white"
-                  pulseColor="rgba(52,211,153,0.5)"
-                />
-                <span className="text-xs font-bold text-emerald-400 font-mono tabular-nums flex items-center">
-                  +<AnimatedCounter value={sessionFollowers} formatter={(n) => n} pulseColor="rgba(52,211,153,0.6)" /> abos
-                </span>
-              </div>
-              <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-1">
-                Viralité et nouveaux abonnés acquis
-              </p>
-            </div>
-
+        {/* KPI 2 : Audience & Pic */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Audience</span>
+            <Users className={`h-4 w-4 ${isLive ? 'text-teal-400' : 'text-zinc-600'}`} />
           </div>
+          <div className="mt-2.5">
+            <div className="text-2xl font-bold tracking-tight text-white">
+              {formatNumber(currentViewers)}
+              <span className="ml-2 text-xs font-normal text-zinc-400">
+                (Pic : {formatNumber(peakViewers)})
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              {isLive ? 'Spectateurs connectés' : 'Aucun spectateur'}
+            </p>
+          </div>
+        </div>
 
-          {/* ======================================================== */}
-          {/* 3. COURBE DE RÉTENTION & SÉLECTION DE SESSION            */}
-          {/* ======================================================== */}
-          <div className="bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/5 rounded-2xl p-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                  <Activity size={16} className="text-[#FE2C55]" />
-                  <span>Courbe de Rétention du Live</span>
-                </h3>
-                <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
-                  Évolution minute par minute de la présence des spectateurs sur le stream.
-                </p>
-              </div>
+        {/* KPI 3 : Likes */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Likes Session</span>
+            <Heart className={`h-4 w-4 ${isLive ? 'text-pink-400' : 'text-zinc-600'}`} />
+          </div>
+          <div className="mt-2.5">
+            <div className="text-2xl font-bold tracking-tight text-white">
+              {formatNumber(currentLikes)}
+            </div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              {isLive ? 'Mentions J’aime reçues' : 'Compteur à zéro'}
+            </p>
+          </div>
+        </div>
 
-              {/* Sélecteur de session si hors ligne */}
-              {!isLive && historyArchives.length > 1 && (
-                <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-black/40 rounded-xl border border-slate-200 dark:border-white/5 self-start sm:self-auto overflow-x-auto max-w-full">
-                  {historyArchives.slice(0, 3).map((session) => (
-                    <button
-                      key={session.id}
-                      onClick={() => setSelectedSessionId(session.id)}
-                      className={cn(
-                        "px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap",
-                        selectedSessionId === session.id
-                          ? "bg-[#FE2C55] text-white shadow-md shadow-[#FE2C55]/20"
-                          : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-                      )}
-                    >
-                      {formatLocalDateTime(session.startedAt || session.date, { day: 'numeric', month: 'short' })}
-                    </button>
-                  ))}
-                </div>
+        {/* KPI 4 : Partages & Abonnés */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/40 p-4 transition-all hover:border-zinc-700">
+          <div className="flex items-center justify-between text-zinc-400">
+            <span className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">Partages & Abos</span>
+            <Share2 className={`h-4 w-4 ${isLive ? 'text-indigo-400' : 'text-zinc-600'}`} />
+          </div>
+          <div className="mt-2.5">
+            <div className="text-2xl font-bold tracking-tight text-white">
+              {isLive ? formatNumber(currentShares) : '--'}
+              {isLive && newFollowers > 0 && (
+                <span className="ml-2 text-xs font-semibold text-emerald-400">
+                  +{newFollowers} abos
+                </span>
               )}
             </div>
+            <p className="mt-1 text-[11px] text-zinc-500">
+              {isLive ? 'Interactions cumulées' : 'Réinitialisé'}
+            </p>
+          </div>
+        </div>
 
-            {/* Graphique Recharts Rétention (Conditionné aux données réelles) */}
-            {retentionCurve.length > 0 ? (
-              <div className="h-48 md:h-64 w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={retentionCurve} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="liveHubGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#FE2C55" stopOpacity={0.0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis 
-                      dataKey="time" 
-                      stroke="#64748b" 
-                      fontSize={11} 
-                      tickLine={false} 
-                      axisLine={false}
-                    />
-                    <YAxis 
-                      stroke="#64748b" 
-                      fontSize={11} 
-                      tickLine={false} 
-                      axisLine={false}
-                      domain={[0, 'auto']}
-                    />
-                    <Tooltip 
-                      contentStyle={{ 
-                        backgroundColor: '#0F172A', 
-                        borderColor: 'rgba(255,255,255,0.1)', 
-                        borderRadius: '12px',
-                        color: '#fff',
-                        fontSize: '12px'
-                      }} 
-                      formatter={(val) => [`${val} spectateurs`, 'Audience']}
-                    />
-                    <ReferenceLine 
-                      y={avgViewers} 
-                      stroke="#25F4EE" 
-                      strokeDasharray="3 3" 
-                      label={{ value: `Moy: ${avgViewers}`, fill: '#25F4EE', fontSize: 10, position: 'right' }} 
-                    />
-                    <Area 
-                      type="monotone" 
-                      dataKey="viewers" 
-                      stroke="#FE2C55" 
-                      strokeWidth={3} 
-                      fillOpacity={1} 
-                      fill="url(#liveHubGradient)" 
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-36 md:h-48 w-full flex flex-col items-center justify-center border border-dashed border-slate-200 dark:border-white/10 rounded-xl text-center px-4">
-                <Activity size={24} className="text-slate-400 dark:text-gray-500 mb-2 opacity-40" />
-                <p className="text-xs font-semibold text-slate-600 dark:text-gray-300">
-                  {isLive ? "Enregistrement du flux en cours (premier point dans 60s)..." : "Aucun historique de rétention disponible"}
-                </p>
-                <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-1">
-                  Les métriques minute par minute se traceront en temps réel dès votre prochain direct.
-                </p>
-              </div>
-            )}
+        {/* BENTO LARGE : COURBE DE RÉTENTION (2 colonnes sur desktop) */}
+        <div className="flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-5 md:col-span-2 lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-rose-400"/>
+              <h3 className="text-sm font-semibold text-white">Monitoring & Rétention Live</h3>
+            </div>
+            <span className="text-[11px] text-zinc-500">
+              {isLive ? 'Échantillonnage 60s' : 'En pause'}
+            </span>
           </div>
 
-          {/* ======================================================== */}
-          {/* 4. TCHAT & INTELLIGENCE AUDIENCE (GEMINI FLASH FREE)    */}
-          {/* ======================================================== */}
-          <div className="bg-slate-50 dark:bg-black/20 border border-slate-200 dark:border-white/5 rounded-2xl p-6">
-            
-            {/* Header Onglets Tchat / Intelligence */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-slate-200 dark:border-white/5 pb-4">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
-                  <Sparkles size={16} />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
-                    <span>Intelligence Audience & Tchat</span>
-                    <span className="text-[10px] uppercase font-mono font-bold bg-purple-500/20 text-purple-400 px-2 py-0.5 rounded-full border border-purple-500/30">
-                      Gemini Flash • Free Tier
-                    </span>
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-gray-400">
-                    Synthèse IA des questions posées et identification des spectateurs les plus actifs.
-                  </p>
-                </div>
+          <div className="my-4 flex min-h-[170px] items-center justify-center rounded-xl border border-dashed border-zinc-800/70 bg-zinc-950/40 p-4 text-center">
+            {!isLive ? (
+              <div className="space-y-1.5">
+                <Activity className="mx-auto h-7 w-7 text-zinc-700"/>
+                <p className="text-xs font-medium text-zinc-300">Aucun enregistrement en cours</p>
+                <p className="text-[11px] text-zinc-500 max-w-xs mx-auto">
+                  La courbe d'audience se tracera minute par minute dès le lancement de la prochaine diffusion.
+                </p>
               </div>
-
-              {/* Sélecteur d'onglets */}
-              <div className="flex items-center gap-1.5 p-1 bg-white dark:bg-black/40 rounded-xl border border-slate-200 dark:border-white/5 self-start sm:self-auto">
-                <button
-                  onClick={() => setChatTab('questions')}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                    chatTab === 'questions'
-                      ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
-                      : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-                  )}
-                >
-                  <HelpCircle size={13} />
-                  <span>Questions Clés IA</span>
-                  <span className="text-[10px] px-1.5 py-0.2 rounded-full font-bold bg-white/20 text-white">
-                    {topQuestions.length}
-                  </span>
-                </button>
-
-                <button
-                  onClick={() => setChatTab('top3')}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                    chatTab === 'top3'
-                      ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
-                      : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-                  )}
-                >
-                  <Crown size={13} className="text-amber-300" />
-                  <span>Top 3 Actifs</span>
-                </button>
-
-                <button
-                  onClick={() => setChatTab('feed')}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
-                    chatTab === 'feed'
-                      ? "bg-purple-600 text-white shadow-md shadow-purple-600/30"
-                      : "text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-                  )}
-                >
-                  <MessageSquare size={13} />
-                  <span>Flux du Tchat</span>
-                </button>
+            ) : retentionPoints.length === 0 ? (
+              <div className="space-y-2">
+                <div className="mx-auto h-5 w-5 animate-spin rounded-full border-2 border-rose-500 border-t-transparent"/>
+                <p className="text-xs text-zinc-400">Acquisition du premier point de mesure en cours...</p>
               </div>
-            </div>
-
-            {/* VUE 1 : QUESTIONS CLÉS EXTRAITES PAR GEMINI FLASH */}
-            {chatTab === 'questions' && (
-              topQuestions.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-                  {topQuestions.map((q, idx) => (
-                    <div 
-                      key={idx} 
-                      className="p-4 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex flex-col justify-between gap-3 shadow-sm hover:border-purple-500/40 transition-all"
-                    >
-                      <div className="flex items-start gap-3">
-                        <span className="w-6 h-6 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-600 dark:text-purple-300 font-black text-xs flex items-center justify-center shrink-0 mt-0.5">
-                          Q{idx + 1}
-                        </span>
-                        <p className="text-xs font-semibold text-slate-800 dark:text-gray-100 leading-snug">
-                          "{q.original}"
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-white/5 text-[11px]">
-                        <span className="text-slate-500 flex items-center gap-1">
-                          <Sparkles size={11} className="text-purple-400" />
-                          Extraction Gemini Flash
-                        </span>
-                        <span className="font-bold font-mono px-2 py-0.5 rounded-full bg-purple-100 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/30">
-                          Posée {q.count || 1}x
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="py-8 text-center text-slate-500 dark:text-gray-400 text-xs">
-                  <HelpCircle size={20} className="mx-auto mb-2 opacity-40 text-purple-400" />
-                  <p className="font-medium">Aucune question détectée pour cette session.</p>
-                  <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-0.5">L'IA regroupe automatiquement les questions récurrentes posées par vos spectateurs en live.</p>
-                </div>
-              )
-            )}
-
-            {/* VUE 2 : TOP 3 SPECTATEURS ACTIFS (PODIUM OR / ARGENT / BRONZE) */}
-            {chatTab === 'top3' && (
-              topContributors.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  {topContributors.map((c) => {
-                    const isGold = c.rank === 1;
-                    const isSilver = c.rank === 2;
-                    const isBronze = c.rank === 3;
-
+            ) : (
+              <div className="w-full">
+                <div className="flex h-28 items-end gap-1 px-1">
+                  {retentionPoints.map((pt, idx) => {
+                    const maxVal = Math.max(...retentionPoints.map(p => p.viewers || 1), 1);
+                    const heightPct = Math.max(12, Math.min(100, Math.round(((pt.viewers || 0) / maxVal) * 100)));
                     return (
-                      <div 
-                        key={c.rank || c.name} 
-                        className={cn(
-                          "p-5 rounded-2xl border flex flex-col items-center text-center relative overflow-hidden transition-all shadow-sm",
-                          isGold 
-                            ? "bg-amber-500/10 border-amber-500/40 dark:bg-amber-500/5 shadow-amber-500/10" 
-                            : isSilver 
-                              ? "bg-slate-200/50 dark:bg-white/5 border-slate-300 dark:border-white/10" 
-                              : "bg-orange-500/5 border-orange-500/20"
-                        )}
-                      >
-                        {/* Médaille ou couronne */}
-                        <div className="mb-2">
-                          {isGold && <Crown className="w-8 h-8 text-amber-400 animate-bounce" />}
-                          {isSilver && <Award className="w-7 h-7 text-slate-300" />}
-                          {isBronze && <Award className="w-7 h-7 text-amber-700" />}
-                        </div>
-
-                        <div className="w-12 h-12 rounded-full bg-slate-800 border-2 border-white/20 flex items-center justify-center text-sm font-black text-white mb-2 shadow-md">
-                          {c.name.charAt(0)}
-                        </div>
-
-                        <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                          {c.name}
-                        </h4>
-
-                        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/10 text-slate-600 dark:text-gray-300 mt-1 border border-white/5 font-mono">
-                          {c.badge || `Rang #${c.rank}`}
+                      <div key={idx} className="group relative flex-1 flex flex-col items-center">
+                        <div
+                          style={{ height: `${heightPct}%` }}
+                          className="w-full rounded-t-sm bg-gradient-to-t from-rose-500/30 to-rose-500 transition-all hover:brightness-125"
+                        />
+                        <span className="pointer-events-none absolute -top-6 rounded bg-zinc-800 px-1 py-0.5 text-[9px] font-bold text-white opacity-0 shadow group-hover:opacity-100">
+                          {pt.viewers}
                         </span>
-
-                        <div className="flex items-center gap-3 mt-3 pt-3 border-t border-slate-200 dark:border-white/10 text-xs font-semibold text-slate-600 dark:text-gray-300 font-mono">
-                          <span>💎 {c.diamonds || 0}</span>
-                          <span>•</span>
-                          <span>💬 {c.comments || 0} msgs</span>
-                        </div>
                       </div>
                     );
                   })}
                 </div>
-              ) : (
-                <div className="py-8 text-center text-slate-500 dark:text-gray-400 text-xs">
-                  <Crown size={20} className="mx-auto mb-2 opacity-40 text-amber-400" />
-                  <p className="font-medium">Aucun top contributeur enregistré.</p>
-                  <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-0.5">Le classement des spectateurs les plus généreux et actifs s'établit en direct pendant vos streams.</p>
+                <div className="mt-2 flex justify-between text-[10px] text-zinc-500">
+                  <span>Début</span>
+                  <span>Point le plus récent</span>
                 </div>
-              )
+              </div>
             )}
+          </div>
 
-            {/* VUE 3 : FLUX DU TCHAT EN DIRECT */}
-            {chatTab === 'feed' && (
-              recentComments.length > 0 ? (
-                <div className="space-y-2.5 max-h-[220px] overflow-y-auto pr-2">
-                  {recentComments.map((msg, idx) => (
-                    <div 
-                      key={idx} 
-                      className="p-3 rounded-xl bg-white dark:bg-white/5 border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 shadow-sm hover:border-white/20 transition-all"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="w-7 h-7 rounded-full bg-gradient-to-tr from-purple-500 to-pink-500 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                          {msg.nickname.charAt(0)}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
-                            {msg.nickname}
-                          </span>
-                          <p className="text-xs text-slate-600 dark:text-gray-300 truncate">
-                            {msg.comment}
-                          </p>
-                        </div>
-                      </div>
-                      <span className="text-[10px] font-mono text-slate-600 dark:text-gray-400 shrink-0">
-                        {msg.time}
-                      </span>
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 border-t border-zinc-800/60 pt-3">
+            <span>Stabilité d'audience</span>
+            <span className="text-zinc-300 font-medium">
+              {isLive && retentionPoints.length > 0 ? 'Flux actif' : 'En attente'}
+            </span>
+          </div>
+        </div>
+
+        {/* BENTO LARGE : ANALYSE AUDIENCE & TCHAT IA (2 colonnes sur desktop) */}
+        <div className="flex flex-col justify-between rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-5 md:col-span-2 lg:col-span-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Sparkles className="h-4 w-4 text-purple-400"/>
+              <h3 className="text-sm font-semibold text-white">Intelligence Audience & Tchat</h3>
+              <span className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[9px] font-bold text-purple-300 border border-purple-500/30">
+                0€ GEMINI
+              </span>
+            </div>
+
+            <div className="flex rounded-lg border border-zinc-800 bg-zinc-900/90 p-0.5 text-xs">
+              <button
+                onClick={() => setActiveChatTab('questions')}
+                className={`rounded px-2.5 py-1 text-[11px] font-medium transition-all ${
+                  activeChatTab === 'questions' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Questions Clés
+              </button>
+              <button
+                onClick={() => setActiveChatTab('topChatters')}
+                className={`rounded px-2.5 py-1 text-[11px] font-medium transition-all ${
+                  activeChatTab === 'topChatters' ? 'bg-purple-600 text-white' : 'text-zinc-400 hover:text-zinc-200'
+                }`}
+              >
+                Top Actifs
+              </button>
+            </div>
+          </div>
+
+          <div className="my-4 flex min-h-[170px] flex-col justify-center rounded-xl border border-zinc-800/60 bg-zinc-950/40 p-4">
+            {!isLive ? (
+              <p className="text-center text-xs text-zinc-500">
+                Tchat inactif — L'analyse automatique de l'audience et des questions débutera lors de la prochaine session en direct.
+              </p>
+            ) : activeChatTab === 'questions' ? (
+              chatQuestions.length > 0 ? (
+                <ul className="space-y-2">
+                  {chatQuestions.slice(0, 3).map((q, idx) => (
+                    <li key={idx} className="flex items-start gap-2 text-xs text-zinc-300">
+                      <MessageSquare className="h-3.5 w-3.5 mt-0.5 text-purple-400 shrink-0"/>
+                      <span className="line-clamp-2">{q.original || q.text || q}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-center text-xs text-zinc-500">
+                  Aucune question récurrente identifiée sur ce live pour l'instant.
+                </p>
+              )
+            ) : (
+              topChatters.length > 0 ? (
+                <div className="grid grid-cols-3 gap-2">
+                  {topChatters.slice(0, 3).map((user, idx) => (
+                    <div key={idx} className="rounded-lg border border-zinc-800/80 bg-zinc-900/60 p-2 text-center">
+                      <p className="text-[11px] font-semibold text-white truncate">@{user.username || user.name || 'Spectateur'}</p>
+                      <p className="text-[10px] text-purple-400 mt-0.5 font-medium">{user.messageCount || user.comments || 0} msgs</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <div className="py-8 text-center text-slate-500 dark:text-gray-400 text-xs">
-                  <MessageSquare size={20} className="mx-auto mb-2 opacity-40 text-purple-400" />
-                  <p className="font-medium">{isLive ? "En attente des premiers messages..." : "Le tchat est inactif hors direct."}</p>
-                  <p className="text-[11px] text-slate-400 dark:text-gray-500 mt-0.5">Les commentaires et questions des spectateurs défileront ici dès la prochaine session.</p>
-                </div>
+                <p className="text-center text-xs text-zinc-500">
+                  Identification des spectateurs les plus fidèles en cours...
+                </p>
               )
             )}
-
           </div>
 
-          {/* ======================================================== */}
-          {/* 5. ARCHIVES DES LIVES (REPLIABLE / SANS SATURATION)     */}
-          {/* ======================================================== */}
-          <div className="pt-2 border-t border-slate-200 dark:border-white/5">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-4 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-200 dark:border-white/5">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-[#FE2C55]/10 border border-[#FE2C55]/20 flex items-center justify-center text-[#FE2C55]">
-                  <Archive size={16} />
-                </div>
-                <div>
-                  <h4 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white">
-                    Historique & Archives des Sessions Live
-                  </h4>
-                  <p className="text-[11px] text-slate-500 dark:text-gray-400">
-                    {historyArchives.length} sessions enregistrées • Graphiques et rétention passés
-                  </p>
-                </div>
-              </div>
+          <div className="flex items-center justify-between text-[11px] text-zinc-500 border-t border-zinc-800/60 pt-3">
+            <span>Synthèse du sentiment</span>
+            <span className="text-purple-300 font-medium">
+              {isLive ? 'Modération active' : 'Hors ligne'}
+            </span>
+          </div>
+        </div>
 
-              <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                {/* Bouton pour déplier l'accordéon rapide */}
-                <button
-                  onClick={() => setIsArchivesAccordionOpen(!isArchivesAccordionOpen)}
-                  className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-semibold bg-white dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 text-slate-700 dark:text-gray-300 border border-slate-200 dark:border-white/10 transition-all"
-                >
-                  <span>{isArchivesAccordionOpen ? "Masquer la liste" : "Aperçu rapide"}</span>
-                  {isArchivesAccordionOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                </button>
-
-                {/* Bouton pour ouvrir le tiroir plein écran */}
-                <button
-                  onClick={() => {
-                    setSelectedLiveForDrawer(null);
-                    setIsDrawerOpen(true);
-                  }}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold bg-[#FE2C55] hover:bg-[#E0264C] text-white shadow-md shadow-[#FE2C55]/20 transition-all active:scale-95"
-                >
-                  <Calendar size={13} />
-                  <span>Ouvrir les Archives</span>
-                </button>
-              </div>
+        {/* 3. SECTION BASSE DU BENTO : HISTORIQUE DES LIVES (Pleine largeur 4 colonnes) */}
+        <div className="rounded-2xl border border-zinc-800/80 bg-zinc-900/30 p-5 md:col-span-2 lg:col-span-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-zinc-400"/>
+              <h3 className="text-sm font-semibold text-white">Historique & Archives des Sessions</h3>
+              <span className="rounded bg-zinc-800 px-2 py-0.5 text-[10px] font-medium text-zinc-400">
+                {archives.length} {archives.length > 1 ? 'sessions' : 'session'}
+              </span>
             </div>
 
-            {/* Accordéon dépliable rapide (ne perturbe pas le catalogue vidéo) */}
-            {isArchivesAccordionOpen && (
-              <div className="mt-3 p-4 rounded-2xl bg-white dark:bg-black/20 border border-slate-200 dark:border-white/5 space-y-2 animate-fade-in">
-                {historyArchives.map((arch) => (
+            {archives.length > 3 && (
+              <button
+                onClick={() => setShowAllArchives(!showAllArchives)}
+                className="text-xs font-medium text-rose-400 hover:text-rose-300 transition-colors"
+              >
+                {showAllArchives ? 'Réduire' : 'Tout afficher'}
+              </button>
+            )}
+          </div>
+
+          <div className="mt-4">
+            {archives.length === 0 ? (
+              <div className="flex items-center justify-center gap-2 rounded-xl border border-zinc-800/60 bg-zinc-950/40 py-6 text-center text-xs text-zinc-500">
+                <AlertCircle className="h-4 w-4 text-zinc-600"/>
+                <span>Aucune archive disponible. Les bilans apparaîtront automatiquement à la clôture de vos lives réels.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+                {(showAllArchives ? archives : archives.slice(0, 3)).map((session, index) => (
                   <div 
-                    key={arch.id}
-                    onClick={() => {
-                      setSelectedLiveForDrawer(arch);
-                      setIsDrawerOpen(true);
-                    }}
-                    className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 hover:bg-slate-100 dark:hover:bg-white/10 border border-slate-200 dark:border-white/10 flex items-center justify-between gap-3 cursor-pointer transition-all group"
+                    key={session.id || index}
+                    className="flex flex-col justify-between rounded-xl border border-zinc-800/70 bg-zinc-950/50 p-3.5 transition-all hover:border-zinc-700"
                   >
-                    <div className="flex items-center gap-3">
-                      <Calendar size={14} className="text-[#FE2C55]" />
-                      <div>
-                        <span className="text-xs font-bold text-slate-900 dark:text-white block group-hover:text-[#FE2C55] transition-colors">
-                          {arch.title || `Live du ${formatLocalDateTime(arch.startedAt || arch.date, { day: 'numeric', month: 'short', year: 'numeric' })}`}
-                        </span>
-                        <span className="text-[10px] text-slate-500 font-mono">
-                          {formatLocalDateTime(arch.startedAt || arch.date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })} • {arch.durationStr || arch.duration || '01h30'}
-                        </span>
-                      </div>
+                    <div className="flex items-center justify-between text-xs text-zinc-400">
+                      <span className="flex items-center gap-1.5 font-medium text-white">
+                        <Calendar className="h-3 w-3 text-zinc-500"/>
+                        {session.date || 'Session passée'}
+                      </span>
+                      <span className="font-mono text-zinc-400">{session.duration || '--:--'}</span>
                     </div>
 
-                    <div className="flex items-center gap-4 text-xs font-mono font-bold text-slate-600 dark:text-gray-300">
-                      <span>👥 Pic: {arch.peakViewers || 16}</span>
-                      <span>❤️ {formatNumber(arch.likes || 0)}</span>
-                      <span className="text-[#FE2C55] text-[11px] underline group-hover:translate-x-0.5 transition-transform">
-                        Détails →
+                    <div className="mt-3 flex items-center justify-between border-t border-zinc-800/60 pt-2.5 text-[11px]">
+                      <span className="text-zinc-500">
+                        Pic : <strong className="text-zinc-300">{formatNumber(session.peakViewers)}</strong>
+                      </span>
+                      <span className="text-zinc-500">
+                        Likes : <strong className="text-zinc-300">{formatNumber(session.totalLikes)}</strong>
                       </span>
                     </div>
                   </div>
@@ -921,11 +414,11 @@ export const TikTokLiveHub = ({ liveData = {}, onRefresh, isRefreshing = false }
               </div>
             )}
           </div>
-
         </div>
+
       </div>
-    </>
+    </section>
   );
-};
+}
 
 export default TikTokLiveHub;

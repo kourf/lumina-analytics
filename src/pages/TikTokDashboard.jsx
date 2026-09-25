@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { TikTokHeader } from '../components/tiktok/TikTokHeader';
 import { TikTokKpiCards } from '../components/tiktok/TikTokKpiCards';
 import { TikTokLiveHub } from '../components/tiktok/TikTokLiveHub';
@@ -8,10 +8,9 @@ import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
 import { useTikTokUnifiedData } from '../hooks/useTikTokUnifiedData';
 import { useTikTokLiveStatus } from '../hooks/useTikTokLiveStatus';
 import { useTikTokLiveSocket } from '../hooks/useTikTokLiveSocket';
-import { Users, Radio, ShieldAlert } from 'lucide-react';
-import { cn } from '../lib/utils';
+import { ShieldAlert } from 'lucide-react';
 
-export const TikTokDashboard = ({ data, auth, liveData }) => {
+export const TikTokDashboard = ({ data, liveData }) => {
   const [loading, setLoading] = useState(false);
 
   // Dynamic, verified live status check with SWR (Stale-While-Revalidate) 60s cache
