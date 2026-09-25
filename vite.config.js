@@ -7,6 +7,7 @@ export default defineConfig({
     environment: "jsdom",
     globals: true,
     setupFiles: "vitest.setup.js",
+    exclude: ['**/node_modules/**', 'functions/**']
   },
   plugins: [react()],
   build: {

@@ -15,7 +15,11 @@ import { io } from 'socket.io-client';
  */
 export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
   const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
-  const configuredUrl = serverUrl || import.meta.env.VITE_TIKTOK_WORKER_WS_URL;
+  // Protection si un username est passé par mégarde (ex: '@karam.drame')
+  const validUrl = (typeof serverUrl === 'string' && (serverUrl.startsWith('http://') || serverUrl.startsWith('https://') || serverUrl.startsWith('ws://') || serverUrl.startsWith('wss://')))
+    ? serverUrl
+    : undefined;
+  const configuredUrl = validUrl || import.meta.env.VITE_TIKTOK_WORKER_WS_URL;
   const isLocalOnHttps = isHttps && (!configuredUrl || configuredUrl.includes('localhost') || configuredUrl.includes('127.0.0.1'));
   const wsUrl = isLocalOnHttps ? null : (configuredUrl || 'http://localhost:8080');
   
@@ -203,7 +207,13 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}) {
     title: sessionId ? `Live session ${sessionId}` : '', // fallback title
     kpis: {
       viewers: metrics.viewers,
+      peakViewers: metrics.peakViewers,
       totalLikes: metrics.likes,
+      likes: metrics.likes,
+      shares: metrics.shares,
+      followers: metrics.followers,
+      comments: metrics.comments,
+      diamonds: metrics.diamonds,
     }
   };
 
