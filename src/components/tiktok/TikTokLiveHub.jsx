@@ -29,16 +29,27 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             id: doc.id,
             ...doc.data()
           }));
-          setArchives(fetchedArchives);
+          if (fetchedArchives.length > 0) {
+            setArchives(fetchedArchives);
+          } else if (Array.isArray(propLiveData?.historyArchives) && propLiveData.historyArchives.length > 0) {
+            setArchives(propLiveData.historyArchives.slice(0, 3));
+          } else {
+            setArchives([]);
+          }
         } catch (error) {
           console.error("Error fetching TikTok archives:", error);
+          if (Array.isArray(propLiveData?.historyArchives) && propLiveData.historyArchives.length > 0) {
+            setArchives(propLiveData.historyArchives.slice(0, 3));
+          } else {
+            setArchives([]);
+          }
         } finally {
           setLoadingArchives(false);
         }
       };
       fetchArchives();
     }
-  }, [isLive]);
+  }, [isLive, propLiveData?.historyArchives]);
 
   // Formatter for numbers
   const formatNumber = (num) => {
@@ -48,15 +59,39 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     return num.toLocaleString();
   };
 
+  // Safe date formatter for archives
+  const formatArchiveDate = (archive) => {
+    const rawDate = archive?.startedAt || archive?.started_at || archive?.date || archive?.createdAt;
+    if (!rawDate) return 'Date inconnue';
+    try {
+      let dateObj;
+      if (typeof rawDate === 'number') {
+        dateObj = new Date(rawDate);
+      } else if (typeof rawDate?.toDate === 'function') {
+        dateObj = rawDate.toDate();
+      } else if (typeof rawDate?.seconds === 'number') {
+        dateObj = new Date(rawDate.seconds * 1000);
+      } else {
+        dateObj = new Date(rawDate);
+      }
+      if (isNaN(dateObj.getTime())) return 'Date inconnue';
+      return dateObj.toLocaleDateString('fr-FR', {
+        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
+      });
+    } catch {
+      return 'Date inconnue';
+    }
+  };
+
   // Safe KPI extractors
-  const currentViewers = isLive ? (socket.isSocketConnected ? socket.metrics.viewers : (propLiveData?.viewers || 0)) : 0;
+  const currentViewers = isLive ? (socket.isSocketConnected ? socket.metrics.viewers : (propLiveData?.currentViewers || propLiveData?.viewers || propLiveData?.viewerCount || 0)) : 0;
   const peakViewers = isLive ? (socket.isSocketConnected ? socket.metrics.peakViewers : (propLiveData?.peakViewers || 0)) : 0;
-  const likes = isLive ? (socket.isSocketConnected ? socket.metrics.likes : (propLiveData?.likes || 0)) : 0;
-  const commentsCount = isLive ? (socket.isSocketConnected ? socket.metrics.comments : (propLiveData?.comments || 0)) : 0;
-  const duration = isLive ? (socket.isSocketConnected ? socket.metrics.durationStr : (propLiveData?.durationStr || '00:00')) : '00:00';
-  const newFollowers = isLive ? (socket.isSocketConnected ? socket.metrics.newFollowers : (propLiveData?.newFollowers || 0)) : 0;
+  const likes = isLive ? (socket.isSocketConnected ? socket.metrics.likes : (propLiveData?.likes || propLiveData?.totalLikes || 0)) : 0;
+  const commentsCount = isLive ? (socket.isSocketConnected ? socket.metrics.comments : (propLiveData?.comments || propLiveData?.totalComments || 0)) : 0;
+  const duration = isLive ? (socket.isSocketConnected ? socket.metrics.durationStr : (propLiveData?.durationStr || propLiveData?.duration || '00:00')) : '00:00';
+  const newFollowers = isLive ? (socket.isSocketConnected ? socket.metrics.newFollowers : (propLiveData?.newFollowers || propLiveData?.followers || 0)) : 0;
   const topQuestions = isLive ? (socket.isSocketConnected ? (socket.metrics.topQuestions || []) : (propLiveData?.topQuestions || [])) : [];
-  const topContributor = isLive ? (socket.isSocketConnected ? socket.metrics.topContributor : (propLiveData?.topContributor || null)) : null;
+  const topContributor = isLive ? (socket.isSocketConnected ? socket.metrics.topContributor : (propLiveData?.topContributor || propLiveData?.topContributors?.[0] || null)) : null;
 
   return (
     <div className="w-full bg-[#0B0F19] border border-slate-800 rounded-3xl p-6 md:p-8 overflow-hidden relative shadow-2xl">
@@ -173,10 +208,18 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                 </div>
                 {topContributor ? (
                   <div className="flex items-center gap-4">
-                    <img src={topContributor.avatarUrl || '/api/placeholder/48/48'} alt={topContributor.nickname} className="w-12 h-12 rounded-full border-2 border-amber-400/50" />
+                    <img
+                      src={topContributor.avatarUrl || '/api/placeholder/48/48'}
+                      alt={topContributor.nickname || topContributor.name || 'Contributeur'}
+                      className="w-12 h-12 rounded-full border-2 border-amber-400/50 object-cover"
+                      onError={(e) => {
+                        e.target.onerror = null;
+                        e.target.src = 'https://ui-avatars.com/api/?name=User&background=amber&color=fff';
+                      }}
+                    />
                     <div>
-                      <div className="font-bold text-white">{topContributor.nickname}</div>
-                      <div className="text-xs text-amber-400/80 mt-0.5">{topContributor.coins} pièces</div>
+                      <div className="font-bold text-white">{topContributor.nickname || topContributor.name || 'Contributeur'}</div>
+                      <div className="text-xs text-amber-400/80 mt-0.5">{topContributor.coins || topContributor.count || 0} pièces</div>
                     </div>
                   </div>
                 ) : (
@@ -192,11 +235,22 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                 </div>
                 {topQuestions.length > 0 ? (
                   <ul className="space-y-3">
-                    {topQuestions.map((q, i) => (
-                      <li key={i} className="text-sm text-slate-300 bg-white/5 rounded-lg p-2.5 line-clamp-2">
-                        "{q}"
-                      </li>
-                    ))}
+                    {topQuestions.map((q, i) => {
+                      const questionText = typeof q === 'string'
+                        ? q
+                        : (q?.original || q?.text || q?.question || (typeof q === 'object' ? JSON.stringify(q) : String(q)));
+                      const questionCount = typeof q === 'object' && q?.count ? q.count : null;
+                      return (
+                        <li key={i} className="text-sm text-slate-300 bg-white/5 rounded-lg p-2.5 line-clamp-2 flex items-center justify-between gap-2">
+                          <span className="truncate">"{questionText}"</span>
+                          {questionCount && (
+                            <span className="text-[10px] font-bold uppercase bg-purple-500/20 text-purple-300 px-2 py-0.5 rounded-full border border-purple-500/30 shrink-0 font-mono">
+                              x{questionCount}
+                            </span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 ) : (
                   <div className="flex items-center justify-center h-full text-sm text-slate-500 italic pb-8">
@@ -226,9 +280,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                 {archives.map((archive, idx) => (
                   <div key={archive.id || idx} className="bg-slate-900/50 border border-white/5 hover:border-slate-700 transition-all rounded-2xl p-6 group">
                     <div className="text-xs font-bold text-slate-500 mb-4 bg-slate-800/50 inline-block px-3 py-1 rounded-full">
-                      {new Date(archive.startedAt || archive.started_at).toLocaleDateString('fr-FR', {
-                        day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit'
-                      })}
+                      {formatArchiveDate(archive)}
                     </div>
 
                     <div className="space-y-4">

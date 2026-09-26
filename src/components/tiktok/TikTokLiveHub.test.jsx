@@ -84,4 +84,33 @@ describe('TikTokLiveHub Component', () => {
     expect(screen.getByText('150')).toBeInTheDocument(); // new followers
     expect(screen.getByText('01:00')).toBeInTheDocument(); // duration
   });
+
+  it('safely renders topQuestions with objects and topContributor with name/count without crashing', async () => {
+    useTikTokLiveSocket.mockReturnValue({
+      isSocketConnected: false,
+      isLive: true,
+      metrics: {}
+    });
+
+    render(
+      <TikTokLiveHub
+        liveData={{
+          isLive: true,
+          topQuestions: [
+            { original: 'Tu utilises Webflow ?', count: 3 },
+            { text: 'Quel micro utilises-tu ?', count: 1 },
+            'Question texte direct'
+          ],
+          topContributor: { name: 'AlexUI', count: 420 }
+        }}
+      />
+    );
+
+    expect(screen.getByText('EN DIRECT')).toBeInTheDocument();
+    expect(screen.getByText(/"Tu utilises Webflow \?"/)).toBeInTheDocument();
+    expect(screen.getByText(/"Quel micro utilises-tu \?"/)).toBeInTheDocument();
+    expect(screen.getByText(/"Question texte direct"/)).toBeInTheDocument();
+    expect(screen.getByText('AlexUI')).toBeInTheDocument();
+    expect(screen.getByText(/420 pièces/)).toBeInTheDocument();
+  });
 });
