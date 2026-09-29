@@ -5,6 +5,7 @@ import { db } from './config/firebase';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { ScrollToTop } from './components/layout/ScrollToTop';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import PinScreen from './components/PinScreen';
 
 // Code-Splitting / Dynamic Imports des pages tableaux de bord
 const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })));
@@ -40,6 +41,7 @@ function DashboardLoader() {
 }
 
 function App() {
+  const [isUnlocked, setIsUnlocked] = useState(() => sessionStorage.getItem('isUnlocked') === 'true');
   const [appData, setAppData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadingPhrase] = useState(() => JARVIS_PHRASES[Math.floor(Math.random() * JARVIS_PHRASES.length)]);
@@ -148,6 +150,10 @@ function App() {
       }
     };
   }, []);
+
+  if (!isUnlocked) {
+    return <PinScreen onUnlock={() => setIsUnlocked(true)} />;
+  }
 
   if (loading || !appData) {
     return (

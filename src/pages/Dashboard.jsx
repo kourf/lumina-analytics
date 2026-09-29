@@ -3,6 +3,7 @@ import { MOCK_DATA } from '../data/mockData';
 import { StatCard } from '../components/StatCard';
 import { Sparkles, BarChart2 } from 'lucide-react';
 import { AreaChart, Area, XAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { DailyInspiration } from '../components/DailyInspiration';
 
 export const Dashboard = ({ data }) => {
   const global = data ? data.global : MOCK_DATA.global;
@@ -28,6 +29,9 @@ export const Dashboard = ({ data }) => {
         <h2 className="text-2xl font-headline-lg font-bold mb-1">Vue d'ensemble</h2>
         <p className="text-sm text-gray-500 dark:text-gray-400">Performances cumulées sur tous vos réseaux</p>
       </section>
+
+      {/* Module de Motivation Quotidienne */}
+      <DailyInspiration />
 
       {/* AI Summary Card */}
       <div className="bg-gradient-to-br from-indigo-600 to-purple-700 text-white rounded-3xl p-6 shadow-lg shadow-indigo-500/20 relative overflow-hidden">
