@@ -130,7 +130,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         
         {/* Card 1: Engagement Moyen */}
-        <div className="bg-white dark:bg-transparent bg-gradient-to-br from-[#25F4EE]/10 dark:from-[#25F4EE]/20 to-blue-500/5 dark:to-blue-500/10 border border-[#25F4EE]/30 p-6 rounded-2xl text-slate-900 dark:text-white shadow-[0_8px_30px_rgba(37,244,238,0.15)] dark:shadow-[0_0_30px_rgba(37,244,238,0.1)] hover:shadow-[0_8px_40px_rgba(37,244,238,0.25)] dark:hover:shadow-[0_0_40px_rgba(37,244,238,0.2)] transition-shadow duration-300 flex flex-col justify-between relative overflow-visible group">
+        <div className="bg-white dark:bg-transparent bg-gradient-to-br from-[#25F4EE]/10 dark:from-[#25F4EE]/20 to-blue-500/5 dark:to-blue-500/10 border border-[#25F4EE]/30 p-6 rounded-2xl text-slate-900 dark:text-white shadow-[0_8px_30px_rgba(37,244,238,0.15)] dark:shadow-[0_0_30px_rgba(37,244,238,0.1)] hover:shadow-[0_8px_40px_rgba(37,244,238,0.25)] dark:hover:shadow-[0_0_40px_rgba(37,244,238,0.2)] transition-shadow duration-300 flex flex-col justify-between relative hover:z-50 overflow-visible group">
           <div className="absolute top-0 right-0 w-32 h-32 bg-[#25F4EE]/20 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#25F4EE]/30 transition-colors"></div>
           <div className="flex justify-between items-start mb-4">
             <div className="text-sm font-semibold text-teal-700 dark:text-[#25F4EE] uppercase tracking-wider relative z-10 flex items-center gap-2">
@@ -166,7 +166,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         </div>
 
         {/* Card 2: Vues Médianes */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-visible group">
+        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Activity className="w-4 h-4 text-purple-600 dark:text-purple-400" /> Vues Médianes
@@ -188,7 +188,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         </div>
 
         {/* Card 3: Taux de Reach */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-visible group">
+        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Taux de Reach
@@ -215,7 +215,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         </div>
 
         {/* Card 4: Ratio de Viralité */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-visible group">
+        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Share2 className="w-4 h-4 text-[#10B981]" /> Taux Partage
@@ -242,7 +242,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         </div>
 
         {/* Card 5: Ratio de Viralité (Portée organique) */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-visible group">
+        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Globe className="w-4 h-4 text-orange-600 dark:text-orange-400" /> Viralité (Portée)
@@ -269,7 +269,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         </div>
 
         {/* Card 6: Ratio de Conversion Abonnés */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-visible group">
+        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
           <div className="flex justify-between items-start mb-4">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Conversion Abo
