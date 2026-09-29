@@ -113,7 +113,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
   };
 
   return (
-    <div className="w-full mt-8">
+    <div className="w-full mt-8 relative z-20 hover:z-50 transition-all">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h2 className="text-2xl font-bold text-slate-900 dark:text-white flex items-center gap-3">

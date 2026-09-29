@@ -102,7 +102,7 @@ export const TikTokKpiCards = ({ tiktokData }) => {
   const iconStyle = "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border";
 
   return (
-    <div className="w-full relative z-[60]">
+    <div className="w-full relative z-10 hover:z-50 transition-all">
       {/* KPI Cards (Title/Header moved to unified parent block) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 relative">
         
