@@ -139,7 +139,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
             </div>
             <div className="relative group/tooltip cursor-help z-50">
               <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors" />
-              <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
                 <p className="font-bold text-white mb-1">Qualité de l'audience</p>
                 <p className="text-gray-300 mb-2">Pourcentage de personnes ayant interagi avec vos vidéos par rapport au nombre de vues.</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
@@ -173,7 +173,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
             </div>
             <div className="relative group/tooltip cursor-help z-50">
               <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute right-0 bottom-full mb-2 w-56 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
                 <p className="font-bold text-white mb-1">Plus réaliste</p>
                 <p className="text-gray-300 mb-2">Une seule vidéo virale peut fausser la moyenne. La médiane indique le score que vos vidéos atteignent "normalement".</p>
                 <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-purple-600 dark:text-purple-400">
@@ -222,7 +222,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
             </div>
             <div className="relative group/tooltip cursor-help z-50">
               <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute right-0 bottom-full mb-2 w-56 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <div className="absolute left-0 bottom-full mb-2 w-56 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
                 <p className="font-bold text-white mb-1">Score de Viralité</p>
                 <p className="text-gray-300 mb-2">Le partage est le signal #1 pour l'algorithme (Pour Toi).</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
@@ -249,7 +249,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
             </div>
             <div className="relative group/tooltip cursor-help z-50">
               <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
                 <p className="font-bold text-white mb-1">Portée Organique</p>
                 <p className="text-gray-300 mb-2">Ce ratio montre à quel point l'algorithme te pousse au-delà de ton propre cercle. Ça prouve concrètement ta capacité à "percer l'algorithme". Un argument en or pour ton Agence.</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
