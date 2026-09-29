@@ -36,20 +36,24 @@ let connection = null;
 let isConnected = false;
 let updateTimeout = null;
 
-let stateData = {
-  isLive: false,
-  likes: 12700,
-  shares: 152,
-  followers: 87,
-  comments: 457,
-  currentViewers: 0,
-  peakViewers: 89,
-  started_at: null,
-  roomId: '',
-  topQuestions: [],
-  topComments: [],
-  recentComments: []
-};
+function getInitialState() {
+  return {
+    isLive: false,
+    likes: 0,
+    shares: 0,
+    followers: 0,
+    comments: 0,
+    currentViewers: 0,
+    peakViewers: 0,
+    started_at: null,
+    roomId: '',
+    topQuestions: [],
+    topComments: [],
+    recentComments: []
+  };
+}
+
+let stateData = getInitialState();
 
 // Initialiser avec les données existantes de Firestore
 async function initExistingData() {
@@ -231,6 +235,7 @@ async function connectToLive() {
       console.log('[Lumina Daemon] 🛑 Le live s\'est terminé.');
       isConnected = false;
       stateData.isLive = false;
+      await saveArchiveToFirestore();
       scheduleFirestoreSync();
       setTimeout(connectToLive, 10000);
     });
@@ -248,4 +253,50 @@ async function connectToLive() {
   }
 }
 
+async function saveArchiveToFirestore() {
+  try {
+    const archivePayload = {
+      fields: {
+        likes: toFirestoreValue(stateData.likes),
+        shares: toFirestoreValue(stateData.shares),
+        followers: toFirestoreValue(stateData.followers),
+        comments: toFirestoreValue(stateData.comments),
+        peakViewers: toFirestoreValue(stateData.peakViewers),
+        startedAt: toFirestoreValue(stateData.started_at || new Date().toISOString()),
+        endedAt: toFirestoreValue(new Date().toISOString()),
+        topQuestions: toFirestoreValue(stateData.topQuestions.slice(0, 15)),
+        roomId: toFirestoreValue(stateData.roomId)
+      }
+    };
+    
+    const archiveUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/tiktok_archives?key=${API_KEY}`;
+    
+    const res = await fetch(archiveUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(archivePayload)
+    });
+    
+    if (res.ok) {
+      console.log('[Lumina Daemon] 📁 Archive du live sauvegardée avec succès dans tiktok_archives.');
+      stateData = getInitialState(); // Réinitialisation de l'état
+    } else {
+      console.error('[Lumina Daemon] Erreur sauvegarde archive:', await res.text());
+    }
+  } catch (err) {
+    console.error("[Lumina Daemon] Exception lors de l'archivage:", err.message);
+  }
+}
+
 connectToLive();
+
+// Serveur HTTP basique pour satisfaire les exigences des hébergeurs (Render, Koyeb, etc.)
+// qui nécessitent d'écouter sur un port pour maintenir le service actif.
+import http from 'http';
+const PORT = process.env.PORT || 8080;
+http.createServer((req, res) => {
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Lumina Live Daemon is running.\n');
+}).listen(PORT, () => {
+  console.log(`[Lumina Daemon] Serveur de santé écoutant sur le port ${PORT}`);
+});

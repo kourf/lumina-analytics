@@ -93,6 +93,29 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const topQuestions = isLive ? (socket.isSocketConnected ? (socket.metrics.topQuestions || []) : (propLiveData?.topQuestions || [])) : [];
   const topContributor = isLive ? (socket.isSocketConnected ? socket.metrics.topContributor : (propLiveData?.topContributor || propLiveData?.topContributors?.[0] || null)) : null;
 
+  // Reset Logic
+  const handleResetLive = async () => {
+    if (window.confirm('Voulez-vous vraiment réinitialiser l\'affichage du live actuel ?')) {
+      // Si la logique de mise à jour Firestore est requise :
+      try {
+        const { doc, updateDoc } = await import('firebase/firestore');
+        const userRef = doc(db, 'users', 'karamokho');
+        await updateDoc(userRef, {
+          'tiktokLiveAPI.isLive': false,
+          'tiktokLiveAPI.likes': 0,
+          'tiktokLiveAPI.currentViewers': 0,
+          'tiktokLiveAPI.comments': 0,
+          'tiktokLiveAPI.peakViewers': 0,
+          'tiktokLiveAPI.shares': 0,
+          'tiktokLiveAPI.followers': 0,
+        });
+        if (onRefresh) onRefresh();
+      } catch (err) {
+        console.error('Erreur lors de la réinitialisation:', err);
+      }
+    }
+  };
+
   return (
     <div className="w-full bg-[#0B0F19] border border-slate-800 rounded-3xl p-6 md:p-8 overflow-hidden relative shadow-2xl">
       {/* Background Effects */}
@@ -131,14 +154,24 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             </p>
           </div>
         </div>
-        <button
-          onClick={onRefresh}
-          disabled={isRefreshing}
-          className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50"
-        >
-          <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
-          Actualiser
-        </button>
+        <div className="flex items-center gap-3">
+          {isLive && (
+            <button
+              onClick={handleResetLive}
+              className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-sm font-medium text-red-400 transition-all"
+            >
+              Reset Live
+            </button>
+          )}
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing}
+            className="flex items-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-sm font-medium text-white transition-all disabled:opacity-50"
+          >
+            <RefreshCw className={cn("w-4 h-4", isRefreshing && "animate-spin")} />
+            Actualiser
+          </button>
+        </div>
       </div>
 
       {/* Main Content - Bento Grid */}
