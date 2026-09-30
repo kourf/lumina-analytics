@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../config/firebase';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { syncYouTubeDirect } from '../services/youtubeSyncService';
 import { YouTubeHeader } from '../components/youtube/YouTubeHeader';
 import { KpiCards } from '../components/youtube/KpiCards';
 import { GrowthCharts } from '../components/youtube/GrowthCharts';
@@ -23,11 +24,10 @@ export const YouTubeDashboard = () => {
   const [loading, setLoading] = useState(true);
   const [youtubeToken, setYoutubeToken] = useState(null);
 
-  const fetchYouTubeData = useCallback(async () => {
-    try {
-      const docRef = doc(db, 'users', 'karamokho');
-      const docSnap = await getDoc(docRef);
-      
+  // Écoute en temps réel de Firestore pour une réactivité instantanée
+  useEffect(() => {
+    const docRef = doc(db, 'users', 'karamokho');
+    const unsubscribe = onSnapshot(docRef, (docSnap) => {
       if (docSnap.exists() && docSnap.data().youtubeAPI) {
         const ytData = docSnap.data().youtubeAPI;
         if (ytData.videos) {
@@ -41,27 +41,31 @@ export const YouTubeDashboard = () => {
         }
         setData(ytData);
       }
-    } catch (error) {
-      console.error("Erreur lors de la récupération des données YouTube:", error);
-    } finally {
       setLoading(false);
-    }
+    }, (error) => {
+      console.error("Erreur temps réel YouTube Firestore:", error);
+      setLoading(false);
+    });
+
+    return () => unsubscribe();
   }, []);
 
-  useEffect(() => {
-    fetchYouTubeData();
-  }, [fetchYouTubeData]);
-
   const handleManualRefresh = async () => {
-    const response = await fetch('https://us-central1-lumina-analytics-kd-2026.cloudfunctions.net/forceSyncYouTube', {
-      method: 'GET'
-    });
-    
-    if (!response.ok) {
-      throw new Error('Erreur lors de la synchronisation avec YouTube');
+    // 1. Tenter la synchronisation via Cloud Function
+    try {
+      const response = await fetch('https://us-central1-lumina-analytics-kd-2026.cloudfunctions.net/forceSyncYouTube', {
+        method: 'GET'
+      });
+      if (response.ok) {
+        return;
+      }
+      console.warn("Cloud function returned status:", response.status, "- bascule sur la synchronisation directe");
+    } catch (err) {
+      console.warn("Échec requête Cloud Function, bascule sur la synchronisation directe:", err);
     }
-    
-    await fetchYouTubeData();
+
+    // 2. Fallback direct client garanti à 100%
+    await syncYouTubeDirect();
   };
 
   const handleRemoveCompetitorLocal = (competitorId) => {

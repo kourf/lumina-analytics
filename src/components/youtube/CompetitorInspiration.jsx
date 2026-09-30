@@ -35,7 +35,7 @@ const CompetitorCard = ({ competitor, onRemove }) => {
   }, [competitor.videos, selectedMonth]);
 
   const topVideos = React.useMemo(() => {
-    return filteredVideos.filter(v => v.type === 'Vidéo').sort((a, b) => b.views - a.views).slice(0, 5);
+    return filteredVideos.filter(v => v.type === 'Vidéo' || v.type === 'Video').sort((a, b) => b.views - a.views).slice(0, 5);
   }, [filteredVideos]);
 
   const topShorts = React.useMemo(() => {

@@ -7,9 +7,31 @@ export const YouTubeHeader = ({ channel, onRefresh }) => {
 
   if (!channel) return null;
 
-  const lastSyncDate = channel.lastSync ? new Date(channel.lastSync.seconds * 1000).toLocaleString('fr-FR', {
-    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-  }) : 'À l\'instant';
+  const getSyncDateFormatted = () => {
+    if (!channel.lastSync) return 'À l\'instant';
+    try {
+      if (typeof channel.lastSync === 'string') {
+        return new Date(channel.lastSync).toLocaleString('fr-FR', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      }
+      if (channel.lastSync.seconds) {
+        return new Date(channel.lastSync.seconds * 1000).toLocaleString('fr-FR', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      }
+      if (channel.lastSync instanceof Date) {
+        return channel.lastSync.toLocaleString('fr-FR', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      }
+      return 'À l\'instant';
+    } catch {
+      return 'À l\'instant';
+    }
+  };
+
+  const lastSyncDate = getSyncDateFormatted();
 
   const handleRefreshClick = async () => {
     setIsRefreshing(true);

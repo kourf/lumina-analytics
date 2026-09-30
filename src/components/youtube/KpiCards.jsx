@@ -1,14 +1,18 @@
 import React, { useState } from 'react';
-import { Users, Eye, Video, Activity, ThumbsUp, Info, Clock, Award, Play, Zap, Radio } from 'lucide-react';
+import { Users, Eye, Video, Activity, ThumbsUp, Info, Clock, Award, Play, Zap, Radio, Scale } from 'lucide-react';
 
 export const KpiCards = ({ channel, videos, analytics }) => {
-  const [showEngagementTooltip, setShowEngagementTooltip] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(null);
 
   if (!channel) return null;
 
-  const classicVideos = (videos || []).filter(v => v.type === 'Vidéo' || v.type === 'Video');
-  const shortVideos = (videos || []).filter(v => v.type === 'Short');
-  const directVideos = (videos || []).filter(v => v.type === 'Direct');
+  const isLive = (v) => v.type === 'Direct' || v.type === 'Live' || v.format === 'live' || v.isLiveNow;
+  const isShort = (v) => v.type === 'Short' || v.format === 'short';
+  const isClassic = (v) => (v.type === 'Vidéo' || v.type === 'Video') && !isLive(v);
+
+  const classicVideos = (videos || []).filter(isClassic);
+  const shortVideos = (videos || []).filter(isShort);
+  const directVideos = (videos || []).filter(isLive);
 
   const classicViews = classicVideos.reduce((acc, v) => acc + (v.views || 0), 0);
   const shortViews = shortVideos.reduce((acc, v) => acc + (v.views || 0), 0);
@@ -20,6 +24,32 @@ export const KpiCards = ({ channel, videos, analytics }) => {
   const totalLikes = classicLikes + shortLikes + directLikes;
 
   const totalContent = (videos || []).length;
+
+  // Calcul des médianes de vues
+  const calcMedian = (arr) => {
+    if (!arr || arr.length === 0) return 0;
+    const sorted = [...arr].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 !== 0 ? sorted[mid] : Math.round((sorted[mid - 1] + sorted[mid]) / 2);
+  };
+
+  const medianClassicViews = calcMedian(classicVideos.map(v => v.views || 0));
+  const medianShortViews = calcMedian(shortVideos.map(v => v.views || 0));
+  const medianDirectViews = calcMedian(directVideos.map(v => v.views || 0));
+  const medianOverallViews = calcMedian((videos || []).map(v => v.views || 0));
+
+  // Durées moyennes exactes calculées sur les contenus réels
+  const avgClassicDurationSec = classicVideos.length > 0 
+    ? Math.round(classicVideos.reduce((acc, v) => acc + (v.durationSec || 0), 0) / classicVideos.length) 
+    : (analytics?.avgVideoDurationSec || 0);
+
+  const avgShortDurationSec = shortVideos.length > 0 
+    ? Math.round(shortVideos.reduce((acc, v) => acc + (v.durationSec || 0), 0) / shortVideos.length) 
+    : (analytics?.avgShortDurationSec || 0);
+
+  const avgDirectDurationSec = directVideos.length > 0 
+    ? Math.round(directVideos.reduce((acc, v) => acc + (v.durationSec || 0), 0) / directVideos.length) 
+    : (analytics?.avgLiveDurationSec || 0);
 
   const getEngagementQuality = (rate) => {
     if (rate < 1) return { text: "Faible", color: "text-red-500" };
@@ -34,24 +64,17 @@ export const KpiCards = ({ channel, videos, analytics }) => {
 
   const formatDuration = (seconds) => {
     if (!seconds) return '0s';
-    const m = Math.floor(seconds / 60);
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
     const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m${s > 0 ? ` ${s}s` : ''}`;
     if (m > 0) return `${m}m${s > 0 ? ` ${s}s` : ''}`;
     return `${s}s`;
   };
 
-  // Calcul de la "Meilleure Durée" (basé sur le format ayant la meilleure moyenne de vues par contenu)
-  const avgViewsClassic = classicVideos.length > 0 ? classicViews / classicVideos.length : 0;
-  const avgViewsShorts = shortVideos.length > 0 ? shortViews / shortVideos.length : 0;
-  const bestFormat = avgViewsShorts > avgViewsClassic ? 'Shorts' : 'Vidéos';
-  const bestDuration = avgViewsShorts > avgViewsClassic 
-    ? formatDuration(analytics?.avgShortDurationSec || 0)
-    : formatDuration(analytics?.avgVideoDurationSec || 0);
-
-  const avgDirectDurationSec = directVideos.length > 0 ? directVideos.reduce((acc, v) => acc + (v.durationSec || 0), 0) / directVideos.length : 0;
-
   return (
     <div className="flex flex-col gap-6">
+      {/* Ligne 1 : Volumes Principaux (Abonnés, Vues Totales, Publications) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
         
         {/* Abonnés */}
@@ -71,6 +94,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <p className="text-4xl md:text-5xl font-display-kpi font-bold text-gray-900 dark:text-white tracking-tight">
               {formatNumber(channel.subscribers)}
             </p>
+            <p className="text-xs text-gray-400 mt-2 font-medium">Audience de la chaîne</p>
           </div>
         </div>
 
@@ -88,17 +112,16 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             </div>
             <div className="relative">
               <button 
-                onMouseEnter={() => setShowEngagementTooltip('views')}
-                onMouseLeave={() => setShowEngagementTooltip(null)}
+                onMouseEnter={() => setShowTooltip('views')}
+                onMouseLeave={() => setShowTooltip(null)}
                 className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <Info size={18} />
               </button>
-              {/* Infobulle */}
-              {showEngagementTooltip === 'views' && (
+              {showTooltip === 'views' && (
                 <div className="absolute top-full right-0 mt-2 w-64 bg-gray-900 dark:bg-gray-800 text-white p-4 rounded-2xl text-xs z-50 shadow-xl border border-gray-700">
                   <p className="font-semibold mb-2">Répartition des vues</p>
-                  <p className="text-gray-300 leading-relaxed">Divise vos vues totales selon le format de contenu pour identifier ce qui fonctionne.</p>
+                  <p className="text-gray-300 leading-relaxed">Cumul de l'ensemble des vues obtenues sur vos vidéos classiques, vos Shorts et vos diffusions Lives.</p>
                 </div>
               )}
             </div>
@@ -112,7 +135,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-red-50/40 dark:bg-red-500/5 p-2.5 rounded-xl border border-red-100/50 dark:border-red-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Play size={12} className="text-red-500" />
+                  <Play size={12} className="text-blue-500" />
                 </div>
                 <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Vidéos</span>
               </div>
@@ -121,7 +144,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-red-50/40 dark:bg-red-500/5 p-2.5 rounded-xl border border-red-100/50 dark:border-red-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Zap size={12} className="text-red-500" />
+                  <Zap size={12} className="text-amber-500" />
                 </div>
                 <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Shorts</span>
               </div>
@@ -130,9 +153,9 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-red-50/40 dark:bg-red-500/5 p-2.5 rounded-xl border border-red-100/50 dark:border-red-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Radio size={12} className="text-red-500" />
+                  <Radio size={12} className="text-rose-500" />
                 </div>
-                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Directs</span>
+                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Lives</span>
               </div>
               <span className="text-sm font-bold text-gray-900 dark:text-white">{formatNumber(directViews)}</span>
             </div>
@@ -148,7 +171,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
                 <Video size={24} className="text-purple-600 dark:text-purple-400" />
               </div>
               <h3 className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-widest leading-snug">
-                Vidéos publiées
+                Contenus publiés
               </h3>
             </div>
           </div>
@@ -161,7 +184,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-purple-50/40 dark:bg-purple-500/5 p-2.5 rounded-xl border border-purple-100/50 dark:border-purple-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Play size={12} className="text-purple-500" />
+                  <Play size={12} className="text-blue-500" />
                 </div>
                 <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Vidéos</span>
               </div>
@@ -170,7 +193,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-purple-50/40 dark:bg-purple-500/5 p-2.5 rounded-xl border border-purple-100/50 dark:border-purple-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Zap size={12} className="text-purple-500" />
+                  <Zap size={12} className="text-amber-500" />
                 </div>
                 <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Shorts</span>
               </div>
@@ -179,16 +202,85 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-purple-50/40 dark:bg-purple-500/5 p-2.5 rounded-xl border border-purple-100/50 dark:border-purple-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Radio size={12} className="text-purple-500" />
+                  <Radio size={12} className="text-rose-500" />
                 </div>
-                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Directs</span>
+                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Lives</span>
               </div>
               <span className="text-sm font-bold text-gray-900 dark:text-white">{directVideos.length}</span>
             </div>
           </div>
         </div>
 
-        {/* Durées Moyennes */}
+      </div>
+
+      {/* Ligne 2 : Analyse Qualitative (Vues Médianes, Durée Moyenne, Likes, Engagement) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+
+        {/* NOUVELLE CARTE : Vues Médianes */}
+        <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface p-6 lg:p-7 rounded-[24px] border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm hover:shadow-xl hover:shadow-lumina-primary/5 hover:-translate-y-1 transition-all duration-300 flex flex-col h-full relative group overflow-visible">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/0 to-transparent group-hover:from-cyan-500/5 transition-colors duration-500 pointer-events-none rounded-[24px]"></div>
+          <div className="flex justify-between items-center mb-5 relative z-10">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 rounded-[16px] bg-cyan-50 dark:bg-cyan-500/10 flex items-center justify-center border border-cyan-100 dark:border-cyan-500/20 shadow-inner flex-shrink-0">
+                <Scale size={24} className="text-cyan-600 dark:text-cyan-400" />
+              </div>
+              <h3 className="text-gray-500 dark:text-gray-400 text-sm font-bold uppercase tracking-widest leading-snug">
+                Vues Médianes
+              </h3>
+            </div>
+            <div className="relative">
+              <button 
+                onMouseEnter={() => setShowTooltip('median')}
+                onMouseLeave={() => setShowTooltip(null)}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              >
+                <Info size={18} />
+              </button>
+              {showTooltip === 'median' && (
+                <div className="absolute top-full right-0 mt-2 w-72 bg-gray-900 dark:bg-gray-800 text-white p-4 rounded-2xl text-xs z-50 shadow-xl border border-gray-700 animate-fade-in">
+                  <p className="font-semibold mb-2 text-cyan-400">Pourquoi la médiane ?</p>
+                  <p className="text-gray-300 leading-relaxed mb-2">
+                    La médiane sépare vos contenus en 2 parts égales (50% ont fait plus, 50% ont fait moins).
+                  </p>
+                  <p className="text-gray-300 leading-relaxed">
+                    Contrairement à la moyenne, elle n'est pas faussée par un buzz exceptionnel ou une vidéo à 0 vue et reflète fidèlement votre audience habituelle.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="flex-1">
+            <p className="text-3xl md:text-4xl font-display-kpi font-bold text-gray-900 dark:text-white tracking-tight leading-none mb-1">
+              {formatNumber(medianOverallViews)}
+            </p>
+            <p className="text-xs text-gray-400 font-medium">Médiane tous formats</p>
+          </div>
+          <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800/50 flex flex-col gap-2">
+            <div className="flex justify-between items-center bg-cyan-50/40 dark:bg-cyan-500/5 px-3 py-2 rounded-xl border border-cyan-100/50 dark:border-cyan-500/10">
+              <div className="flex items-center gap-2">
+                <Play size={12} className="text-blue-500" />
+                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Vidéos</span>
+              </div>
+              <span className="text-sm font-bold text-gray-900 dark:text-white">{formatNumber(medianClassicViews)} vues</span>
+            </div>
+            <div className="flex justify-between items-center bg-cyan-50/40 dark:bg-cyan-500/5 px-3 py-2 rounded-xl border border-cyan-100/50 dark:border-cyan-500/10">
+              <div className="flex items-center gap-2">
+                <Zap size={12} className="text-amber-500" />
+                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Shorts</span>
+              </div>
+              <span className="text-sm font-bold text-gray-900 dark:text-white">{formatNumber(medianShortViews)} vues</span>
+            </div>
+            <div className="flex justify-between items-center bg-cyan-50/40 dark:bg-cyan-500/5 px-3 py-2 rounded-xl border border-cyan-100/50 dark:border-cyan-500/10">
+              <div className="flex items-center gap-2">
+                <Radio size={12} className="text-rose-500" />
+                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Lives</span>
+              </div>
+              <span className="text-sm font-bold text-rose-500 dark:text-rose-400">{formatNumber(medianDirectViews)} vues 🔥</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Durées Moyennes (Vidéos, Shorts et Lives) */}
         <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface p-6 lg:p-7 rounded-[24px] border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm hover:shadow-xl hover:shadow-lumina-primary/5 hover:-translate-y-1 transition-all duration-300 flex flex-col h-full relative group overflow-visible">
           <div className="absolute inset-0 bg-gradient-to-br from-orange-500/0 to-transparent group-hover:from-orange-500/5 transition-colors duration-500 pointer-events-none rounded-[24px]"></div>
           <div className="flex justify-between items-center mb-5 relative z-10">
@@ -202,51 +294,52 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             </div>
             <div className="relative">
               <button 
-                onMouseEnter={() => setShowEngagementTooltip('duration')}
-                onMouseLeave={() => setShowEngagementTooltip(null)}
+                onMouseEnter={() => setShowTooltip('duration')}
+                onMouseLeave={() => setShowTooltip(null)}
                 className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <Info size={18} />
               </button>
-              {showEngagementTooltip === 'duration' && (
+              {showTooltip === 'duration' && (
                 <div className="absolute top-full right-0 mt-2 w-64 bg-gray-900 dark:bg-gray-800 text-white p-4 rounded-2xl text-xs z-50 shadow-xl border border-gray-700">
-                  <p className="font-semibold mb-2">Choix de la meilleure durée</p>
-                  <p className="text-gray-300 leading-relaxed">L'app compare les vues moyennes de vos vidéos classiques avec celles de vos Shorts pour identifier le format le plus impactant et l'affiche en référence.</p>
+                  <p className="font-semibold mb-2">Durée moyenne par format</p>
+                  <p className="text-gray-300 leading-relaxed">
+                    Indique la durée moyenne exacte pour les Vidéos classiques, les Shorts, et les sessions en Direct (Lives).
+                  </p>
                 </div>
               )}
             </div>
           </div>
           <div className="flex-1">
-            <p className="text-3xl md:text-4xl lg:text-5xl font-display-kpi font-bold text-gray-900 dark:text-white tracking-tight leading-none mb-1">
-              {formatDuration(analytics?.avgVideoDurationSec)}
+            <p className="text-3xl md:text-4xl font-display-kpi font-bold text-gray-900 dark:text-white tracking-tight leading-none mb-1">
+              {formatDuration(avgDirectDurationSec)}
             </p>
-            <p className="text-xs text-gray-400 font-medium">Pour le format Vidéo</p>
+            <p className="text-xs text-rose-500 dark:text-rose-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-rose-500 animate-pulse"></span>
+              Format dominant (Lives)
+            </p>
           </div>
           <div className="mt-5 pt-4 border-t border-gray-100 dark:border-gray-800/50 flex flex-col gap-2">
-             <div className="flex justify-between items-center bg-orange-50/40 dark:bg-orange-500/5 px-3 py-2.5 rounded-xl border border-orange-100/50 dark:border-orange-500/10">
+             <div className="flex justify-between items-center bg-orange-50/40 dark:bg-orange-500/5 px-3 py-2 rounded-xl border border-orange-100/50 dark:border-orange-500/10">
                 <div className="flex items-center gap-2">
-                  <Zap size={12} className="text-orange-500" />
+                  <Play size={12} className="text-blue-500" />
+                  <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Moy. Vidéos</span>
+                </div>
+                <span className="text-sm font-bold text-gray-900 dark:text-white">{formatDuration(avgClassicDurationSec)}</span>
+             </div>
+             <div className="flex justify-between items-center bg-orange-50/40 dark:bg-orange-500/5 px-3 py-2 rounded-xl border border-orange-100/50 dark:border-orange-500/10">
+                <div className="flex items-center gap-2">
+                  <Zap size={12} className="text-amber-500" />
                   <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Moy. Shorts</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">{formatDuration(analytics?.avgShortDurationSec)}</span>
+                <span className="text-sm font-bold text-gray-900 dark:text-white">{formatDuration(avgShortDurationSec)}</span>
              </div>
-             <div className="flex justify-between items-center bg-orange-50/40 dark:bg-orange-500/5 px-3 py-2.5 rounded-xl border border-orange-100/50 dark:border-orange-500/10">
+             <div className="flex justify-between items-center bg-orange-50/40 dark:bg-orange-500/5 px-3 py-2 rounded-xl border border-orange-100/50 dark:border-orange-500/10">
                 <div className="flex items-center gap-2">
-                  <Radio size={12} className="text-orange-500" />
-                  <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Moy. Directs</span>
+                  <Radio size={12} className="text-rose-500" />
+                  <span className="text-[11px] font-bold text-gray-600 dark:text-gray-300 uppercase tracking-wide">Moy. Lives</span>
                 </div>
-                <span className="text-sm font-bold text-gray-900 dark:text-white">{formatDuration(avgDirectDurationSec)}</span>
-             </div>
-             <div className="flex items-center justify-between px-3 mt-1">
-               <div className="flex items-center gap-1.5">
-                 <Award size={14} className="text-yellow-500 flex-shrink-0" />
-                 <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Idéal</span>
-               </div>
-               <span className="text-[11px] font-bold text-yellow-600 dark:text-yellow-500 bg-yellow-50 dark:bg-yellow-500/10 px-2 py-1 rounded-md">
-                 {formatDuration(analytics?.avgShortDurationSec)} <span className="opacity-50">(S)</span> 
-                 <span className="mx-1 font-normal opacity-30">|</span> 
-                 {formatDuration(analytics?.avgVideoDurationSec)} <span className="opacity-50">(V)</span>
-               </span>
+                <span className="text-sm font-bold text-rose-500 dark:text-rose-400">{formatDuration(avgDirectDurationSec)}</span>
              </div>
           </div>
         </div>
@@ -273,7 +366,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-pink-50/40 dark:bg-pink-500/5 p-2.5 rounded-xl border border-pink-100/50 dark:border-pink-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Play size={12} className="text-pink-500" />
+                  <Play size={12} className="text-blue-500" />
                 </div>
                 <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Vidéos</span>
               </div>
@@ -282,7 +375,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-pink-50/40 dark:bg-pink-500/5 p-2.5 rounded-xl border border-pink-100/50 dark:border-pink-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Zap size={12} className="text-pink-500" />
+                  <Zap size={12} className="text-amber-500" />
                 </div>
                 <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Shorts</span>
               </div>
@@ -291,9 +384,9 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             <div className="flex justify-between items-center bg-pink-50/40 dark:bg-pink-500/5 p-2.5 rounded-xl border border-pink-100/50 dark:border-pink-500/10">
               <div className="flex items-center gap-2">
                 <div className="w-6 h-6 rounded-lg bg-white dark:bg-gray-800 flex items-center justify-center shadow-sm">
-                  <Radio size={12} className="text-pink-500" />
+                  <Radio size={12} className="text-rose-500" />
                 </div>
-                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Directs</span>
+                <span className="text-[11px] text-gray-600 dark:text-gray-300 uppercase font-bold tracking-wide">Lives</span>
               </div>
               <span className="text-sm font-bold text-gray-900 dark:text-white">{formatNumber(directLikes)}</span>
             </div>
@@ -314,25 +407,19 @@ export const KpiCards = ({ channel, videos, analytics }) => {
             </div>
             <div className="relative">
               <button 
-                onMouseEnter={() => setShowEngagementTooltip('engagement')}
-                onMouseLeave={() => setShowEngagementTooltip(null)}
+                onMouseEnter={() => setShowTooltip('engagement')}
+                onMouseLeave={() => setShowTooltip(null)}
                 className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
               >
                 <Info size={18} />
               </button>
-              {showEngagementTooltip === 'engagement' && (
+              {showTooltip === 'engagement' && (
                 <div className="absolute top-full right-0 mt-2 w-64 bg-gray-900 dark:bg-gray-800 text-white p-4 rounded-2xl text-xs z-50 shadow-xl border border-gray-700">
                   <p className="font-semibold mb-2">Calcul de l'engagement</p>
                   <p className="mb-2 text-gray-300 leading-relaxed">Mesure la proportion de personnes interagissant par rapport au nombre de vues.</p>
                   <div className="bg-black/30 p-2 rounded-lg font-mono text-[10px] mb-2 text-center text-green-400">
                     (Likes + Comms) / Vues × 100
                   </div>
-                  <ul className="space-y-1 text-gray-400 mt-3 border-t border-gray-700 pt-2">
-                    <li><span className="text-red-400">{"< 1%"}</span> : Faible</li>
-                    <li><span className="text-yellow-400">{"1-3%"}</span> : Correct</li>
-                    <li><span className="text-green-400">{"3-6%"}</span> : Bon</li>
-                    <li><span className="text-blue-400">{"> 6%"}</span> : Excellent</li>
-                  </ul>
                 </div>
               )}
             </div>
@@ -358,4 +445,3 @@ export const KpiCards = ({ channel, videos, analytics }) => {
     </div>
   );
 };
-

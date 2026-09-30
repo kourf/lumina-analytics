@@ -7,9 +7,13 @@ export const OptimizationOpps = ({ videos }) => {
 
   if (!videos || videos.length === 0) return null;
 
-  const classicVideos = videos.filter(v => v.type === 'Vidéo' || v.type === 'Video').slice(0, 3);
-  const shortVideos = videos.filter(v => v.type === 'Short').slice(0, 3);
-  const directVideos = videos.filter(v => v.type === 'Direct').slice(0, 3);
+  const isLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.isLiveNow;
+  const isShort = (v) => v.type === 'Short';
+  const isClassic = (v) => (v.type === 'Vidéo' || v.type === 'Video') && !isLive(v);
+
+  const classicVideos = videos.filter(isClassic).slice(0, 3);
+  const shortVideos = videos.filter(isShort).slice(0, 3);
+  const directVideos = videos.filter(isLive).slice(0, 3);
 
   const displayedVideos = activeTab === 'videos' ? classicVideos : activeTab === 'shorts' ? shortVideos : directVideos;
 
@@ -24,8 +28,8 @@ export const OptimizationOpps = ({ videos }) => {
             <Target size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Contenus à surveiller</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Vidéos nécessitant une optimisation</p>
+            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Contenus à optimiser</h3>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Opportunités de relance d'audience</p>
           </div>
         </div>
 
@@ -38,7 +42,7 @@ export const OptimizationOpps = ({ videos }) => {
                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
-            Vidéos
+            Vidéos ({classicVideos.length})
           </button>
           <button
             onClick={() => setActiveTab('shorts')}
@@ -48,7 +52,7 @@ export const OptimizationOpps = ({ videos }) => {
                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
-            Shorts
+            Shorts ({shortVideos.length})
           </button>
           <button
             onClick={() => setActiveTab('directs')}
@@ -58,7 +62,7 @@ export const OptimizationOpps = ({ videos }) => {
                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
-            Directs
+            Lives ({directVideos.length})
           </button>
         </div>
       </div>
@@ -82,7 +86,7 @@ export const OptimizationOpps = ({ videos }) => {
       <div className="flex flex-col gap-4 flex-1 relative z-10">
         {displayedVideos.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-sm text-gray-400 py-4">
-            Aucun {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Direct' : 'vidéo'} à surveiller.
+            Aucun {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Live' : 'vidéo'} à surveiller.
           </div>
         ) : (
           displayedVideos.map((video) => (
@@ -98,16 +102,22 @@ export const OptimizationOpps = ({ videos }) => {
               </div>
               <div className="flex flex-col justify-center py-0.5 flex-1">
                 <div className="flex items-start gap-2 mb-1">
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex-shrink-0 ${activeTab === 'shorts' ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400' : activeTab === 'directs' ? 'bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400'}`}>
-                    {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Direct' : 'Vidéo'}
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0 ${
+                    activeTab === 'shorts' 
+                      ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20' 
+                      : activeTab === 'directs' 
+                        ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 border border-rose-500/20' 
+                        : 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20'
+                  }`}>
+                    {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Live' : 'Vidéo'}
                   </span>
                 </div>
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
                   {video.title}
                 </h4>
                 <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  <span className="flex items-center gap-1">
-                    <PlayCircle size={12} /> {video.views.toLocaleString('fr-FR')} vues
+                  <span className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
+                    <PlayCircle size={12} className="text-gray-400" /> {video.views.toLocaleString('fr-FR')} vues
                   </span>
                 </div>
               </div>

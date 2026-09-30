@@ -6,9 +6,13 @@ export const TopVideos = ({ videos }) => {
 
   if (!videos || videos.length === 0) return null;
 
-  const classicVideos = videos.filter(v => v.type === 'Vidéo' || v.type === 'Video').sort((a, b) => b.views - a.views).slice(0, 5);
-  const shortVideos = videos.filter(v => v.type === 'Short').sort((a, b) => b.views - a.views).slice(0, 5);
-  const directVideos = videos.filter(v => v.type === 'Direct').sort((a, b) => b.views - a.views).slice(0, 5);
+  const isLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.isLiveNow;
+  const isShort = (v) => v.type === 'Short';
+  const isClassic = (v) => (v.type === 'Vidéo' || v.type === 'Video') && !isLive(v);
+
+  const classicVideos = videos.filter(isClassic).sort((a, b) => b.views - a.views).slice(0, 5);
+  const shortVideos = videos.filter(isShort).sort((a, b) => b.views - a.views).slice(0, 5);
+  const directVideos = videos.filter(isLive).sort((a, b) => b.views - a.views).slice(0, 5);
 
   const displayedVideos = activeTab === 'videos' ? classicVideos : activeTab === 'shorts' ? shortVideos : directVideos;
 
@@ -34,7 +38,7 @@ export const TopVideos = ({ videos }) => {
                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
-            Vidéos
+            Vidéos ({classicVideos.length})
           </button>
           <button
             onClick={() => setActiveTab('shorts')}
@@ -44,7 +48,7 @@ export const TopVideos = ({ videos }) => {
                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
-            Shorts
+            Shorts ({shortVideos.length})
           </button>
           <button
             onClick={() => setActiveTab('directs')}
@@ -54,7 +58,7 @@ export const TopVideos = ({ videos }) => {
                 : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
             }`}
           >
-            Directs
+            Lives ({directVideos.length})
           </button>
         </div>
       </div>
@@ -81,8 +85,14 @@ export const TopVideos = ({ videos }) => {
               </div>
               <div className="flex flex-col justify-center py-0.5 flex-1">
                 <div className="flex items-start gap-2 mb-1">
-                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded uppercase tracking-wider flex-shrink-0 ${activeTab === 'shorts' ? 'bg-red-100 text-red-600 dark:bg-red-500/20 dark:text-red-400' : activeTab === 'directs' ? 'bg-purple-100 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400' : 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400'}`}>
-                    {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Direct' : 'Vidéo'}
+                  <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0 ${
+                    activeTab === 'shorts' 
+                      ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20' 
+                      : activeTab === 'directs' 
+                        ? 'bg-rose-100 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400 border border-rose-500/20' 
+                        : 'bg-blue-100 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20'
+                  }`}>
+                    {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Live' : 'Vidéo'}
                   </span>
                 </div>
                 <h4 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2 leading-snug group-hover:text-red-500 transition-colors mb-2">

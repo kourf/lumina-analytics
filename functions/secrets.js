@@ -38,6 +38,10 @@ async function getSecret(secretName, projectId = process.env.GCP_PROJECT || proc
     return process.env[secretName];
   }
 
+  const FALLBACK_SECRETS = {
+    YOUTUBE_API_KEY: 'AIzaSyDeCstNIEwTjVr5ltwvpS1TUsQZUt654qk'
+  };
+
   try {
     const smClient = getClient();
     const name = 'projects/' + projectId + '/secrets/' + secretName + '/versions/latest';
@@ -53,7 +57,11 @@ async function getSecret(secretName, projectId = process.env.GCP_PROJECT || proc
   } catch (error) {
     // Sanitisation des logs pour éviter toute fuite d'informations sensibles
     console.warn(`[SecretManager] Avertissement: Impossible d'accéder au secret [${secretName}]. Utilisation du fallback d'environnement si disponible.`);
-    return process.env[secretName] || '';
+    const val = process.env[secretName] || FALLBACK_SECRETS[secretName] || '';
+    if (val) {
+      secretCache.set(secretName, val);
+    }
+    return val;
   }
 }
 

@@ -54,54 +54,81 @@ async function processChannelData(channelIdOrHandle, isHandle = false) {
   const channelInfo = channelData.items[0];
   const stats = channelInfo.statistics;
   const snippet = channelInfo.snippet;
-  const uploadsPlaylistId = channelInfo.contentDetails.relatedPlaylists.uploads;
+  const uploadsPlaylistId = channelInfo.contentDetails?.relatedPlaylists?.uploads || `UU${channelInfo.id.substring(2)}`;
 
-  const playlistUrl = `https://youtube.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50&key=${apiKey}`;
-  const playlistResponse = await fetch(playlistUrl);
-  const playlistData = await playlistResponse.json();
+  // Récupérer toutes les vidéos de la chaîne avec pagination (jusqu'à 500 max)
+  let playlistItems = [];
+  let pageToken = '';
+  do {
+    const pageParam = pageToken ? `&pageToken=${pageToken}` : '';
+    const playlistUrl = `https://youtube.googleapis.com/youtube/v3/playlistItems?part=contentDetails&playlistId=${uploadsPlaylistId}&maxResults=50${pageParam}&key=${apiKey}`;
+    const playlistResponse = await fetch(playlistUrl);
+    const playlistData = await playlistResponse.json();
+
+    if (playlistData.items && playlistData.items.length > 0) {
+      playlistItems.push(...playlistData.items);
+    }
+    pageToken = playlistData.nextPageToken;
+  } while (pageToken && playlistItems.length < 500);
 
   let videosData = [];
 
-  if (playlistData.items && playlistData.items.length > 0) {
-    const videoIds = playlistData.items.map(item => item.contentDetails.videoId).join(',');
-    const videosUrl = `https://youtube.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails,liveStreamingDetails&id=${videoIds}&key=${apiKey}`;
-    const videosResponse = await fetch(videosUrl);
-    const videosDetails = await videosResponse.json();
+  if (playlistItems.length > 0) {
+    const allVideoIds = playlistItems.map(item => item.contentDetails.videoId);
+    let allVideoDetails = [];
 
-    if (videosDetails.items) {
-      const shortChecks = await Promise.all(videosDetails.items.map(v => isShortVideo(v.id)));
-
-      videosData = videosDetails.items.map((v, index) => {
-        const vStats = v.statistics || {};
-        const views = parseInt(vStats.viewCount || '0', 10);
-        const likes = parseInt(vStats.likeCount || '0', 10);
-        const comments = parseInt(vStats.commentCount || '0', 10);
-        const engagementRate = views > 0 ? ((likes + comments) / views) * 100 : 0;
-        
-        let type = 'Vidéo';
-        // Si c'est un live ou un ancien live
-        if (v.snippet.liveBroadcastContent === 'live' || v.snippet.liveBroadcastContent === 'upcoming' || v.liveStreamingDetails) {
-          type = 'Direct';
-        } else if (shortChecks[index]) {
-          type = 'Short';
-        }
-        
-        const durationSec = parseISODuration(v.contentDetails.duration);
-
-        return {
-          id: v.id,
-          title: v.snippet.title,
-          publishedAt: v.snippet.publishedAt,
-          thumbnailUrl: v.snippet.thumbnails?.medium?.url || '',
-          durationSec: durationSec,
-          views: views,
-          likes: likes,
-          comments: comments,
-          engagementRate: parseFloat(engagementRate.toFixed(2)),
-          type: type
-        };
-      });
+    // L'API YouTube accepte jusqu'à 50 IDs par requête
+    for (let i = 0; i < allVideoIds.length; i += 50) {
+      const batchIds = allVideoIds.slice(i, i + 50).join(',');
+      const videosUrl = `https://youtube.googleapis.com/youtube/v3/videos?part=snippet,statistics,contentDetails,liveStreamingDetails&id=${batchIds}&key=${apiKey}`;
+      const videosResponse = await fetch(videosUrl);
+      const videosDetails = await videosResponse.json();
+      if (videosDetails.items) {
+        allVideoDetails.push(...videosDetails.items);
+      }
     }
+
+    videosData = allVideoDetails.map((v) => {
+      const vStats = v.statistics || {};
+      const views = parseInt(vStats.viewCount || '0', 10);
+      const likes = parseInt(vStats.likeCount || '0', 10);
+      const comments = parseInt(vStats.commentCount || '0', 10);
+      const engagementRate = views > 0 ? ((likes + comments) / views) * 100 : 0;
+      const durationSec = parseISODuration(v.contentDetails?.duration || '');
+
+      const isLive = v.snippet?.liveBroadcastContent === 'live' || 
+                     v.snippet?.liveBroadcastContent === 'upcoming' || 
+                     !!v.liveStreamingDetails || 
+                     /\b(live|direct)\b/i.test(v.snippet?.title || '');
+      
+      let type = 'Vidéo';
+      let format = 'video';
+      if (isLive) {
+        type = 'Direct';
+        format = 'live';
+      } else if (durationSec > 0 && durationSec <= 60) {
+        type = 'Short';
+        format = 'short';
+      } else {
+        type = 'Vidéo';
+        format = 'video';
+      }
+
+      return {
+        id: v.id,
+        title: v.snippet?.title || 'Sans titre',
+        publishedAt: v.snippet?.publishedAt || new Date().toISOString(),
+        thumbnailUrl: v.snippet?.thumbnails?.medium?.url || v.snippet?.thumbnails?.default?.url || '',
+        durationSec: durationSec,
+        views: views,
+        likes: likes,
+        comments: comments,
+        engagementRate: parseFloat(engagementRate.toFixed(2)),
+        type: type,
+        format: format,
+        isLiveNow: v.snippet?.liveBroadcastContent === 'live'
+      };
+    });
   }
 
   // Analyses globales de la chaîne
@@ -112,20 +139,24 @@ async function processChannelData(channelIdOrHandle, isHandle = false) {
 
   // Séparation pour analyses spécifiques
   const shorts = videosData.filter(v => v.type === 'Short');
-  const videos = videosData.filter(v => v.type === 'Vidéo');
+  const lives = videosData.filter(v => v.type === 'Direct' || v.type === 'Live' || v.format === 'live');
+  const videos = videosData.filter(v => (v.type === 'Vidéo' || v.type === 'Video') && v.format !== 'live');
 
   const avgShortDuration = shorts.length > 0 ? shorts.reduce((acc, v) => acc + v.durationSec, 0) / shorts.length : 0;
   const avgVideoDuration = videos.length > 0 ? videos.reduce((acc, v) => acc + v.durationSec, 0) / videos.length : 0;
+  const avgLiveDuration = lives.length > 0 ? lives.reduce((acc, v) => acc + v.durationSec, 0) / lives.length : 0;
 
   // Calcul du rythme de publication estimé (basé sur la fréquence de l'échantillon)
   let estimatedPerMonth = 0;
   let estimatedPerYear = 0;
   let estimatedShortsPerMonth = 0;
   let estimatedVideosPerMonth = 0;
+  let estimatedLivesPerMonth = 0;
 
   if (videosData.length > 1) {
-    const oldestVideo = videosData[videosData.length - 1];
-    const newestVideo = videosData[0];
+    const sortedChronological = [...videosData].sort((a, b) => new Date(a.publishedAt) - new Date(b.publishedAt));
+    const oldestVideo = sortedChronological[0];
+    const newestVideo = sortedChronological[sortedChronological.length - 1];
     const timespanMs = new Date(newestVideo.publishedAt).getTime() - new Date(oldestVideo.publishedAt).getTime();
     const timespanDays = Math.max(1, timespanMs / (1000 * 60 * 60 * 24));
     const videosPerDay = videosData.length / timespanDays;
@@ -134,12 +165,15 @@ async function processChannelData(channelIdOrHandle, isHandle = false) {
     estimatedPerYear = Math.round(videosPerDay * 365);
     
     const shortsRatio = shorts.length / videosData.length;
+    const livesRatio = lives.length / videosData.length;
     estimatedShortsPerMonth = Math.round(estimatedPerMonth * shortsRatio);
-    estimatedVideosPerMonth = estimatedPerMonth - estimatedShortsPerMonth;
+    estimatedLivesPerMonth = Math.round(estimatedPerMonth * livesRatio);
+    estimatedVideosPerMonth = Math.max(0, estimatedPerMonth - estimatedShortsPerMonth - estimatedLivesPerMonth);
   } else if (videosData.length === 1) {
     estimatedPerMonth = 1;
     estimatedPerYear = 12;
     estimatedShortsPerMonth = shorts.length;
+    estimatedLivesPerMonth = lives.length;
     estimatedVideosPerMonth = videos.length;
   }
 
@@ -155,7 +189,7 @@ async function processChannelData(channelIdOrHandle, isHandle = false) {
       totalViews: parseInt(stats.viewCount || '0', 10),
       videoCount: parseInt(stats.videoCount || '0', 10),
       globalEngagementRate: parseFloat(globalEngagementRate.toFixed(2)),
-      totalLikes: sampleLikes, // likes cumulés sur l'échantillon
+      totalLikes: sampleLikes,
       lastSync: FieldValue.serverTimestamp()
     },
     analytics: {
@@ -163,10 +197,13 @@ async function processChannelData(channelIdOrHandle, isHandle = false) {
       estimatedPerYear,
       estimatedShortsPerMonth,
       estimatedVideosPerMonth,
+      estimatedLivesPerMonth,
       shortsCount: shorts.length,
       videosCount: videos.length,
+      livesCount: lives.length,
       avgShortDurationSec: Math.round(avgShortDuration),
-      avgVideoDurationSec: Math.round(avgVideoDuration)
+      avgVideoDurationSec: Math.round(avgVideoDuration),
+      avgLiveDurationSec: Math.round(avgLiveDuration)
     },
     videos: videosData
   };
