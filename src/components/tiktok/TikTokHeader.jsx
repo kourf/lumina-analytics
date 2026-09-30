@@ -1,9 +1,9 @@
 import React from 'react';
-import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp } from 'lucide-react';
+import { ExternalLink, Users, Heart } from 'lucide-react';
 import { TikTokIcon } from '../SocialIcons';
 import { cn } from '../../lib/utils';
 
-export const TikTokHeader = ({ user, isLive, onRefresh }) => {
+export const TikTokHeader = ({ user, isLive }) => {
   const followersCount = user?.followers || 0;
   const likesCount = user?.likes || user?.totalLikes || 0;
   const displayName = user?.display_name || user?.username || 'Karam';
@@ -45,14 +45,6 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           }}
         />
 
-        {/* Badge Identité Officielle discret (Le statut Live est centralisé dans le Hub Live Unique) */}
-        <div className="absolute top-4 right-6 flex items-center gap-3">
-          <div className="flex items-center gap-2 bg-black/60 border border-white/10 backdrop-blur-md px-3.5 py-1.5 rounded-full text-slate-300">
-            <span className="w-2 h-2 rounded-full bg-[#25F4EE]"></span>
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-300 font-mono">Compte Certifié</span>
-          </div>
-        </div>
-
       </div>
 
       {/* Contenu Profil Inférieur */}
@@ -89,10 +81,6 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
               <h1 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight flex items-center gap-2">
                 {displayName}
               </h1>
-              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-[#FE2C55]/15 text-[#FE2C55] border border-[#FE2C55]/30">
-                <ShieldCheck size={13} className="text-[#FE2C55]" />
-                Créateur Certifié
-              </span>
             </div>
 
             <p className="text-sm font-medium text-gray-400 font-mono flex items-center justify-center md:justify-start gap-2">
@@ -102,29 +90,22 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
             </p>
 
             <div className="flex items-center justify-center md:justify-start gap-3 pt-2 text-xs font-semibold">
-              <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
+              <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3.5 py-1.5 rounded-xl text-gray-300">
                 <Users size={13} className="text-cyan-400" />
                 <span className="font-bold text-white font-mono">{new Intl.NumberFormat('fr-FR').format(followersCount)}</span>
                 <span className="text-gray-400 text-[11px]">Abonnés</span>
               </div>
 
-              <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
+              <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3.5 py-1.5 rounded-xl text-gray-300">
                 <Heart size={13} className="text-[#FE2C55]" />
                 <span className="font-bold text-[#FE2C55] font-mono">{new Intl.NumberFormat('fr-FR').format(likesCount)}</span>
                 <span className="text-gray-400 text-[11px]">Likes</span>
-              </div>
-
-              <div className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-3 py-1.5 rounded-xl text-gray-300">
-                <TrendingUp size={13} className="text-emerald-400" />
-                <span className="font-bold text-emerald-400 font-mono">{user?.engagementRate || "5.8%"}</span>
-                <span className="text-gray-400 text-[11px]">Engagement</span>
               </div>
             </div>
           </div>
         </div>
 
         <div className="shrink-0 flex flex-wrap items-center justify-center md:justify-end gap-3 pt-2 lg:pt-0">
-
           <a 
             href={user?.links?.tiktok || `https://tiktok.com/@${cleanUsername.replace('@', '')}`}
             target="_blank"
