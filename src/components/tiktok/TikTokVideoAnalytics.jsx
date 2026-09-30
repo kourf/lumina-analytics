@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon, Sparkles, Calendar } from 'lucide-react';
+import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon, Sparkles, Calendar, X } from 'lucide-react';
 
 export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], followers = 0 }) => {
   const [activeMetric, setActiveMetric] = useState('views');
   const [chartType, setChartType] = useState('bar');
+  const [mobileModal, setMobileModal] = useState(null);
 
   if (!recentVideos || recentVideos.length === 0 || followers === null || followers === 0) {
     return (
@@ -250,8 +251,26 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               Taux d'Engagement
             </div>
             <div className="relative group/tooltip cursor-help z-50">
-              <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors" />
-              <div className="absolute left-0 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMobileModal({
+                  title: "Taux d'Engagement",
+                  subtitle: "Qualité de l'audience",
+                  description: "Pourcentage de personnes ayant interagi avec vos vidéos par rapport au nombre de vues.",
+                  scale: [
+                    { label: "< 3%", text: "Faible", color: "text-red-400" },
+                    { label: "3% - 6%", text: "Bon", color: "text-yellow-400" },
+                    { label: "6% - 9%", text: "Excellent", color: "text-emerald-400" },
+                    { label: "> 9%", text: "Viral", color: "text-purple-400 font-semibold" }
+                  ],
+                  formula: "(Likes + Comms + Partages) / Vues * 100"
+                })}
+                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
+                aria-label="Information Taux d'Engagement"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              <div className="hidden md:block absolute right-0 lg:right-auto lg:left-0 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
                 <p className="font-bold text-white mb-1">Qualité de l'audience</p>
                 <p className="text-gray-300 mb-2">Pourcentage de personnes ayant interagi avec vos vidéos par rapport au nombre de vues.</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
@@ -284,8 +303,20 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Activity className="w-4 h-4 text-purple-600 dark:text-purple-400" /> Vues Médianes
             </div>
             <div className="relative group/tooltip cursor-help z-50">
-              <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-56 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMobileModal({
+                  title: "Vues Médianes",
+                  subtitle: "Plus réaliste",
+                  description: "Une seule vidéo virale peut fausser la moyenne. La médiane indique le score que vos vidéos atteignent 'normalement'.",
+                  formula: "50% font mieux, 50% font moins"
+                })}
+                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
+                aria-label="Information Vues Médianes"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              <div className="hidden md:block absolute right-0 sm:left-1/2 sm:-translate-x-1/2 bottom-full mb-2 w-56 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
                 <p className="font-bold text-white mb-1">Plus réaliste</p>
                 <p className="text-gray-300 mb-2">Une seule vidéo virale peut fausser la moyenne. La médiane indique le score que vos vidéos atteignent "normalement".</p>
                 <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-purple-600 dark:text-purple-400">
@@ -306,8 +337,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Taux de Reach
             </div>
             <div className="relative group/tooltip cursor-help z-50">
-              <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMobileModal({
+                  title: "Taux de Reach",
+                  subtitle: "Portée de l'Audience",
+                  description: "Proportion d'abonnés touchés par vos vidéos 'normales' (médianes).",
+                  scale: [
+                    { label: "< 10%", text: "Faible", color: "text-red-400" },
+                    { label: "10% - 25%", text: "Bon", color: "text-yellow-400" },
+                    { label: "> 25%", text: "Excellent", color: "text-purple-400 font-semibold" }
+                  ],
+                  formula: "(Vues Médianes / Abonnés) * 100"
+                })}
+                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
+                aria-label="Information Taux de Reach"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              <div className="hidden md:block absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
                 <p className="font-bold text-white mb-1">Portée de l'Audience</p>
                 <p className="text-gray-300 mb-2">Proportion d'abonnés touchés par vos vidéos "normales" (médianes).</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
@@ -333,8 +381,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Share2 className="w-4 h-4 text-[#10B981]" /> Taux Partage
             </div>
             <div className="relative group/tooltip cursor-help z-50">
-              <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute left-0 bottom-full mb-2 w-56 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMobileModal({
+                  title: "Taux Partage",
+                  subtitle: "Score de Viralité",
+                  description: "Le partage est le signal #1 pour l'algorithme (Pour Toi).",
+                  scale: [
+                    { label: "< 0.5%", text: "Faible", color: "text-red-400" },
+                    { label: "0.5% - 2%", text: "Bon", color: "text-yellow-400" },
+                    { label: "> 2%", text: "Viral", color: "text-purple-400 font-semibold" }
+                  ],
+                  formula: "(Partages / Vues) * 100"
+                })}
+                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
+                aria-label="Information Taux Partage"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              <div className="hidden md:block absolute right-0 lg:right-auto lg:left-0 bottom-full mb-2 w-56 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
                 <p className="font-bold text-white mb-1">Score de Viralité</p>
                 <p className="text-gray-300 mb-2">Le partage est le signal #1 pour l'algorithme (Pour Toi).</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
@@ -360,8 +425,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Globe className="w-4 h-4 text-orange-600 dark:text-orange-400" /> Viralité (Portée)
             </div>
             <div className="relative group/tooltip cursor-help z-50">
-              <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMobileModal({
+                  title: "Viralité (Portée)",
+                  subtitle: "Portée Organique",
+                  description: "Ce ratio montre à quel point l'algorithme te pousse au-delà de ton propre cercle. Ça prouve concrètement ta capacité à 'percer l'algorithme'. Un argument en or pour ton Agence.",
+                  scale: [
+                    { label: "< 5x", text: "Faible", color: "text-red-400" },
+                    { label: "5x - 20x", text: "Bon", color: "text-yellow-400" },
+                    { label: "> 20x", text: "Excellent", color: "text-purple-400 font-semibold" }
+                  ],
+                  formula: "Vues Totales / Abonnés"
+                })}
+                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
+                aria-label="Information Viralité (Portée)"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              <div className="hidden md:block absolute right-0 sm:left-1/2 sm:-translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
                 <p className="font-bold text-white mb-1">Portée Organique</p>
                 <p className="text-gray-300 mb-2">Ce ratio montre à quel point l'algorithme te pousse au-delà de ton propre cercle. Ça prouve concrètement ta capacité à "percer l'algorithme". Un argument en or pour ton Agence.</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
@@ -387,8 +469,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Conversion Abo
             </div>
             <div className="relative group/tooltip cursor-help z-50">
-              <Info className="w-4 h-4 text-gray-400 hover:text-slate-900 dark:hover:text-white" />
-              <div className="absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900 dark:bg-black border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[60] pointer-events-none">
+              <button
+                type="button"
+                onClick={() => setMobileModal({
+                  title: "Conversion Abo",
+                  subtitle: "Efficacité du Contenu",
+                  description: "C'est un indicateur d'efficacité de ton contenu. Tes vidéos font des vues, c'est bien. Est-ce qu'elles donnent envie de s'abonner ? Ça permet de tester des Call to Action à la fin de tes vidéos.",
+                  scale: [
+                    { label: "< 1%", text: "Faible", color: "text-red-400" },
+                    { label: "1% - 3%", text: "Moyen", color: "text-yellow-400" },
+                    { label: "> 3%", text: "Excellent", color: "text-purple-400 font-semibold" }
+                  ],
+                  formula: `Abonnés / Vues Totales (Soit 1 abo toutes les ${viewsPerSub} vues)`
+                })}
+                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
+                aria-label="Information Conversion Abo"
+              >
+                <Info className="w-4 h-4" />
+              </button>
+              <div className="hidden md:block absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
                 <p className="font-bold text-white mb-1">Efficacité du Contenu</p>
                 <p className="text-gray-300 mb-2">C'est un indicateur d'efficacité de ton contenu. Tes vidéos font des vues, c'est bien. Est-ce qu'elles donnent envie de s'abonner ? Ça permet de tester des Call to Action à la fin de tes vidéos.</p>
                 <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
@@ -559,6 +658,54 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
           </div>
         </div>
       </div>
+
+      {/* Modal Pédagogique Mobile pour Analyse Stratégique (100% visible sur smartphones) */}
+      {mobileModal && (
+        <div 
+          className="fixed inset-0 z-[9999] md:hidden flex items-end justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setMobileModal(null)}
+        >
+          <div 
+            className="w-full max-w-sm bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-2xl animate-in slide-in-from-bottom duration-200 text-left relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-3 pb-2.5 border-b border-white/10">
+              <div>
+                <span className="text-[10px] font-bold text-teal-400 uppercase tracking-wider block">{mobileModal.title}</span>
+                <h4 className="font-bold text-white text-sm">{mobileModal.subtitle}</h4>
+              </div>
+              <button 
+                onClick={() => setMobileModal(null)}
+                className="p-1 rounded-lg hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+                aria-label="Fermer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            
+            <p className="text-xs text-slate-300 leading-relaxed mb-3">
+              {mobileModal.description}
+            </p>
+
+            {mobileModal.scale && (
+              <div className="bg-black/50 rounded-lg p-2.5 mb-3 border border-white/5 space-y-1.5">
+                {mobileModal.scale.map((lvl, idx) => (
+                  <div key={idx} className="flex justify-between text-xs">
+                    <span className={lvl.color}>{lvl.label}</span>
+                    <span className="text-gray-400">{lvl.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {mobileModal.formula && (
+              <div className="bg-white/10 rounded-lg p-2 font-mono text-[11px] text-teal-300 text-center">
+                {mobileModal.formula}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
