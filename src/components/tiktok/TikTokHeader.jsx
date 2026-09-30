@@ -127,11 +127,11 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
           {onRefresh && (
             <button
               onClick={onRefresh}
-              className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/15 active:scale-95 text-gray-200 border border-white/10 transition-all shadow-md backdrop-blur-md group"
-              title="Actualiser les métriques en direct depuis TikTok"
+              className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/15 active:scale-95 text-gray-200 border border-white/10 transition-all shadow-md backdrop-blur-md group cursor-pointer"
+              title="Vérifier instantanément si un live est en cours sur le compte @karam.drame"
             >
               <RefreshCw size={14} className={cn("text-[#25F4EE] transition-transform duration-300", user?.isRefreshing ? "animate-spin" : "group-hover:rotate-180")} />
-              <span>{user?.isRefreshing ? "Actualisation..." : "Actualiser"}</span>
+              <span>{user?.isRefreshing ? "Vérification..." : "Vérifier le Live"}</span>
             </button>
           )}
 
