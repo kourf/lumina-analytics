@@ -1,10 +1,11 @@
 import React, { useState, useMemo } from 'react';
-import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
 import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon, Sparkles, Calendar, X } from 'lucide-react';
 
 export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], followers = 0 }) => {
   const [activeMetric, setActiveMetric] = useState('views');
   const [chartType, setChartType] = useState('bar');
+  const [monthlyChartType, setMonthlyChartType] = useState('bar');
   const [mobileModal, setMobileModal] = useState(null);
   const [hoveredCard, setHoveredCard] = useState(null);
 
@@ -166,20 +167,104 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
     };
   });
 
-  // Préparer les données pour les vidéos publiées par mois
-  const videosPerMonth = {};
-  recentVideos.forEach(video => {
-    if (video.date) {
-      const dateObj = new Date(video.date);
-      const monthStr = dateObj.toLocaleString('fr-FR', { month: 'short', year: '2-digit' });
-      videosPerMonth[monthStr] = (videosPerMonth[monthStr] || 0) + 1;
+  // Préparer les données pour les vidéos publiées par mois avec statistiques détaillées
+  const monthlyStats = useMemo(() => {
+    const monthMap = {};
+    
+    sortedChronologicalVideos.forEach(video => {
+      let d = null;
+      if (video.date) {
+        d = new Date(video.date);
+      } else if (video.create_time || video.timestamp) {
+        d = new Date((video.create_time || video.timestamp) * 1000);
+      }
+      
+      if (d && !isNaN(d.getTime())) {
+        const sortKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        const shortMonth = d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+        const rawFullMonth = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+        const fullMonth = rawFullMonth.charAt(0).toUpperCase() + rawFullMonth.slice(1);
+        
+        if (!monthMap[sortKey]) {
+          monthMap[sortKey] = {
+            sortKey,
+            month: shortMonth,
+            fullMonth,
+            count: 0,
+            views: 0
+          };
+        }
+        monthMap[sortKey].count += 1;
+        monthMap[sortKey].views += Number(video.views || 0);
+      }
+    });
+
+    const sorted = Object.values(monthMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    
+    let cumCount = 0;
+    const withCumulative = sorted.map(item => {
+      cumCount += item.count;
+      return {
+        ...item,
+        cumulativeCount: cumCount
+      };
+    });
+
+    const totalCount = withCumulative.reduce((acc, curr) => acc + curr.count, 0);
+    const avg = withCumulative.length > 0 ? (totalCount / withCumulative.length).toFixed(1) : '0';
+    const maxMonth = withCumulative.length > 0 ? [...withCumulative].sort((a, b) => b.count - a.count)[0] : null;
+    const latestMonth = withCumulative.length > 0 ? withCumulative[withCumulative.length - 1] : null;
+
+    return {
+      data: withCumulative,
+      average: avg,
+      record: maxMonth,
+      latest: latestMonth,
+      totalMonths: withCumulative.length,
+      totalVideos: totalCount
+    };
+  }, [sortedChronologicalVideos]);
+
+  const monthlyData = monthlyStats.data;
+
+  const MonthlyTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length) {
+      const itemData = payload[0].payload;
+      const count = itemData.count || 0;
+      const total = monthlyStats.totalVideos || 1;
+      const pct = Math.round((count / total) * 100);
+
+      return (
+        <div className="bg-[#111827]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/10 max-w-[260px] animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10">
+            <span className="text-xs font-bold text-emerald-400 capitalize">
+              {itemData.fullMonth || itemData.month}
+            </span>
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+              {count} {count > 1 ? 'vidéos' : 'vidéo'}
+            </span>
+          </div>
+          <div className="space-y-1.5 text-xs text-gray-300">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400">Part du catalogue :</span>
+              <span className="font-bold text-white">{pct}%</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-400">Cumul de vidéos :</span>
+              <span className="font-bold text-white">{itemData.cumulativeCount} / {total}</span>
+            </div>
+            {itemData.views > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400">Vues générées :</span>
+                <span className="font-bold text-[#25F4EE]">{new Intl.NumberFormat('fr-FR').format(itemData.views)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+      );
     }
-  });
-  
-  const monthlyData = Object.keys(videosPerMonth).map(key => ({
-    month: key,
-    count: videosPerMonth[key]
-  })).reverse();
+    return null;
+  };
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
@@ -783,29 +868,158 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         
         {/* Graphique Vidéos par Mois */}
         <div className="flex-1 bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-6 tracking-wide uppercase">Vidéos Publiées / Mois</h3>
-          <div className="h-[300px] w-full mt-auto">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide uppercase">
+                  Vidéos Publiées / Mois
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  {monthlyStats.totalMonths} mois analysés
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+                Volume de publication mensuel sur vos {monthlyStats.totalVideos} vidéos répertoriées
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
+                <button
+                  onClick={() => setMonthlyChartType('bar')}
+                  className={`p-1.5 rounded-md transition-all ${monthlyChartType === 'bar' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  title="Histogramme avec étiquettes"
+                >
+                  <BarChart2 className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setMonthlyChartType('line')}
+                  className={`p-1.5 rounded-md transition-all ${monthlyChartType === 'line' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  title="Courbe d'évolution"
+                >
+                  <TrendingUpIcon className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Encart Pédagogique Inspiré de Évolution des performances */}
+          <div className="mb-4 p-4 rounded-xl border transition-all duration-300 bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-white/10">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+              <div className="flex items-center gap-2">
+                <span className="px-2.5 py-0.5 text-xs font-bold rounded-full border bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30">
+                  Cadence de Publication
+                </span>
+                <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Régularité et volume mensuel
+                </h4>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5 text-emerald-500" /> Du 1er mois à aujourd'hui
+              </span>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-gray-300 leading-relaxed mb-2.5">
+              L'algorithme TikTok récompense la constance : poster régulièrement maintient votre présence dans les flux "Pour Toi", active votre communauté et capitalise sur vos anciennes vidéos toujours en circulation.
+            </p>
+            <div className="flex items-start sm:items-center gap-2 text-[11px] font-medium text-slate-700 dark:text-gray-300 bg-white dark:bg-black/30 p-2.5 rounded-lg border border-slate-200 dark:border-white/5">
+              <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5 sm:mt-0" />
+              <span>Chaque barre affiche directement le nombre exact de vidéos produites durant ce mois.</span>
+            </div>
+          </div>
+
+          {/* KPI Pills Récapitulatifs Mensuels */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
+            <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Moyenne</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-base font-extrabold text-slate-900 dark:text-white">{monthlyStats.average}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300">vid/mois</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Mois Record</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">{monthlyStats.record?.count || 0}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300 truncate">({monthlyStats.record?.month || '-'})</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Dernier Mois</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-base font-extrabold text-blue-600 dark:text-blue-400">{monthlyStats.latest?.count || 0}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300 truncate">({monthlyStats.latest?.month || '-'})</span>
+              </div>
+            </div>
+
+            <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
+              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Mois Actifs</span>
+              <div className="flex items-baseline gap-1 mt-0.5">
+                <span className="text-base font-extrabold text-purple-600 dark:text-purple-400">{monthlyStats.totalMonths}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300">mois</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="h-[280px] w-full mt-auto">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={monthlyData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
-                <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
-                <Tooltip 
-                  cursor={{fill: 'rgba(16, 185, 129, 0.05)'}}
-                  contentStyle={{ backgroundColor: '#111827', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '12px', color: '#fff' }}
-                  itemStyle={{ color: '#10B981', fontWeight: 'bold' }}
-                />
-                <Bar dataKey="count" name="Vidéos publiées" radius={[6, 6, 0, 0]}>
-                  {monthlyData.map((entry, index) => (
-                    <Cell key={`cell-month-${index}`} fill="url(#colorMonths)" />
-                  ))}
-                </Bar>
-                <defs>
-                  <linearGradient id="colorMonths" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10B981" stopOpacity={1}/>
-                    <stop offset="100%" stopColor="#10B981" stopOpacity={0.2}/>
-                  </linearGradient>
-                </defs>
-              </BarChart>
+              {monthlyChartType === 'bar' ? (
+                <BarChart data={monthlyStats.data} margin={{ top: 25, right: 10, left: 10, bottom: 0 }}>
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
+                  <Tooltip content={<MonthlyTooltip />} cursor={{fill: 'rgba(16, 185, 129, 0.05)'}} />
+                  <Bar dataKey="count" name="Vidéos publiées" radius={[6, 6, 0, 0]}>
+                    <LabelList 
+                      dataKey="count" 
+                      position="top" 
+                      fill="#10B981" 
+                      fontSize={12} 
+                      fontWeight="bold" 
+                      dy={-6} 
+                    />
+                    {monthlyStats.data.map((entry, index) => (
+                      <Cell key={`cell-month-${index}`} fill="url(#colorMonths)" />
+                    ))}
+                  </Bar>
+                  <defs>
+                    <linearGradient id="colorMonths" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor="#10B981" stopOpacity={1}/>
+                      <stop offset="100%" stopColor="#10B981" stopOpacity={0.25}/>
+                    </linearGradient>
+                  </defs>
+                </BarChart>
+              ) : (
+                <LineChart data={monthlyStats.data} margin={{ top: 25, right: 10, left: 10, bottom: 0 }}>
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
+                  <Tooltip content={<MonthlyTooltip />} />
+                  <Line 
+                    type="monotone" 
+                    dataKey="count" 
+                    stroke="#10B981" 
+                    strokeWidth={3} 
+                    dot={{r: 4, fill: '#111827', stroke: '#10B981', strokeWidth: 2}} 
+                    activeDot={{r: 6, fill: '#10B981'}}
+                  >
+                    <LabelList 
+                      dataKey="count" 
+                      position="top" 
+                      fill="#10B981" 
+                      fontSize={11} 
+                      fontWeight="bold" 
+                      dy={-8} 
+                    />
+                  </Line>
+                </LineChart>
+              )}
             </ResponsiveContainer>
+          </div>
+
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px] text-slate-600 dark:text-gray-400">
+            <span>Ordre chronologique : {monthlyStats.data[0]?.month || 'Début'}</span>
+            <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+              Total : {monthlyStats.totalVideos} vidéos publiées
+            </span>
+            <span>{monthlyStats.data[monthlyStats.data.length - 1]?.month || 'Aujourd\'hui'}</span>
           </div>
         </div>
       </div>
