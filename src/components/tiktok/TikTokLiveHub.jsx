@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Radio, Users, Heart, Sparkles, MessageSquare,
-  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, Trash2, X
+  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, Trash2, X, Crown, UserCheck, Flame
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTikTokLiveSocket } from '../../hooks/useTikTokLiveSocket';
@@ -17,6 +17,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const [loadingArchives, setLoadingArchives] = useState(false);
   const [isQuickPreviewOpen, setIsQuickPreviewOpen] = useState(false);
   const [isArchivesModalOpen, setIsArchivesModalOpen] = useState(false);
+  const [activeAiTab, setActiveAiTab] = useState('questions'); // 'questions' | 'topViewers' | 'chat'
   const [liveDurationTicker, setLiveDurationTicker] = useState('00:00:00');
 
   // Compteur dynamique en temps réel chaque seconde
@@ -98,8 +99,11 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const commentsCount = isLive ? (socket.isSocketConnected ? socket.metrics.comments : (propLiveData?.comments || 0)) : 0;
   const newFollowers = isLive ? (socket.isSocketConnected ? socket.metrics.followers : (propLiveData?.newFollowers || 0)) : 0;
   const shares = isLive ? (socket.isSocketConnected ? socket.metrics.shares : (propLiveData?.shares || 0)) : 0;
-  const topQuestions = isLive ? (socket.isSocketConnected ? (socket.metrics.topQuestions || []) : (propLiveData?.topQuestions || [])) : [];
-  const topContributor = isLive ? (socket.isSocketConnected ? socket.metrics.topContributor : (propLiveData?.topContributor || null)) : null;
+  
+  // Analyse sémantique des questions & TOP 5 spectateurs les plus actifs
+  const topQuestions = propLiveData?.topQuestions || (socket.isSocketConnected ? socket.metrics?.topQuestions : []) || [];
+  const topCommenters = propLiveData?.topCommenters || (socket.isSocketConnected ? socket.metrics?.topContributors : []) || [];
+  const recentComments = propLiveData?.recentComments || (socket.isSocketConnected ? socket.chatMessages : []) || [];
   const liveTimeline = isLive ? (socket.isSocketConnected ? socket.liveTimeline : (propLiveData?.liveTimeline || [])) : [];
 
   const displayTimeline = liveTimeline.length > 0 ? liveTimeline : Array.from({ length: 90 }, (_, i) => ({
@@ -294,31 +298,192 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         </div>
       </div>
 
-      {/* AI Intelligence & Chat */}
-      <div className="bg-[#131825] border border-white/5 rounded-2xl p-4 mb-6 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 relative z-10">
-        <div className="flex items-center gap-4">
-          <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
-            <Sparkles className="w-5 h-5 text-purple-400" />
+      {/* AI Intelligence & Chat Analysis (Questions fréquentes & TOP 5 Spectateurs) */}
+      <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 mb-6 relative z-10">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
+              <Sparkles className="w-5 h-5 text-purple-400" />
+            </div>
+            <div>
+              <h3 className="font-bold text-white text-base flex items-center gap-2">
+                Intelligence Audience & Tchat
+                <span className="bg-purple-500/20 text-purple-300 text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-purple-500/30">Gemini Flash - Free Tier</span>
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">Synthèse IA des questions posées et classement des spectateurs les plus fidèles.</p>
+            </div>
           </div>
-          <div>
-            <h3 className="font-bold text-white text-sm flex items-center gap-2">
-              Intelligence Audience & Tchat
-              <span className="bg-purple-500/20 text-purple-300 text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-purple-500/30">Gemini Flash - Free Tier</span>
-            </h3>
-            <p className="text-xs text-slate-400 mt-0.5">Synthèse IA des questions posées et identification des spectateurs les plus actifs.</p>
+          
+          <div className="flex items-center gap-2">
+            <button 
+              onClick={() => setActiveAiTab('questions')}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer",
+                activeAiTab === 'questions'
+                  ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.4)]"
+                  : "bg-slate-800/60 text-slate-300 hover:text-white border border-white/5"
+              )}
+            >
+              <Clock className="w-4 h-4" /> Questions Clés IA ({topQuestions.length})
+            </button>
+            <button 
+              onClick={() => setActiveAiTab('topViewers')}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer",
+                activeAiTab === 'topViewers'
+                  ? "bg-amber-500 text-slate-950 font-black shadow-[0_0_15px_rgba(245,158,11,0.4)]"
+                  : "bg-slate-800/60 text-slate-300 hover:text-white border border-white/5"
+              )}
+            >
+              <Crown className="w-4 h-4 text-amber-400" /> Top 5 Actifs
+            </button>
+            <button 
+              onClick={() => setActiveAiTab('chat')}
+              className={cn(
+                "px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer",
+                activeAiTab === 'chat'
+                  ? "bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]"
+                  : "bg-slate-800/60 text-slate-300 hover:text-white border border-white/5"
+              )}
+            >
+              <MessageSquare className="w-4 h-4" /> Flux du tchat
+            </button>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <button className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 transition-colors cursor-pointer">
-            <Clock className="w-4 h-4" /> Questions Clés IA <ChevronDown className="w-4 h-4" />
-          </button>
-          <button className="text-slate-300 hover:text-white px-4 py-2 border border-white/10 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer">
-            <Award className="w-4 h-4 text-amber-400" /> Top 3 Actifs
-          </button>
-          <button className="text-slate-300 hover:text-white px-4 py-2 border border-white/10 rounded-xl text-sm font-medium flex items-center gap-2 transition-colors cursor-pointer">
-            <MessageSquare className="w-4 h-4" /> Flux du tchat
-          </button>
-        </div>
+
+        {/* CONTENU ONGLET 1 : QUESTIONS ET DEMANDES FRÉQUENTES */}
+        {activeAiTab === 'questions' && (
+          <div className="animate-fade-in space-y-3">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+              <span>Questions & Demandes récurrentes détectées par l'algorithme :</span>
+              <span className="text-purple-400 font-mono">Total analysé : {commentsCount} commentaires</span>
+            </div>
+            {topQuestions.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {topQuestions.map((q, idx) => {
+                  const qText = typeof q === 'string' ? q : (q.original || q.text || q.question || 'Question inconnue');
+                  const count = typeof q === 'object' ? (q.count || 1) : 1;
+                  const asker = typeof q === 'object' && q.lastAskedBy ? q.lastAskedBy : 'Spectateur';
+                  return (
+                    <div key={idx} className="bg-slate-900/60 border border-white/5 hover:border-purple-500/30 rounded-xl p-3.5 flex items-start justify-between gap-3 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-slate-200 font-medium truncate">"{qText}"</p>
+                        <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
+                          <UserCheck className="w-3 h-3 text-purple-400" />
+                          Dernière fois par : <span className="text-slate-300 font-medium">@{asker}</span>
+                        </p>
+                      </div>
+                      <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-full text-xs font-mono font-bold shrink-0">
+                        x{count}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
+                <Sparkles className="w-8 h-8 text-purple-400 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-medium text-slate-300">En attente de questions des spectateurs...</p>
+                <p className="text-xs text-slate-500 mt-1">Dès que vos viewers posent des questions ou font des demandes répétées, elles seront synthétisées ici avec leur compteur.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CONTENU ONGLET 2 : TOP 5 SPECTATEURS LES PLUS ACTIFS */}
+        {activeAiTab === 'topViewers' && (
+          <div className="animate-fade-in space-y-3">
+            <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
+              <span>Classement des pseudos ayant envoyé le plus de messages :</span>
+              <span className="text-amber-400 font-semibold flex items-center gap-1">
+                <Flame className="w-3.5 h-3.5 text-amber-400" /> Suivi Fidélité
+              </span>
+            </div>
+
+            {topCommenters.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                {topCommenters.slice(0, 5).map((user, idx) => (
+                  <div 
+                    key={idx} 
+                    className={cn(
+                      "bg-slate-900/60 border rounded-2xl p-4 flex flex-col justify-between transition-all relative overflow-hidden group",
+                      idx === 0 
+                        ? "border-amber-500/40 bg-gradient-to-b from-amber-500/10 to-slate-900/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]" 
+                        : idx === 1 
+                        ? "border-slate-400/30 bg-gradient-to-b from-slate-400/5 to-slate-900/60" 
+                        : idx === 2 
+                        ? "border-amber-700/30 bg-gradient-to-b from-amber-800/5 to-slate-900/60" 
+                        : "border-white/5"
+                    )}
+                  >
+                    <div>
+                      <div className="flex items-center justify-between mb-3">
+                        <span className={cn(
+                          "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black",
+                          idx === 0 ? "bg-amber-400 text-slate-950 font-black shadow-md" :
+                          idx === 1 ? "bg-slate-300 text-slate-950" :
+                          idx === 2 ? "bg-amber-700 text-white" :
+                          "bg-slate-800 text-slate-400"
+                        )}>
+                          #{idx + 1}
+                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                          {user.badge || `Top ${idx + 1}`}
+                        </span>
+                      </div>
+
+                      <div className="font-black text-white text-base truncate mb-1" title={user.nickname || user.name}>
+                        @{user.nickname || user.name || 'Spectateur'}
+                      </div>
+                      
+                      <div className="text-2xl font-black text-amber-400 font-mono mb-2">
+                        {user.count || user.comments || 0}
+                        <span className="text-xs font-medium text-slate-400 ml-1">msgs</span>
+                      </div>
+                    </div>
+
+                    {user.lastComment && (
+                      <div className="text-[11px] text-slate-400 bg-black/30 p-2 rounded-lg truncate italic border border-white/5">
+                        "{user.lastComment}"
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
+                <Crown className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-medium text-slate-300">Aucun message de spectateur pour l'instant</p>
+                <p className="text-xs text-slate-500 mt-1">Dès que le stream commencera, le top 5 des pseudos les plus actifs sera généré en direct.</p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* CONTENU ONGLET 3 : FLUX DU TCHAT */}
+        {activeAiTab === 'chat' && (
+          <div className="animate-fade-in space-y-2">
+            <div className="text-xs text-slate-400 mb-2">Derniers messages du chat en direct :</div>
+            {recentComments.length > 0 ? (
+              <div className="max-h-[220px] overflow-y-auto space-y-2 pr-2">
+                {recentComments.slice(0, 20).map((msg, i) => (
+                  <div key={i} className="bg-slate-900/50 border border-white/5 rounded-lg p-2.5 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 truncate">
+                      <span className="text-[#FE2C55] font-bold">@{msg.nickname || 'Spectateur'}:</span>
+                      <span className="text-slate-300 truncate">{msg.comment || msg.content || ''}</span>
+                    </div>
+                    {msg.time && <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">{msg.time}</span>}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
+                <MessageSquare className="w-8 h-8 text-blue-400 mx-auto mb-2 opacity-50" />
+                <p className="text-sm font-medium text-slate-300">En attente de messages dans le tchat...</p>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* History & Archives Bar */}
@@ -394,7 +559,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                 <h2 className="text-2xl font-black text-white flex items-center gap-2">
                   Archives des Sessions TikTok Live
                 </h2>
-                <p className="text-sm text-slate-400 mt-1">Historique complet de toutes vos diffusions en direct</p>
+                <p className="text-sm text-slate-400 mt-1">Historique complet de toutes vos diffusions en direct avec suivi des meilleurs viewers</p>
               </div>
               <button 
                 onClick={() => setIsArchivesModalOpen(false)}
@@ -407,29 +572,45 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             {archives.length > 0 ? (
               <div className="space-y-4">
                 {archives.map((arch, index) => (
-                  <div key={arch.id || index} className="bg-[#141A29] border border-white/5 rounded-2xl p-5 hover:border-[#FE2C55]/30 transition-all flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                    <div>
-                      <div className="text-sm font-bold text-white mb-1">
-                        Session du {formatArchiveDate(arch.startedAt || arch.started_at)}
+                  <div key={arch.id || index} className="bg-[#141A29] border border-white/5 rounded-2xl p-5 hover:border-[#FE2C55]/30 transition-all flex flex-col gap-4">
+                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                      <div>
+                        <div className="text-sm font-bold text-white mb-1">
+                          Session du {formatArchiveDate(arch.startedAt || arch.started_at)}
+                        </div>
+                        <div className="text-xs text-slate-400 font-mono">
+                          ID: {arch.id || 'N/A'} • {arch.durationStr || 'Durée non spécifiée'}
+                        </div>
                       </div>
-                      <div className="text-xs text-slate-400 font-mono">
-                        ID: {arch.id || 'N/A'} • {arch.durationStr || 'Durée non spécifiée'}
+                      <div className="flex items-center gap-6 text-sm">
+                        <div className="text-center">
+                          <div className="text-xs text-slate-400">Pic Vues</div>
+                          <div className="text-white font-bold">{formatNumber(arch.peakViewers || arch.views || 0)}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-slate-400">Likes</div>
+                          <div className="text-[#FE2C55] font-bold">{formatNumber(arch.likes || 0)}</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-xs text-slate-400">Nv. Abos</div>
+                          <div className="text-emerald-400 font-bold">+{formatNumber(arch.newFollowers || arch.followers || 0)}</div>
+                        </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-6 text-sm">
-                      <div className="text-center">
-                        <div className="text-xs text-slate-400">Pic Vues</div>
-                        <div className="text-white font-bold">{formatNumber(arch.peakViewers || arch.views || 0)}</div>
+
+                    {/* TOP Viewers sauvegardés pour cette archive */}
+                    {Array.isArray(arch.topCommenters) && arch.topCommenters.length > 0 && (
+                      <div className="pt-3 border-t border-white/5 flex items-center gap-2 overflow-x-auto text-xs">
+                        <span className="text-amber-400 font-bold shrink-0 flex items-center gap-1">
+                          <Crown className="w-3.5 h-3.5" /> Top Viewers :
+                        </span>
+                        {arch.topCommenters.slice(0, 5).map((u, i) => (
+                          <span key={i} className="bg-slate-900 border border-white/10 px-2.5 py-1 rounded-lg text-slate-300 shrink-0">
+                            #{i+1} @{u.nickname || u.name} ({u.count || u.comments} msgs)
+                          </span>
+                        ))}
                       </div>
-                      <div className="text-center">
-                        <div className="text-xs text-slate-400">Likes</div>
-                        <div className="text-[#FE2C55] font-bold">{formatNumber(arch.likes || 0)}</div>
-                      </div>
-                      <div className="text-center">
-                        <div className="text-xs text-slate-400">Nv. Abos</div>
-                        <div className="text-emerald-400 font-bold">+{formatNumber(arch.newFollowers || arch.followers || 0)}</div>
-                      </div>
-                    </div>
+                    )}
                   </div>
                 ))}
               </div>

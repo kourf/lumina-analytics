@@ -50,7 +50,9 @@ function getInitialState() {
     peakViewers: 0,
     started_at: null,
     roomId: '',
-    topQuestions: [],
+    topQuestions: [],      // Questions & demandes récurrentes des spectateurs
+    topCommenters: [],      // TOP 5 des spectateurs ayant envoyé le plus de messages
+    userMessageCounts: {},  // Map { pseudo: { nickname, count, lastComment, lastSeen } }
     topComments: [],
     recentComments: []
   };
@@ -96,7 +98,7 @@ function scheduleFirestoreSync() {
             roomId: stateData.roomId,
             started_at: stateData.started_at,
             topQuestions: stateData.topQuestions.slice(0, 15),
-            topComments: stateData.topComments.slice(0, 15),
+            topCommenters: stateData.topCommenters.slice(0, 5),
             recentComments: stateData.recentComments.slice(0, 50),
             lastSyncTime: new Date().toISOString()
           })
@@ -110,7 +112,7 @@ function scheduleFirestoreSync() {
       });
 
       if (res.ok) {
-        console.log(`[Lumina Daemon Sync] ⚡ ${stateData.currentViewers} viewers | ❤️ ${stateData.likes} likes | 💬 ${stateData.comments} comments | 🔄 ${stateData.shares} shares`);
+        console.log(`[Lumina Daemon Sync] ⚡ ${stateData.currentViewers} viewers | ❤️ ${stateData.likes} likes | 💬 ${stateData.comments} comments | 🔄 ${stateData.shares} shares | 👥 Top 1: ${stateData.topCommenters[0]?.nickname || 'Aucun'}`);
       }
     } catch (err) {
       console.error("[Lumina Daemon] Erreur écriture Firestore:", err.message);
@@ -118,16 +120,43 @@ function scheduleFirestoreSync() {
   }, 500);
 }
 
-function processIncomingMessage(commentText, nickname) {
+function processIncomingMessage(commentText, nickname, uniqueId) {
   if (!commentText || commentText.trim().length < 2) return;
   const text = commentText.trim();
   const lower = text.toLowerCase();
   const nowTime = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const author = nickname || uniqueId || 'Spectateur';
 
-  // 1. Flux direct
+  // 1. Suivi & Identification du Top 5 des spectateurs les plus actifs (par nombre de messages)
+  if (!stateData.userMessageCounts[author]) {
+    stateData.userMessageCounts[author] = {
+      nickname: author,
+      uniqueId: uniqueId || author,
+      count: 0,
+      lastComment: text,
+      lastSeen: nowTime
+    };
+  }
+  stateData.userMessageCounts[author].count += 1;
+  stateData.userMessageCounts[author].lastComment = text;
+  stateData.userMessageCounts[author].lastSeen = nowTime;
+
+  // Calcul dynamique du TOP 5 en direct
+  stateData.topCommenters = Object.values(stateData.userMessageCounts)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 5)
+    .map((user, idx) => ({
+      rank: idx + 1,
+      nickname: user.nickname,
+      count: user.count,
+      lastComment: user.lastComment,
+      badge: idx === 0 ? '👑 MVP' : idx === 1 ? '🥈 VIP' : idx === 2 ? '🥉 Bronze' : '⭐ Actif'
+    }));
+
+  // 2. Flux direct des commentaires récents (buffer glissant)
   stateData.recentComments.unshift({
     id: Date.now().toString() + '-' + Math.random().toString(36).slice(2, 6),
-    nickname: nickname || 'Spectateur',
+    nickname: author,
     comment: text,
     time: nowTime
   });
@@ -135,26 +164,36 @@ function processIncomingMessage(commentText, nickname) {
     stateData.recentComments = stateData.recentComments.slice(0, 50);
   }
 
-  // 2. Détection questions & commentaires répétés
-  const isQuestion = lower.includes('?') || 
-    ['comment', 'pourquoi', 'combien', 'est ce', 'est-ce', 'c quoi', "c'est quoi", 'quel', 'quelle', 'quels', 'quelles', 'qui', 'où', 'ou', 'quand', 'tu penses', 'tu fais', 'tu conseil', 'tu conseille', 'tu recommandes', 'avis sur', 'peux tu', 'peux-tu', 'tu peux', 'c normal', "c'est normal", 'tu vis', 'tu gagnes'].some(k => lower.startsWith(k) || lower.includes(' ' + k));
+  // 3. Détection sémantique des questions et demandes fréquentes
+  const questionKeywords = [
+    'comment', 'pourquoi', 'combien', 'est ce', 'est-ce', 'c quoi', "c'est quoi",
+    'quel', 'quelle', 'quels', 'quelles', 'qui', 'où', 'ou', 'quand',
+    'tu penses', 'tu fais', 'tu conseil', 'tu conseille', 'tu recommandes',
+    'avis sur', 'peux tu', 'peux-tu', 'tu peux', 'c normal', "c'est normal",
+    'tu vis', 'tu gagnes', 'aide', 'montre', 'fais voir', 'demande', 'dis moi',
+    'formation', 'prix', 'tuto', 'astuce', 'conseil', 'recommande'
+  ];
 
-  if (isQuestion) {
-    const existing = stateData.topQuestions.find(q => (q.original || '').toLowerCase() === lower || (q.original && q.original.length > 8 && lower.includes(q.original.toLowerCase().slice(0, 12))));
+  const isQuestionOrRequest = lower.includes('?') || questionKeywords.some(k => lower.startsWith(k) || lower.includes(' ' + k));
+
+  if (isQuestionOrRequest) {
+    const existing = stateData.topQuestions.find(q => 
+      (q.original || '').toLowerCase() === lower || 
+      (q.original && q.original.length > 8 && lower.includes(q.original.toLowerCase().slice(0, 12)))
+    );
     if (existing) {
       existing.count = (existing.count || 1) + 1;
+      existing.lastAskedBy = author;
+      existing.lastTime = nowTime;
     } else {
-      stateData.topQuestions.unshift({ original: text, count: 1 });
+      stateData.topQuestions.unshift({ 
+        original: text, 
+        count: 1, 
+        lastAskedBy: author,
+        time: nowTime 
+      });
     }
     stateData.topQuestions.sort((a, b) => (b.count || 1) - (a.count || 1));
-  } else {
-    const existingC = stateData.topComments.find(c => (c.text || c.original || '').toLowerCase() === lower || (c.text && c.text.length > 6 && lower === c.text.toLowerCase()));
-    if (existingC) {
-      existingC.count = (existingC.count || 1) + 1;
-    } else {
-      stateData.topComments.unshift({ text: text, count: 1 });
-    }
-    stateData.topComments.sort((a, b) => (b.count || 1) - (a.count || 1));
   }
 
   scheduleFirestoreSync();
@@ -169,7 +208,7 @@ async function connectToLive() {
   try {
     const state = await connection.connect();
     isConnected = true;
-    stateData.roomId = state.roomId || '';
+    stateData.roomId = state.roomId || (state.roomInfo?.data?.id_str || state.roomInfo?.id_str || 'live_stream');
     stateData.isLive = true;
     stateData.started_at = new Date().toISOString();
 
@@ -216,13 +255,15 @@ async function connectToLive() {
       stateData.comments++;
       const text = data.content || data.comment || '';
       const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname;
-      processIncomingMessage(text, nickname);
+      const uniqueId = data.user?.uniqueId || data.uniqueId;
+      processIncomingMessage(text, nickname, uniqueId);
     });
 
     connection.on('questionNew', (data) => {
       const qText = data.details?.questionText || data.questionText || data.question || '';
       const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname || 'Spectateur';
-      processIncomingMessage(qText, nickname);
+      const uniqueId = data.user?.uniqueId || data.uniqueId;
+      processIncomingMessage(qText, nickname, uniqueId);
     });
 
     connection.on('social', (data) => {
@@ -311,6 +352,7 @@ async function saveArchiveToFirestore() {
         durationStr: toFirestoreValue(durationStr),
         durationSeconds: toFirestoreValue(durationSeconds),
         topQuestions: toFirestoreValue(stateData.topQuestions.slice(0, 15)),
+        topCommenters: toFirestoreValue(stateData.topCommenters.slice(0, 5)),
         roomId: toFirestoreValue(stateData.roomId)
       }
     };
@@ -338,7 +380,6 @@ async function saveArchiveToFirestore() {
 connectToLive();
 
 // Serveur HTTP basique pour satisfaire les exigences des hébergeurs (Render, Koyeb, etc.)
-// qui nécessitent d'écouter sur un port pour maintenir le service actif.
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
