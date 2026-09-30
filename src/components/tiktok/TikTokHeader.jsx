@@ -1,5 +1,5 @@
 import React from 'react';
-import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp, RefreshCw } from 'lucide-react';
+import { Radio, ExternalLink, ShieldCheck, Users, Heart, TrendingUp } from 'lucide-react';
 import { TikTokIcon } from '../SocialIcons';
 import { cn } from '../../lib/utils';
 
@@ -124,16 +124,6 @@ export const TikTokHeader = ({ user, isLive, onRefresh }) => {
         </div>
 
         <div className="shrink-0 flex flex-wrap items-center justify-center md:justify-end gap-3 pt-2 lg:pt-0">
-          {onRefresh && (
-            <button
-              onClick={onRefresh}
-              className="flex items-center gap-2 px-4 py-3 rounded-2xl text-xs font-bold bg-white/10 hover:bg-white/15 active:scale-95 text-gray-200 border border-white/10 transition-all shadow-md backdrop-blur-md group cursor-pointer"
-              title="Vérifier instantanément si un live est en cours sur le compte @karam.drame"
-            >
-              <RefreshCw size={14} className={cn("text-[#25F4EE] transition-transform duration-300", user?.isRefreshing ? "animate-spin" : "group-hover:rotate-180")} />
-              <span>{user?.isRefreshing ? "Vérification..." : "Vérifier le Live"}</span>
-            </button>
-          )}
 
           <a 
             href={user?.links?.tiktok || `https://tiktok.com/@${cleanUsername.replace('@', '')}`}
