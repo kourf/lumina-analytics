@@ -6,6 +6,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
   const [activeMetric, setActiveMetric] = useState('views');
   const [chartType, setChartType] = useState('bar');
   const [mobileModal, setMobileModal] = useState(null);
+  const [hoveredCard, setHoveredCard] = useState(null);
 
   if (!recentVideos || recentVideos.length === 0 || followers === null || followers === 0) {
     return (
@@ -243,17 +244,23 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         
         {/* Card 1: Engagement Moyen */}
-        <div className="bg-white dark:bg-transparent bg-gradient-to-br from-[#25F4EE]/10 dark:from-[#25F4EE]/20 to-blue-500/5 dark:to-blue-500/10 border border-[#25F4EE]/30 p-6 rounded-2xl text-slate-900 dark:text-white shadow-[0_8px_30px_rgba(37,244,238,0.15)] dark:shadow-[0_0_30px_rgba(37,244,238,0.1)] hover:shadow-[0_8px_40px_rgba(37,244,238,0.25)] dark:hover:shadow-[0_0_40px_rgba(37,244,238,0.2)] transition-shadow duration-300 flex flex-col justify-between relative hover:z-50 overflow-visible group">
+        <div 
+          className="bg-white dark:bg-transparent bg-gradient-to-br from-[#25F4EE]/10 dark:from-[#25F4EE]/20 to-blue-500/5 dark:to-blue-500/10 border border-[#25F4EE]/30 p-6 rounded-2xl text-slate-900 dark:text-white shadow-[0_8px_30px_rgba(37,244,238,0.15)] dark:shadow-[0_0_30px_rgba(37,244,238,0.1)] hover:shadow-[0_8px_40px_rgba(37,244,238,0.25)] dark:hover:shadow-[0_0_40px_rgba(37,244,238,0.2)] transition-shadow duration-300 flex flex-col justify-between relative overflow-hidden group min-h-[190px]"
+          onMouseLeave={() => setHoveredCard(null)}
+        >
           <div className="absolute top-0 right-0 w-32 h-32 bg-[#25F4EE]/20 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#25F4EE]/30 transition-colors"></div>
-          <div className="flex justify-between items-start mb-4">
-            <div className="text-sm font-semibold text-teal-700 dark:text-[#25F4EE] uppercase tracking-wider relative z-10 flex items-center gap-2">
+          
+          <div className="flex justify-between items-start mb-4 relative z-10">
+            <div className="text-sm font-semibold text-teal-700 dark:text-[#25F4EE] uppercase tracking-wider flex items-center gap-2">
               <Zap className="w-4 h-4" />
               Taux d'Engagement
             </div>
-            <div className="relative group/tooltip cursor-help z-50">
-              <button
-                type="button"
-                onClick={() => setMobileModal({
+            <button
+              type="button"
+              onMouseEnter={() => setHoveredCard('engagement')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileModal({
                   title: "Taux d'Engagement",
                   subtitle: "Qualité de l'audience",
                   description: "Pourcentage de personnes ayant interagi avec vos vidéos par rapport au nombre de vues.",
@@ -264,82 +271,132 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                     { label: "> 9%", text: "Viral", color: "text-purple-400 font-semibold" }
                   ],
                   formula: "(Likes + Comms + Partages) / Vues * 100"
-                })}
-                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
-                aria-label="Information Taux d'Engagement"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-              <div className="hidden md:block absolute right-0 lg:right-auto lg:left-0 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
-                <p className="font-bold text-white mb-1">Qualité de l'audience</p>
-                <p className="text-gray-300 mb-2">Pourcentage de personnes ayant interagi avec vos vidéos par rapport au nombre de vues.</p>
-                <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
-                  <div className="flex justify-between text-[10px]"><span className="text-red-400">&lt; 3%</span><span className="text-gray-400">Faible</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-yellow-400">3% - 6%</span><span className="text-gray-400">Bon</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-emerald-400">6% - 9%</span><span className="text-gray-400">Excellent</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-purple-400">&gt; 9%</span><span className="text-gray-400 font-semibold">Viral</span></div>
-                </div>
-                <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-teal-400 dark:text-[#25F4EE]">
-                  (Likes + Comms + Partages) / Vues * 100
-                </div>
-              </div>
-            </div>
+                });
+              }}
+              className="cursor-help p-1 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              aria-label="Information Taux d'Engagement"
+              title="Passer la souris pour voir l'explication"
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
           
-          <div>
-            <div className="text-4xl font-black mb-1 tracking-tight relative z-10 text-slate-900 dark:text-white flex items-baseline gap-1">
+          <div className="relative z-10">
+            <div className="text-4xl font-black mb-1 tracking-tight text-slate-900 dark:text-white flex items-baseline gap-1">
               {engagementRate}<span className="text-2xl text-slate-600">%</span>
             </div>
-            <div className="mt-2 text-sm text-gray-800 font-medium dark:text-gray-300 relative z-10">
+            <div className="mt-2 text-sm text-gray-800 font-medium dark:text-gray-300">
               Sur {recentVideos.length} vidéos analysées
             </div>
           </div>
+
+          {/* Encart Pédagogique Intra-Carte au survol (Strictement confiné à la carte, 0 chevauchement) */}
+          {hoveredCard === 'engagement' && (
+            <div 
+              className="absolute inset-0 z-40 bg-slate-950/98 border border-[#25F4EE]/50 rounded-2xl p-4 flex flex-col justify-between shadow-2xl animate-in fade-in duration-150 text-left backdrop-blur-md"
+              onMouseLeave={() => setHoveredCard(null)}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-teal-400">
+                    <Zap className="w-3.5 h-3.5" />
+                    <span>Qualité de l'audience</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                    {engagementRate}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-300 leading-snug mb-2 mt-1">
+                  Pourcentage de personnes ayant interagi avec vos vidéos par rapport au nombre de vues.
+                </p>
+                <div className="grid grid-cols-4 gap-1 text-center bg-black/60 rounded-lg p-1.5 border border-white/5 text-[10px]">
+                  <div><span className="text-red-400 block font-bold">&lt; 3%</span><span className="text-gray-400 text-[9px]">Faible</span></div>
+                  <div><span className="text-yellow-400 block font-bold">3% - 6%</span><span className="text-gray-400 text-[9px]">Bon</span></div>
+                  <div><span className="text-emerald-400 block font-bold">6% - 9%</span><span className="text-gray-400 text-[9px]">Excellent</span></div>
+                  <div><span className="text-purple-400 block font-bold">&gt; 9%</span><span className="text-gray-400 text-[9px]">Viral</span></div>
+                </div>
+              </div>
+              <div className="text-[10px] text-teal-300 font-mono bg-white/5 rounded px-2 py-1 text-center border border-white/5">
+                (Likes + Comms + Partages) / Vues * 100
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Card 2: Vues Médianes */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
-          <div className="flex justify-between items-start mb-4">
+        <div 
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          onMouseLeave={() => setHoveredCard(null)}
+        >
+          <div className="flex justify-between items-start mb-4 relative z-10">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Activity className="w-4 h-4 text-purple-600 dark:text-purple-400" /> Vues Médianes
             </div>
-            <div className="relative group/tooltip cursor-help z-50">
-              <button
-                type="button"
-                onClick={() => setMobileModal({
+            <button
+              type="button"
+              onMouseEnter={() => setHoveredCard('median')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileModal({
                   title: "Vues Médianes",
                   subtitle: "Plus réaliste",
                   description: "Une seule vidéo virale peut fausser la moyenne. La médiane indique le score que vos vidéos atteignent 'normalement'.",
                   formula: "50% font mieux, 50% font moins"
-                })}
-                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
-                aria-label="Information Vues Médianes"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-              <div className="hidden md:block absolute right-0 sm:left-1/2 sm:-translate-x-1/2 bottom-full mb-2 w-56 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
-                <p className="font-bold text-white mb-1">Plus réaliste</p>
-                <p className="text-gray-300 mb-2">Une seule vidéo virale peut fausser la moyenne. La médiane indique le score que vos vidéos atteignent "normalement".</p>
-                <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-purple-600 dark:text-purple-400">
-                  50% font mieux, 50% font moins
-                </div>
-              </div>
-            </div>
+                });
+              }}
+              className="cursor-help p-1 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              aria-label="Information Vues Médianes"
+              title="Passer la souris pour voir l'explication"
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
+          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight relative z-10">
               {new Intl.NumberFormat('fr-FR').format(medianViews)}
           </div>
+
+          {/* Encart Pédagogique Intra-Carte au survol */}
+          {hoveredCard === 'median' && (
+            <div 
+              className="absolute inset-0 z-40 bg-slate-950/98 border border-purple-500/50 rounded-2xl p-4 flex flex-col justify-between shadow-2xl animate-in fade-in duration-150 text-left backdrop-blur-md"
+              onMouseLeave={() => setHoveredCard(null)}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-purple-400">
+                    <Activity className="w-3.5 h-3.5" />
+                    <span>Vues Médianes</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                    {new Intl.NumberFormat('fr-FR').format(medianViews)}
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-300 leading-snug mt-1 mb-2">
+                  Plus réaliste que la moyenne : une seule vidéo virale ne fausse pas le résultat. La médiane reflète le score habituel de vos vidéos.
+                </p>
+              </div>
+              <div className="text-[10px] text-purple-300 font-mono bg-white/5 rounded px-2 py-1 text-center border border-white/5">
+                50% de vos vidéos font plus, 50% font moins
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Card 3: Taux de Reach */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
-          <div className="flex justify-between items-start mb-4">
+        <div 
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          onMouseLeave={() => setHoveredCard(null)}
+        >
+          <div className="flex justify-between items-start mb-4 relative z-10">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <TrendingUp className="w-4 h-4 text-blue-600 dark:text-blue-400" /> Taux de Reach
             </div>
-            <div className="relative group/tooltip cursor-help z-50">
-              <button
-                type="button"
-                onClick={() => setMobileModal({
+            <button
+              type="button"
+              onMouseEnter={() => setHoveredCard('reach')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileModal({
                   title: "Taux de Reach",
                   subtitle: "Portée de l'Audience",
                   description: "Proportion d'abonnés touchés par vos vidéos 'normales' (médianes).",
@@ -349,41 +406,66 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                     { label: "> 25%", text: "Excellent", color: "text-purple-400 font-semibold" }
                   ],
                   formula: "(Vues Médianes / Abonnés) * 100"
-                })}
-                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
-                aria-label="Information Taux de Reach"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-              <div className="hidden md:block absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
-                <p className="font-bold text-white mb-1">Portée de l'Audience</p>
-                <p className="text-gray-300 mb-2">Proportion d'abonnés touchés par vos vidéos "normales" (médianes).</p>
-                <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
-                  <div className="flex justify-between text-[10px]"><span className="text-red-400">&lt; 10%</span><span className="text-gray-400">Faible</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-yellow-400">10% - 25%</span><span className="text-gray-400">Bon</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-purple-400">&gt; 25%</span><span className="text-gray-400 font-semibold">Excellent</span></div>
-                </div>
-                <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-blue-400 dark:text-[#25F4EE]">
-                  (Vues Médianes / Abonnés) * 100
-                </div>
-              </div>
-            </div>
+                });
+              }}
+              className="cursor-help p-1 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              aria-label="Information Taux de Reach"
+              title="Passer la souris pour voir l'explication"
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
+          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
               {reachRate}<span className="text-xl font-normal text-slate-600">%</span>
           </div>
+
+          {/* Encart Pédagogique Intra-Carte au survol */}
+          {hoveredCard === 'reach' && (
+            <div 
+              className="absolute inset-0 z-40 bg-slate-950/98 border border-blue-500/50 rounded-2xl p-4 flex flex-col justify-between shadow-2xl animate-in fade-in duration-150 text-left backdrop-blur-md"
+              onMouseLeave={() => setHoveredCard(null)}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-blue-400">
+                    <TrendingUp className="w-3.5 h-3.5" />
+                    <span>Portée de l'Audience</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                    {reachRate}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-300 leading-snug mt-1 mb-2">
+                  Proportion d'abonnés touchés par vos vidéos 'normales' (médianes).
+                </p>
+                <div className="grid grid-cols-3 gap-1 text-center bg-black/60 rounded-lg p-1.5 border border-white/5 text-[10px]">
+                  <div><span className="text-red-400 block font-bold">&lt; 10%</span><span className="text-gray-400 text-[9px]">Faible</span></div>
+                  <div><span className="text-yellow-400 block font-bold">10% - 25%</span><span className="text-gray-400 text-[9px]">Bon</span></div>
+                  <div><span className="text-purple-400 block font-bold">&gt; 25%</span><span className="text-gray-400 text-[9px]">Excellent</span></div>
+                </div>
+              </div>
+              <div className="text-[10px] text-blue-300 font-mono bg-white/5 rounded px-2 py-1 text-center border border-white/5">
+                (Vues Médianes / Abonnés) * 100
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Card 4: Ratio de Viralité */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
-          <div className="flex justify-between items-start mb-4">
+        <div 
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          onMouseLeave={() => setHoveredCard(null)}
+        >
+          <div className="flex justify-between items-start mb-4 relative z-10">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Share2 className="w-4 h-4 text-[#10B981]" /> Taux Partage
             </div>
-            <div className="relative group/tooltip cursor-help z-50">
-              <button
-                type="button"
-                onClick={() => setMobileModal({
+            <button
+              type="button"
+              onMouseEnter={() => setHoveredCard('partage')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileModal({
                   title: "Taux Partage",
                   subtitle: "Score de Viralité",
                   description: "Le partage est le signal #1 pour l'algorithme (Pour Toi).",
@@ -393,41 +475,66 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                     { label: "> 2%", text: "Viral", color: "text-purple-400 font-semibold" }
                   ],
                   formula: "(Partages / Vues) * 100"
-                })}
-                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
-                aria-label="Information Taux Partage"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-              <div className="hidden md:block absolute right-0 lg:right-auto lg:left-0 bottom-full mb-2 w-56 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
-                <p className="font-bold text-white mb-1">Score de Viralité</p>
-                <p className="text-gray-300 mb-2">Le partage est le signal #1 pour l'algorithme (Pour Toi).</p>
-                <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
-                  <div className="flex justify-between text-[10px]"><span className="text-red-400">&lt; 0.5%</span><span className="text-gray-400">Faible</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-yellow-400">0.5% - 2%</span><span className="text-gray-400">Bon</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-purple-400">&gt; 2%</span><span className="text-gray-400 font-semibold">Viral</span></div>
-                </div>
-                <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-[#10B981]">
-                  (Partages / Vues) * 100
-                </div>
-              </div>
-            </div>
+                });
+              }}
+              className="cursor-help p-1 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              aria-label="Information Taux Partage"
+              title="Passer la souris pour voir l'explication"
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
+          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
               {viralityRate}<span className="text-xl font-normal text-slate-600">%</span>
           </div>
+
+          {/* Encart Pédagogique Intra-Carte au survol */}
+          {hoveredCard === 'partage' && (
+            <div 
+              className="absolute inset-0 z-40 bg-slate-950/98 border border-emerald-500/50 rounded-2xl p-4 flex flex-col justify-between shadow-2xl animate-in fade-in duration-150 text-left backdrop-blur-md"
+              onMouseLeave={() => setHoveredCard(null)}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>Score de Viralité</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                    {viralityRate}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-300 leading-snug mt-1 mb-2">
+                  Le partage est le signal n°1 pour TikTok. Si les utilisateurs partagent, la diffusion dans 'Pour Toi' explose.
+                </p>
+                <div className="grid grid-cols-3 gap-1 text-center bg-black/60 rounded-lg p-1.5 border border-white/5 text-[10px]">
+                  <div><span className="text-red-400 block font-bold">&lt; 0.5%</span><span className="text-gray-400 text-[9px]">Faible</span></div>
+                  <div><span className="text-yellow-400 block font-bold">0.5% - 2%</span><span className="text-gray-400 text-[9px]">Bon</span></div>
+                  <div><span className="text-purple-400 block font-bold">&gt; 2%</span><span className="text-gray-400 text-[9px]">Viral</span></div>
+                </div>
+              </div>
+              <div className="text-[10px] text-emerald-300 font-mono bg-white/5 rounded px-2 py-1 text-center border border-white/5">
+                (Partages / Vues) * 100
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Card 5: Ratio de Viralité (Portée organique) */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
-          <div className="flex justify-between items-start mb-4">
+        <div 
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          onMouseLeave={() => setHoveredCard(null)}
+        >
+          <div className="flex justify-between items-start mb-4 relative z-10">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Globe className="w-4 h-4 text-orange-600 dark:text-orange-400" /> Viralité (Portée)
             </div>
-            <div className="relative group/tooltip cursor-help z-50">
-              <button
-                type="button"
-                onClick={() => setMobileModal({
+            <button
+              type="button"
+              onMouseEnter={() => setHoveredCard('portee')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileModal({
                   title: "Viralité (Portée)",
                   subtitle: "Portée Organique",
                   description: "Ce ratio montre à quel point l'algorithme te pousse au-delà de ton propre cercle. Ça prouve concrètement ta capacité à 'percer l'algorithme'. Un argument en or pour ton Agence.",
@@ -437,41 +544,66 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                     { label: "> 20x", text: "Excellent", color: "text-purple-400 font-semibold" }
                   ],
                   formula: "Vues Totales / Abonnés"
-                })}
-                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
-                aria-label="Information Viralité (Portée)"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-              <div className="hidden md:block absolute right-0 sm:left-1/2 sm:-translate-x-1/2 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
-                <p className="font-bold text-white mb-1">Portée Organique</p>
-                <p className="text-gray-300 mb-2">Ce ratio montre à quel point l'algorithme te pousse au-delà de ton propre cercle. Ça prouve concrètement ta capacité à "percer l'algorithme". Un argument en or pour ton Agence.</p>
-                <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
-                  <div className="flex justify-between text-[10px]"><span className="text-red-400">&lt; 5x</span><span className="text-gray-400">Faible</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-yellow-400">5x - 20x</span><span className="text-gray-400">Bon</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-purple-400">&gt; 20x</span><span className="text-gray-400 font-semibold">Excellent</span></div>
-                </div>
-                <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-orange-400 text-center">
-                  Vues Totales / Abonnés
-                </div>
-              </div>
-            </div>
+                });
+              }}
+              className="cursor-help p-1 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              aria-label="Information Viralité (Portée)"
+              title="Passer la souris pour voir l'explication"
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
+          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
               {organicReachMultiplier}<span className="text-xl font-normal text-slate-600">x</span>
           </div>
+
+          {/* Encart Pédagogique Intra-Carte au survol */}
+          {hoveredCard === 'portee' && (
+            <div 
+              className="absolute inset-0 z-40 bg-slate-950/98 border border-orange-500/50 rounded-2xl p-4 flex flex-col justify-between shadow-2xl animate-in fade-in duration-150 text-left backdrop-blur-md"
+              onMouseLeave={() => setHoveredCard(null)}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-orange-400">
+                    <Globe className="w-3.5 h-3.5" />
+                    <span>Portée Organique</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                    {organicReachMultiplier}x
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-300 leading-snug mt-1 mb-2">
+                  Multiplicateur prouvant votre capacité à percer au-delà de vos abonnés. Un argument clé pour sponsorisations et agences.
+                </p>
+                <div className="grid grid-cols-3 gap-1 text-center bg-black/60 rounded-lg p-1.5 border border-white/5 text-[10px]">
+                  <div><span className="text-red-400 block font-bold">&lt; 5x</span><span className="text-gray-400 text-[9px]">Faible</span></div>
+                  <div><span className="text-yellow-400 block font-bold">5x - 20x</span><span className="text-gray-400 text-[9px]">Bon</span></div>
+                  <div><span className="text-purple-400 block font-bold">&gt; 20x</span><span className="text-gray-400 text-[9px]">Excellent</span></div>
+                </div>
+              </div>
+              <div className="text-[10px] text-orange-300 font-mono bg-white/5 rounded px-2 py-1 text-center border border-white/5">
+                Vues Totales / Abonnés
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Card 6: Ratio de Conversion Abonnés */}
-        <div className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative hover:z-50 overflow-visible group">
-          <div className="flex justify-between items-start mb-4">
+        <div 
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          onMouseLeave={() => setHoveredCard(null)}
+        >
+          <div className="flex justify-between items-start mb-4 relative z-10">
             <div className="flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-gray-400 uppercase tracking-wider">
               <Users className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> Conversion Abo
             </div>
-            <div className="relative group/tooltip cursor-help z-50">
-              <button
-                type="button"
-                onClick={() => setMobileModal({
+            <button
+              type="button"
+              onMouseEnter={() => setHoveredCard('conversion')}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMobileModal({
                   title: "Conversion Abo",
                   subtitle: "Efficacité du Contenu",
                   description: "C'est un indicateur d'efficacité de ton contenu. Tes vidéos font des vues, c'est bien. Est-ce qu'elles donnent envie de s'abonner ? Ça permet de tester des Call to Action à la fin de tes vidéos.",
@@ -481,30 +613,49 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                     { label: "> 3%", text: "Excellent", color: "text-purple-400 font-semibold" }
                   ],
                   formula: `Abonnés / Vues Totales (Soit 1 abo toutes les ${viewsPerSub} vues)`
-                })}
-                className="text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors p-1"
-                aria-label="Information Conversion Abo"
-              >
-                <Info className="w-4 h-4" />
-              </button>
-              <div className="hidden md:block absolute right-0 bottom-full mb-2 w-64 p-3 bg-gray-900/98 dark:bg-black/98 border border-gray-700 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none">
-                <p className="font-bold text-white mb-1">Efficacité du Contenu</p>
-                <p className="text-gray-300 mb-2">C'est un indicateur d'efficacité de ton contenu. Tes vidéos font des vues, c'est bien. Est-ce qu'elles donnent envie de s'abonner ? Ça permet de tester des Call to Action à la fin de tes vidéos.</p>
-                <div className="bg-black/50 rounded-lg p-2 mb-2 border border-white/5 space-y-1">
-                  <div className="flex justify-between text-[10px]"><span className="text-red-400">&lt; 1%</span><span className="text-gray-400">Faible</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-yellow-400">1% - 3%</span><span className="text-gray-400">Moyen</span></div>
-                  <div className="flex justify-between text-[10px]"><span className="text-purple-400">&gt; 3%</span><span className="text-gray-400 font-semibold">Excellent</span></div>
-                </div>
-                <div className="bg-white/10 rounded p-1.5 font-mono text-[10px] text-emerald-400 text-center">
-                  Abonnés / Vues Totales<br/>
-                  (Soit 1 abo toutes les {viewsPerSub} vues)
-                </div>
-              </div>
-            </div>
+                });
+              }}
+              className="cursor-help p-1 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors rounded-lg hover:bg-white/10"
+              aria-label="Information Conversion Abo"
+              title="Passer la souris pour voir l'explication"
+            >
+              <Info className="w-4 h-4" />
+            </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
+          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
               {conversionRate}<span className="text-xl font-normal text-slate-600">%</span>
           </div>
+
+          {/* Encart Pédagogique Intra-Carte au survol */}
+          {hoveredCard === 'conversion' && (
+            <div 
+              className="absolute inset-0 z-40 bg-slate-950/98 border border-emerald-500/50 rounded-2xl p-4 flex flex-col justify-between shadow-2xl animate-in fade-in duration-150 text-left backdrop-blur-md"
+              onMouseLeave={() => setHoveredCard(null)}
+            >
+              <div>
+                <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/10">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                    <Users className="w-3.5 h-3.5" />
+                    <span>Conversion Abonnés</span>
+                  </div>
+                  <span className="text-xs font-mono font-bold text-white bg-white/10 px-2 py-0.5 rounded">
+                    {conversionRate}%
+                  </span>
+                </div>
+                <p className="text-[11px] text-gray-300 leading-snug mt-1 mb-2">
+                  Efficacité du contenu : mesure si vos vidéos incitent les spectateurs à s'abonner avec vos Call-to-Action.
+                </p>
+                <div className="grid grid-cols-3 gap-1 text-center bg-black/60 rounded-lg p-1.5 border border-white/5 text-[10px]">
+                  <div><span className="text-red-400 block font-bold">&lt; 1%</span><span className="text-gray-400 text-[9px]">Faible</span></div>
+                  <div><span className="text-yellow-400 block font-bold">1% - 3%</span><span className="text-gray-400 text-[9px]">Moyen</span></div>
+                  <div><span className="text-purple-400 block font-bold">&gt; 3%</span><span className="text-gray-400 text-[9px]">Excellent</span></div>
+                </div>
+              </div>
+              <div className="text-[10px] text-emerald-300 font-mono bg-white/5 rounded px-2 py-1 text-center border border-white/5">
+                1 abonné gagné toutes les {viewsPerSub} vues
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

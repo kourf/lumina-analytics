@@ -11,6 +11,7 @@ const formatNumber = (num) => {
 
 export const TikTokKpiCards = ({ tiktokData }) => {
   const [mobileModal, setMobileModal] = useState(null);
+  const [hoveredCard, setHoveredCard] = useState(null);
 
   if (!tiktokData) return null;
 
@@ -40,121 +41,133 @@ export const TikTokKpiCards = ({ tiktokData }) => {
   const videosList = tiktokData.recentVideos || [];
   const totalVideos = tiktokData.videoAnalytics?.totalVideosAnalyzed || videosList.length || 0;
 
-  const renderTooltip = (id, title, explanation, source, align = 'center') => {
-    let positionClass = "left-1/2 -translate-x-1/2";
-    if (align === 'left') positionClass = "right-0 md:right-auto md:left-0";
-    if (align === 'right') positionClass = "right-0";
+  const cardStyle = "bg-white dark:bg-[#111827]/80 backdrop-blur-xl p-5 flex flex-col justify-between rounded-[24px] border border-slate-200 dark:border-[#1F2937] hover:border-slate-300 dark:hover:border-gray-600 transition-all duration-300 relative group overflow-hidden shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-sm min-h-[145px]";
+  const iconStyle = "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border";
 
-    return (
-      <div className="absolute top-4 right-4 z-50">
-        <button
-          type="button"
-          className="relative group/tooltip cursor-help p-1 text-gray-400 hover:text-slate-900 dark:hover:text-white transition-colors"
-          onClick={(e) => {
-            e.stopPropagation();
-            setMobileModal({ title, explanation, source });
-          }}
-          aria-label={`Informations : ${title}`}
-        >
-          <Info size={16} />
+  const kpis = [
+    {
+      id: 'total_videos',
+      title: 'Total Vidéos',
+      label: 'Vidéos',
+      value: totalVideos,
+      displayValue: totalVideos,
+      explanation: 'Le nombre total de vidéos actuellement publiées sur votre compte TikTok.',
+      source: "API officielle TikTok",
+      icon: <Video className="text-blue-600 dark:text-blue-400" size={20} />,
+      iconBg: "bg-blue-500/10 border-blue-500/20",
+      accentBorder: "border-blue-500/50"
+    },
+    {
+      id: 'vues',
+      title: 'Vues Totales',
+      label: 'Vues',
+      value: tiktokData.views,
+      displayValue: formatNumber(tiktokData.views),
+      explanation: "Le cumul de toutes les vues générées par l'ensemble de vos vidéos publiées.",
+      source: "API officielle TikTok",
+      icon: <Eye className="text-teal-700 dark:text-[#25F4EE]" size={20} />,
+      iconBg: "bg-[#25F4EE]/10 border-[#25F4EE]/20",
+      accentBorder: "border-[#25F4EE]/50"
+    },
+    {
+      id: 'abonnes',
+      title: 'Total Abonnés',
+      label: 'Abonnés',
+      value: tiktokData.followers,
+      displayValue: formatNumber(tiktokData.followers),
+      explanation: 'Le nombre de personnes actuellement abonnées à votre compte.',
+      source: "API officielle TikTok",
+      icon: <Users className="text-orange-400" size={20} />,
+      iconBg: "bg-orange-500/10 border-orange-500/20",
+      accentBorder: "border-orange-500/50"
+    },
+    {
+      id: 'likes',
+      title: 'Total Likes',
+      label: 'Likes',
+      value: tiktokData.likes || tiktokData.totalLikes,
+      displayValue: formatNumber(tiktokData.likes || tiktokData.totalLikes),
+      explanation: "Le cumul des mentions 'J'aime' reçues sur l'ensemble de vos vidéos.",
+      source: "API officielle TikTok",
+      icon: <ThumbsUp className="text-[#FE2C55]" size={20} />,
+      iconBg: "bg-[#FE2C55]/10 border-[#FE2C55]/20",
+      accentBorder: "border-[#FE2C55]/50"
+    },
+    {
+      id: 'partages',
+      title: 'Total Partages',
+      label: 'Partages',
+      value: tiktokData.shares || 0,
+      displayValue: formatNumber(tiktokData.shares || 0),
+      explanation: "Le nombre de fois que vos vidéos ont été partagées ou envoyées par les utilisateurs.",
+      source: "API officielle TikTok",
+      icon: <Share2 className="text-green-400" size={20} />,
+      iconBg: "bg-green-500/10 border-green-500/20",
+      accentBorder: "border-green-500/50"
+    }
+  ];
 
-          {/* Desktop Hover Tooltip (survol souris pur, orienté vers le haut, aucun clic requis) */}
-          <div className={`hidden md:block absolute ${positionClass} bottom-full mb-2 w-64 p-3.5 bg-gray-900/98 dark:bg-black/98 border border-gray-700/80 dark:border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover/tooltip:opacity-100 group-hover/tooltip:visible transition-all text-xs text-left z-[100] pointer-events-none`}>
-            <p className="font-bold mb-1.5 text-white text-[13px]">{title}</p>
-            <p className="text-gray-300 dark:text-gray-300 leading-relaxed mb-2.5 text-xs">
-              <span className="block font-semibold text-gray-400 dark:text-gray-400 mb-0.5">Ce que mesure ce chiffre :</span>
-              {explanation}
-            </p>
-            {source && (
-              <div className="bg-black/50 p-2 rounded-lg border border-white/5 text-[11px]">
-                <span className="font-semibold text-gray-400 block mb-0.5">Origine de la donnée :</span>
-                <span className="text-gray-300 italic">{source}</span>
+  return (
+    <div className="w-full relative z-10 transition-all">
+      {/* KPI Cards */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 relative">
+        {kpis.map((kpi) => (
+          <div 
+            key={kpi.id} 
+            className={cardStyle}
+            onMouseLeave={() => setHoveredCard(null)}
+          >
+            {/* Header Carte : Icône + Bouton Info */}
+            <div className="flex items-start justify-between mb-4 relative z-10">
+              <div className={cn(iconStyle, kpi.iconBg)}>
+                {kpi.icon}
+              </div>
+              <button
+                type="button"
+                onMouseEnter={() => setHoveredCard(kpi.id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMobileModal(kpi);
+                }}
+                className="cursor-help p-1.5 text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/10"
+                aria-label={`Informations : ${kpi.title}`}
+                title="Passer la souris pour voir l'explication"
+              >
+                <Info size={16} />
+              </button>
+            </div>
+
+            {/* Contenu Standard de la Carte */}
+            <div className="relative z-10">
+              <p className="text-[13px] font-semibold text-slate-600 dark:text-gray-400 mb-1 uppercase tracking-wider">{kpi.label}</p>
+              <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate" title={kpi.value}>{kpi.displayValue}</p>
+            </div>
+
+            {/* Encart Pédagogique Intra-Carte au survol (Strictement confiné à la carte, 0 chevauchement, 0 débordement) */}
+            {hoveredCard === kpi.id && (
+              <div 
+                className={cn(
+                  "absolute inset-0 z-40 bg-slate-950/98 border rounded-[24px] p-4 flex flex-col justify-between shadow-2xl animate-in fade-in duration-150 text-left backdrop-blur-md",
+                  kpi.accentBorder
+                )}
+                onMouseLeave={() => setHoveredCard(null)}
+              >
+                <div>
+                  <div className="flex items-center justify-between mb-1.5 pb-1 border-b border-white/10">
+                    <span className="text-xs font-bold text-white uppercase tracking-wider">{kpi.title}</span>
+                    <span className="text-xs font-mono font-bold text-teal-400">{kpi.displayValue}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-snug mb-1">
+                    {kpi.explanation}
+                  </p>
+                </div>
+                <div className="text-[10px] text-gray-400 italic bg-black/60 rounded px-2 py-1 border border-white/5 truncate">
+                  Source : {kpi.source}
+                </div>
               </div>
             )}
           </div>
-        </button>
-      </div>
-    );
-  };
-
-  const cardStyle = "bg-white dark:bg-[#111827]/80 backdrop-blur-xl p-5 flex flex-col justify-between rounded-[24px] border border-slate-200 dark:border-[#1F2937] hover:border-slate-300 dark:hover:border-gray-600 transition-all duration-300 relative group hover:z-50 overflow-visible shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-sm";
-  const iconStyle = "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border";
-
-  return (
-    <div className="w-full relative z-10 hover:z-50 transition-all">
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 relative">
-        
-        {/* Total Vidéos */}
-        <div className={cardStyle}>
-          {renderTooltip('total_videos', 'Total Vidéos', 'Le nombre total de vidéos actuellement publiées sur votre compte.', 'Récupéré en direct depuis l\'API officielle TikTok.', 'left')}
-          <div className="flex items-start justify-between mb-4 relative z-10">
-            <div className={cn(iconStyle, "bg-blue-500/10 border-blue-500/20")}>
-              <Video className="text-blue-600 dark:text-blue-400" size={20} />
-            </div>
-          </div>
-          <div className="relative z-10">
-            <p className="text-[13px] font-semibold text-slate-600 dark:text-gray-400 mb-1 uppercase tracking-wider">Vidéos</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate" title={totalVideos}>{totalVideos}</p>
-          </div>
-        </div>
-
-        {/* Vues Totales */}
-        <div className={cardStyle}>
-          {renderTooltip('vues', 'Vues Totales', 'Le cumul de toutes les vues générées par l\'ensemble de vos vidéos.', 'Récupéré en direct depuis l\'API officielle TikTok.', 'left')}
-          <div className="flex items-start justify-between mb-4 relative z-10">
-            <div className={cn(iconStyle, "bg-[#25F4EE]/10 border-[#25F4EE]/20")}>
-              <Eye className="text-teal-700 dark:text-[#25F4EE]" size={20} />
-            </div>
-          </div>
-          <div className="relative z-10">
-            <p className="text-[13px] font-semibold text-slate-600 dark:text-gray-400 mb-1 uppercase tracking-wider">Vues</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate" title={tiktokData.views}>{formatNumber(tiktokData.views)}</p>
-          </div>
-        </div>
-
-        {/* Total Abonnés */}
-        <div className={cardStyle}>
-          {renderTooltip('abonnes', 'Total Abonnés', 'Le nombre de personnes abonnées à votre compte.', 'Récupéré en direct depuis l\'API officielle TikTok.', 'center')}
-          <div className="flex items-start justify-between mb-4 relative z-10">
-            <div className={cn(iconStyle, "bg-orange-500/10 border-orange-500/20")}>
-              <Users className="text-orange-400" size={20} />
-            </div>
-          </div>
-          <div className="relative z-10">
-            <p className="text-[13px] font-semibold text-slate-600 dark:text-gray-400 mb-1 uppercase tracking-wider">Abonnés</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate" title={tiktokData.followers}>{formatNumber(tiktokData.followers)}</p>
-          </div>
-        </div>
-
-        {/* Total Likes */}
-        <div className={cardStyle}>
-          {renderTooltip('likes', 'Total Likes', 'Le nombre total de "J\'aime" reçus sur l\'ensemble de vos vidéos.', 'Récupéré en direct depuis l\'API officielle TikTok.', 'right')}
-          <div className="flex items-start justify-between mb-4 relative z-10">
-            <div className={cn(iconStyle, "bg-[#FE2C55]/10 border-[#FE2C55]/20")}>
-              <ThumbsUp className="text-[#FE2C55]" size={20} />
-            </div>
-          </div>
-          <div className="relative z-10">
-            <p className="text-[13px] font-semibold text-slate-600 dark:text-gray-400 mb-1 uppercase tracking-wider">Likes</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate" title={tiktokData.likes || tiktokData.totalLikes}>{formatNumber(tiktokData.likes || tiktokData.totalLikes)}</p>
-          </div>
-        </div>
-
-        {/* Partages */}
-        <div className={cardStyle}>
-          {renderTooltip('partages', 'Partages', 'Le nombre de fois que l\'ensemble de vos vidéos ont été partagées.', 'Récupéré en direct depuis l\'API officielle TikTok.', 'right')}
-          <div className="flex items-start justify-between mb-4 relative z-10">
-            <div className={cn(iconStyle, "bg-green-500/10 border-green-500/20")}>
-              <Share2 className="text-green-400" size={20} />
-            </div>
-          </div>
-          <div className="relative z-10">
-            <p className="text-[13px] font-semibold text-slate-600 dark:text-gray-400 mb-1 uppercase tracking-wider">Partages</p>
-            <p className="text-2xl font-bold text-slate-900 dark:text-white tracking-tight truncate" title={tiktokData.shares || 0}>{formatNumber(tiktokData.shares || 0)}</p>
-          </div>
-        </div>
-
+        ))}
       </div>
 
       {/* Modal Pédagogique Mobile (100% visible et adapté sur smartphone, aucun débordement) */}
