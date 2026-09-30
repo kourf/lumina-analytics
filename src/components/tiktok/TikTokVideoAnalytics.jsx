@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon } from 'lucide-react';
+import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon, Sparkles, Calendar } from 'lucide-react';
 
 export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], followers = 0 }) => {
   const [activeMetric, setActiveMetric] = useState('views');
@@ -27,6 +27,60 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
       </div>
     );
   }
+
+  // Configurations pédagogiques pour chaque métrique
+  const metricConfig = {
+    views: {
+      key: 'views',
+      label: 'Vues',
+      color: '#25F4EE',
+      activeText: 'text-teal-600 dark:text-[#25F4EE]',
+      bgBadge: 'bg-[#25F4EE]/10 text-teal-700 dark:text-[#25F4EE] border-[#25F4EE]/30',
+      title: 'Évolution du volume de Vues',
+      explanation: 'Mesure la diffusion algorithmique de chaque vidéo, de votre 1ère vidéo publiée jusqu\'à aujourd\'hui. Les pics correspondent aux contenus massivement propulsés dans le flux "Pour Toi" grâce à une forte rétention dès les premières secondes.',
+      takeaway: 'Objectif : Identifier les sujets et formats des vidéos en pic pour répliquer leurs accroches (hooks).'
+    },
+    likes: {
+      key: 'likes',
+      label: 'Likes',
+      color: '#F43F5E',
+      activeText: 'text-rose-600 dark:text-rose-400',
+      bgBadge: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30',
+      title: 'Évolution des Mentions "J\'aime"',
+      explanation: 'Mesure l\'approbation immédiate et la sympathie générée auprès de vos spectateurs, de votre toute 1ère vidéo à aujourd\'hui. Le like valide la qualité perçue et le plaisir ressenti par le spectateur.',
+      takeaway: 'Objectif : Observer la hausse constante des likes qui témoigne d\'une meilleure maîtrise de vos formats et d\'un public de plus en plus conquis.'
+    },
+    shares: {
+      key: 'shares',
+      label: 'Partages',
+      color: '#8B5CF6',
+      activeText: 'text-purple-600 dark:text-purple-400',
+      bgBadge: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30',
+      title: 'Évolution de la Viralité (Partages)',
+      explanation: 'Mesure la recommandation active de vos vidéos : les spectateurs les envoient à leurs proches ou les partagent sur d\'autres réseaux. C\'est le signal le plus puissant et le plus récompensé par l\'algorithme TikTok.',
+      takeaway: 'Objectif : Isoler les vidéos à très fort partage (astuces concrètes, émotions fortes, contenus éducatifs) qui drainent le plus d\'audience externe.'
+    },
+    engagement: {
+      key: 'engagement',
+      label: 'Engagement (%)',
+      color: '#F59E0B',
+      activeText: 'text-amber-600 dark:text-amber-400',
+      bgBadge: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30',
+      title: 'Évolution du Taux d\'Engagement (%)',
+      explanation: 'Représente le pourcentage d\'interactions actives (Likes + Commentaires + Partages) rapporté au nombre de vues, pour chaque vidéo de la 1ère à aujourd\'hui. Il permet de comparer objectivement petits et gros succès.',
+      takeaway: 'Un taux supérieur à 6% signale une communauté très soudée et attentive, indépendamment du nombre de vues.'
+    },
+    followers: {
+      key: 'followers',
+      label: 'Abonnés',
+      color: '#10B981',
+      activeText: 'text-emerald-600 dark:text-emerald-400',
+      bgBadge: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30',
+      title: 'Évolution de la Croissance des Abonnés',
+      explanation: 'Retrace la croissance progressive de votre communauté de la 1ère vidéo publiée jusqu\'à votre total actuel d\'abonnés. Chaque vidéo convertit une fraction de son audience en abonnés fidèles.',
+      takeaway: 'Les accélérations de la courbe mettent en lumière les vidéos qui ont servi de tremplin d\'acquisition majeur.'
+    }
+  };
 
   // Calcul Taux d'Engagement
   const totalViews = recentVideos.reduce((acc, v) => acc + (v.views || 0), 0);
@@ -55,19 +109,57 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
   const conversionRate = totalViews > 0 ? ((followers / totalViews) * 100).toFixed(2) : 0;
   const viewsPerSub = followers > 0 ? Math.round(totalViews / followers) : 0;
 
-  // Préparer les données pour le graphique des dernières vidéos
-  const chartData = [...recentVideos].reverse().map((video, index) => {
+  // Tri chronologique rigoureux : de la 1ère vidéo publiée jusqu'à aujourd'hui
+  const sortedChronologicalVideos = useMemo(() => {
+    const hasDates = recentVideos.some(v => v.date);
+    if (hasDates) {
+      return [...recentVideos].sort((a, b) => {
+        const timeA = a.date ? new Date(a.date).getTime() : 0;
+        const timeB = b.date ? new Date(b.date).getTime() : 0;
+        return timeA - timeB;
+      });
+    }
+    return [...recentVideos].reverse();
+  }, [recentVideos]);
+
+  // Préparer les données pour le graphique chronologique
+  let cumulativeViewsTracker = 0;
+  const chartData = sortedChronologicalVideos.map((video, index) => {
     const views = Number(video.views || 0);
     const likes = Number(video.likes || 0);
     const comments = Number(video.comments || 0);
     const shares = Number(video.shares || 0);
     const engagement = views > 0 ? Number((((likes + comments + shares) / views) * 100).toFixed(2)) : 0;
+    
+    cumulativeViewsTracker += views;
+    const cumulativeFollowers = totalViews > 0 ? Math.round((cumulativeViewsTracker / totalViews) * followers) : 0;
+    const followersGain = totalViews > 0 ? Math.round((views / totalViews) * followers) : 0;
+
+    let formattedDate = '';
+    if (video.date) {
+      try {
+        formattedDate = new Date(video.date).toLocaleDateString('fr-FR', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        });
+      } catch (e) {
+        formattedDate = '';
+      }
+    }
+
     return {
       name: `Vid ${index + 1}`,
+      index: index + 1,
+      isFirst: index === 0,
+      isLast: index === sortedChronologicalVideos.length - 1,
       views,
-      median: medianViews,
-      engagement,
+      likes,
       shares,
+      engagement,
+      followers: cumulativeFollowers,
+      followersGain,
+      formattedDate,
       title: video.title || video.desc || `Vidéo ${index + 1}`
     };
   });
@@ -89,23 +181,43 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
   const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length) {
-      const metricLabel = {
-        views: 'Vues',
-        median: 'Médiane',
-        engagement: 'Engagement (%)',
-        shares: 'Partages'
-      }[activeMetric];
-
-      const value = activeMetric === 'engagement'
-        ? `${payload[0].value}%`
-        : new Intl.NumberFormat('fr-FR').format(payload[0].value);
+      const itemData = payload[0].payload;
+      const currentConfig = metricConfig[activeMetric] || metricConfig.views;
+      const rawVal = payload[0].value;
+      const formattedVal = activeMetric === 'engagement'
+        ? `${rawVal}%`
+        : new Intl.NumberFormat('fr-FR').format(rawVal);
 
       return (
-        <div className="bg-[#111827]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/10 max-w-[200px] animate-in fade-in zoom-in duration-200">
-          <p className="font-semibold text-white mb-2 line-clamp-2">{payload[0].payload.title}</p>
-          <p className="text-teal-700 dark:text-[#25F4EE] font-bold">
-            {value} {metricLabel}
-          </p>
+        <div className="bg-[#111827]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/10 max-w-[260px] animate-in fade-in zoom-in duration-200">
+          <div className="flex items-center justify-between gap-2 mb-1.5 pb-1.5 border-b border-white/10">
+            <span className="text-[11px] font-bold text-gray-300 uppercase tracking-wider">
+              {itemData.name} {itemData.isFirst ? '· 1ère vidéo' : itemData.isLast ? '· Aujourd\'hui' : ''}
+            </span>
+            {itemData.formattedDate && (
+              <span className="text-[10px] text-gray-400 font-mono">{itemData.formattedDate}</span>
+            )}
+          </div>
+          <p className="font-semibold text-white mb-2 line-clamp-2 text-xs leading-snug">{itemData.title}</p>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-xs text-gray-300">{currentConfig.label} :</span>
+            <span className="font-bold text-sm" style={{ color: currentConfig.color }}>
+              {formattedVal}
+            </span>
+          </div>
+          {activeMetric === 'followers' && (
+            <p className="text-[10px] text-emerald-400 mt-1 font-mono">
+              +{new Intl.NumberFormat('fr-FR').format(itemData.followersGain)} abos estimés générés
+            </p>
+          )}
+          {activeMetric !== 'followers' && (
+            <div className="grid grid-cols-2 gap-1 mt-2 pt-2 border-t border-white/5 text-[10px] text-gray-400 font-mono">
+              <div>Vues: {new Intl.NumberFormat('fr-FR').format(itemData.views)}</div>
+              <div>Likes: {new Intl.NumberFormat('fr-FR').format(itemData.likes)}</div>
+              <div>Partages: {new Intl.NumberFormat('fr-FR').format(itemData.shares)}</div>
+              <div>Engag.: {itemData.engagement}%</div>
+            </div>
+          )}
         </div>
       );
     }
@@ -301,27 +413,43 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
       <div className="flex flex-col lg:flex-row gap-6">
         {/* Graphique Interactif */}
         <div className="flex-1 bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-            <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide uppercase">Évolution des performances</h3>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide uppercase">
+                  Évolution des performances
+                </h3>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  De la 1ère vidéo à aujourd'hui
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+                Suivi chronologique sur vos {recentVideos.length} vidéos (de la toute première publiée jusqu'à la plus récente)
+              </p>
+            </div>
 
             <div className="flex flex-wrap items-center gap-2">
               <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
                 <button
                   onClick={() => setActiveMetric('views')}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'views' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'views' ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-[#25F4EE] shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                 >Vues</button>
                 <button
-                  onClick={() => setActiveMetric('median')}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'median' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >Médiane</button>
-                <button
-                  onClick={() => setActiveMetric('engagement')}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'engagement' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >Engagement</button>
+                  onClick={() => setActiveMetric('likes')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'likes' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >Likes</button>
                 <button
                   onClick={() => setActiveMetric('shares')}
-                  className={`px-3 py-1 text-xs font-medium rounded-md transition-all ${activeMetric === 'shares' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'shares' ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
                 >Partages</button>
+                <button
+                  onClick={() => setActiveMetric('engagement')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'engagement' ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >Engagement</button>
+                <button
+                  onClick={() => setActiveMetric('followers')}
+                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'followers' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                >Abonnés</button>
               </div>
 
               <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
@@ -342,32 +470,64 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               </div>
             </div>
           </div>
-          <div className="h-[300px] w-full mt-auto">
+
+          {/* Encart Pédagogique Interactif pour l'indicateur sélectionné */}
+          {metricConfig[activeMetric] && (
+            <div className="mb-4 p-4 rounded-xl border transition-all duration-300 bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2">
+                  <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full border ${metricConfig[activeMetric].bgBadge}`}>
+                    {metricConfig[activeMetric].label}
+                  </span>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {metricConfig[activeMetric].title}
+                  </h4>
+                </div>
+                <span className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 flex items-center gap-1">
+                  <Calendar className="w-3.5 h-3.5 text-blue-500" /> De la 1ère vidéo publiée à aujourd'hui
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-gray-300 leading-relaxed mb-2.5">
+                {metricConfig[activeMetric].explanation}
+              </p>
+              <div className="flex items-start sm:items-center gap-2 text-[11px] font-medium text-slate-700 dark:text-gray-300 bg-white dark:bg-black/30 p-2.5 rounded-lg border border-slate-200 dark:border-white/5">
+                <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5 sm:mt-0" />
+                <span>{metricConfig[activeMetric].takeaway}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="h-[280px] w-full mt-auto">
             <ResponsiveContainer width="100%" height="100%">
               {chartType === 'bar' ? (
-                <BarChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
-                  <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(37, 244, 238, 0.05)'}} />
+                  <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255, 255, 255, 0.05)'}} />
                   <Bar dataKey={activeMetric} radius={[6, 6, 0, 0]}>
                     {chartData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill="url(#colorMetric)" />
+                      <Cell key={`cell-${index}`} fill={metricConfig[activeMetric]?.color || '#25F4EE'} fillOpacity={0.85} />
                     ))}
                   </Bar>
-                  <defs>
-                    <linearGradient id="colorMetric" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#25F4EE" stopOpacity={1}/>
-                      <stop offset="100%" stopColor="#25F4EE" stopOpacity={0.2}/>
-                    </linearGradient>
-                  </defs>
                 </BarChart>
               ) : (
-                <LineChart data={chartData} margin={{ top: 0, right: 0, left: 0, bottom: 0 }}>
+                <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
                   <Tooltip content={<CustomTooltip />} />
-                  <Line type="monotone" dataKey={activeMetric} stroke="#25F4EE" strokeWidth={3} dot={{r: 4, fill: '#111827', stroke: '#25F4EE', strokeWidth: 2}} activeDot={{r: 6}} />
+                  <Line 
+                    type="monotone" 
+                    dataKey={activeMetric} 
+                    stroke={metricConfig[activeMetric]?.color || '#25F4EE'} 
+                    strokeWidth={3} 
+                    dot={{r: 3, fill: '#111827', stroke: metricConfig[activeMetric]?.color || '#25F4EE', strokeWidth: 2}} 
+                    activeDot={{r: 6, fill: metricConfig[activeMetric]?.color || '#25F4EE'}} 
+                  />
                 </LineChart>
               )}
             </ResponsiveContainer>
+          </div>
+          <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px] text-slate-600 dark:text-gray-400">
+            <span>Ordre chronologique : Vid 1 (1ère vidéo)</span>
+            <span>Vid {recentVideos.length} (Dernière vidéo · Aujourd'hui)</span>
           </div>
         </div>
         
