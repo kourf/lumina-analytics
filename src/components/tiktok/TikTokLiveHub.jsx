@@ -122,12 +122,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const topQuestions = propLiveData?.topQuestions || (socket.isSocketConnected ? socket.metrics?.topQuestions : []) || [];
   const topCommenters = propLiveData?.topCommenters || (socket.isSocketConnected ? socket.metrics?.topContributors : []) || [];
   const recentComments = propLiveData?.recentComments || (socket.isSocketConnected ? socket.chatMessages : []) || [];
-  const liveTimeline = isLive ? (socket.isSocketConnected ? socket.liveTimeline : (propLiveData?.liveTimeline || [])) : [];
-
-  const displayTimeline = liveTimeline.length > 0 ? liveTimeline : Array.from({ length: 90 }, (_, i) => ({
-    time: i,
-    viewers: Math.floor(Math.sin(i / 10) * 10 + 20) + (i % 5 === 0 ? Math.random() * 5 : 0)
-  }));
+  const displayTimeline = isLive ? (liveTimeline.length > 0 ? liveTimeline : [{ time: 0, viewers: currentViewers }]) : [];
 
   const handleResetLive = async () => {
     if (window.confirm('Voulez-vous vraiment réinitialiser l\'affichage du live actuel ?')) {
@@ -289,31 +284,41 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         </h3>
         <p className="text-xs text-slate-400 mb-6">Évolution minute par minute de la présence des spectateurs sur le stream.</p>
         
-        <div className="h-[250px] w-full">
-          <ResponsiveContainer width="100%" height="100%">
-            <AreaChart data={displayTimeline} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-              <defs>
-                <linearGradient id="colorViewers" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.4}/>
-                  <stop offset="95%" stopColor="#FE2C55" stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="time" stroke="#334155" tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(val) => `${val}m`} minTickGap={30} />
-              <YAxis stroke="#334155" tick={{fill: '#64748b', fontSize: 12}} />
-              <Tooltip content={<CustomTooltip />} />
-              <ReferenceLine y={Math.round(peakViewers * 0.75) || 20} stroke="#25F4EE" strokeDasharray="3 3" />
-              <Area 
-                type="monotone" 
-                dataKey="viewers" 
-                stroke="#FE2C55" 
-                strokeWidth={3}
-                fillOpacity={1} 
-                fill="url(#colorViewers)" 
-                isAnimationActive={true}
-              />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
+        {isLive && displayTimeline.length > 0 ? (
+          <div className="h-[250px] w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={displayTimeline} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="colorViewers" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.4}/>
+                    <stop offset="95%" stopColor="#FE2C55" stopOpacity={0}/>
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="time" stroke="#334155" tick={{fill: '#64748b', fontSize: 12}} tickFormatter={(val) => `${val}m`} minTickGap={30} />
+                <YAxis stroke="#334155" tick={{fill: '#64748b', fontSize: 12}} />
+                <Tooltip content={<CustomTooltip />} />
+                <ReferenceLine y={Math.round(peakViewers * 0.75) || 20} stroke="#25F4EE" strokeDasharray="3 3" />
+                <Area 
+                  type="monotone" 
+                  dataKey="viewers" 
+                  stroke="#FE2C55" 
+                  strokeWidth={3}
+                  fillOpacity={1} 
+                  fill="url(#colorViewers)" 
+                  isAnimationActive={true}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="h-[200px] w-full flex flex-col items-center justify-center border border-dashed border-white/5 rounded-2xl bg-black/20 text-center p-6">
+            <Activity className="w-9 h-9 text-slate-600 mb-2.5 opacity-60" />
+            <p className="text-white font-bold text-sm mb-1">Aucune session en direct actuellement</p>
+            <p className="text-xs text-slate-400 max-w-md">
+              La courbe de rétention minute par minute s'activera automatiquement dès que vous lancerez votre live sur TikTok.
+            </p>
+          </div>
+        )}
       </div>
 
       {/* AI Intelligence & Chat Analysis (Questions fréquentes & TOP 5 Spectateurs) */}
