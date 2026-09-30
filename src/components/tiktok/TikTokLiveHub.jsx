@@ -53,14 +53,17 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         const archivesRef = collection(db, 'tiktok_archives');
         const q = query(archivesRef, orderBy('startedAt', 'desc'), limit(15));
         const snapshot = await getDocs(q);
-        const fetchedArchives = snapshot.docs.map(doc => ({
-          id: doc.id,
-          ...doc.data()
-        }));
+        const fetchedArchives = snapshot.docs
+          .map(doc => ({
+            id: doc.id,
+            ...doc.data()
+          }))
+          .filter(a => a.id !== 'live_karam_drame_20260912_7684785174780906262');
         if (fetchedArchives.length > 0) {
           setArchives(fetchedArchives);
         } else if (Array.isArray(propLiveData?.historyArchives) && propLiveData.historyArchives.length > 0) {
-          setArchives(propLiveData.historyArchives);
+          const validFallbacks = propLiveData.historyArchives.filter(a => a.id !== 'live_karam_drame_20260912_7684785174780906262');
+          setArchives(validFallbacks);
         } else {
           setArchives([]);
         }
@@ -72,6 +75,21 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     };
     fetchArchives();
   }, [propLiveData?.historyArchives]);
+
+  const handleDeleteArchive = async (archiveId, e) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (!archiveId) return;
+    if (window.confirm("Voulez-vous supprimer définitivement cette archive ?")) {
+      try {
+        const { doc, deleteDoc } = await import('firebase/firestore');
+        await deleteDoc(doc(db, 'tiktok_archives', archiveId)).catch(() => {});
+        await deleteDoc(doc(db, 'tiktokLiveSessions', archiveId)).catch(() => {});
+        setArchives(prev => prev.filter(a => a.id !== archiveId));
+      } catch (err) {
+        console.error("Erreur suppression:", err);
+      }
+    }
+  };
 
   const formatNumber = (num) => {
     if (!num) return '0';
@@ -582,7 +600,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                           ID: {arch.id || 'N/A'} • {arch.durationStr || 'Durée non spécifiée'}
                         </div>
                       </div>
-                      <div className="flex items-center gap-6 text-sm">
+                      <div className="flex items-center gap-4 md:gap-6 text-sm">
                         <div className="text-center">
                           <div className="text-xs text-slate-400">Pic Vues</div>
                           <div className="text-white font-bold">{formatNumber(arch.peakViewers || arch.views || 0)}</div>
@@ -595,6 +613,13 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                           <div className="text-xs text-slate-400">Nv. Abos</div>
                           <div className="text-emerald-400 font-bold">+{formatNumber(arch.newFollowers || arch.followers || 0)}</div>
                         </div>
+                        <button
+                          onClick={(e) => handleDeleteArchive(arch.id, e)}
+                          title="Supprimer définitivement cette archive"
+                          className="p-2 rounded-xl bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 hover:border-red-500/40 transition-colors cursor-pointer"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                       </div>
                     </div>
 
