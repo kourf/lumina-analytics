@@ -1,4 +1,5 @@
 import { TikTokLiveConnection } from 'tiktok-live-connector';
+import http from 'http';
 
 const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
 const PROJECT_ID = 'lumina-analytics-kd-2026';
@@ -42,6 +43,8 @@ function getInitialState() {
     likes: 0,
     shares: 0,
     followers: 0,
+    initialFollowers: 0,
+    finalFollowers: 0,
     comments: 0,
     currentViewers: 0,
     peakViewers: 0,
@@ -168,7 +171,15 @@ async function connectToLive() {
     isConnected = true;
     stateData.roomId = state.roomId || '';
     stateData.isLive = true;
-    console.log(`[Lumina Daemon] ✅ Connecté avec succès au Live TikTok ! Room ID: ${state.roomId}`);
+    stateData.started_at = new Date().toISOString();
+
+    // 1. Capture des abonnés initiaux au moment exact du lancement
+    if (state.roomInfo?.owner?.follower_count) {
+      stateData.initialFollowers = state.roomInfo.owner.follower_count;
+    } else if (state.roomInfo?.data?.owner?.follower_count) {
+      stateData.initialFollowers = state.roomInfo.data.owner.follower_count;
+    }
+    console.log(`[Lumina Daemon] ✅ Connecté au Live TikTok ! Room ID: ${state.roomId} (Abonnés initiaux: ${stateData.initialFollowers})`);
 
     if (state.roomInfo?.data?.user_count) {
       stateData.currentViewers = state.roomInfo.data.user_count;
@@ -235,6 +246,15 @@ async function connectToLive() {
       console.log('[Lumina Daemon] 🛑 Le live s\'est terminé.');
       isConnected = false;
       stateData.isLive = false;
+      
+      // Capture des abonnés à la fin
+      try {
+        const roomInfo = await connection.getRoomInfo();
+        stateData.finalFollowers = roomInfo?.owner?.follower_count || roomInfo?.data?.owner?.follower_count || (stateData.initialFollowers + stateData.followers);
+      } catch (e) {
+        stateData.finalFollowers = stateData.initialFollowers + stateData.followers;
+      }
+
       await saveArchiveToFirestore();
       scheduleFirestoreSync();
       setTimeout(connectToLive, 10000);
@@ -255,21 +275,48 @@ async function connectToLive() {
 
 async function saveArchiveToFirestore() {
   try {
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const dateStr = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}_${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+    const docId = `live_${dateStr}`;
+
+    // Calcul de la durée exacte
+    let durationSeconds = 0;
+    if (stateData.started_at) {
+      durationSeconds = Math.max(0, Math.floor((now.getTime() - new Date(stateData.started_at).getTime()) / 1000));
+    }
+    const h = Math.floor(durationSeconds / 3600);
+    const m = Math.floor((durationSeconds % 3600) / 60);
+    const s = durationSeconds % 60;
+    const durationStr = `${pad(h)}:${pad(m)}:${pad(s)}`;
+
+    // Calcul de l'acquisition exacte d'abonnés (Final - Initial)
+    const acquiredFollowers = (stateData.finalFollowers && stateData.initialFollowers)
+      ? Math.max(0, stateData.finalFollowers - stateData.initialFollowers)
+      : stateData.followers;
+
     const archivePayload = {
       fields: {
+        id: toFirestoreValue(docId),
         likes: toFirestoreValue(stateData.likes),
         shares: toFirestoreValue(stateData.shares),
-        followers: toFirestoreValue(stateData.followers),
+        followers: toFirestoreValue(acquiredFollowers),
+        newFollowers: toFirestoreValue(acquiredFollowers),
+        initialFollowers: toFirestoreValue(stateData.initialFollowers),
+        finalFollowers: toFirestoreValue(stateData.finalFollowers),
         comments: toFirestoreValue(stateData.comments),
         peakViewers: toFirestoreValue(stateData.peakViewers),
-        startedAt: toFirestoreValue(stateData.started_at || new Date().toISOString()),
-        endedAt: toFirestoreValue(new Date().toISOString()),
+        startedAt: toFirestoreValue(stateData.started_at || now.toISOString()),
+        endedAt: toFirestoreValue(now.toISOString()),
+        durationStr: toFirestoreValue(durationStr),
+        durationSeconds: toFirestoreValue(durationSeconds),
         topQuestions: toFirestoreValue(stateData.topQuestions.slice(0, 15)),
         roomId: toFirestoreValue(stateData.roomId)
       }
     };
     
-    const archiveUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/tiktok_archives?key=${API_KEY}`;
+    // Création d'une archive horodatée unique (ex: live_20260930_231500)
+    const archiveUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/tiktok_archives?documentId=${docId}&key=${API_KEY}`;
     
     const res = await fetch(archiveUrl, {
       method: 'POST',
@@ -278,7 +325,7 @@ async function saveArchiveToFirestore() {
     });
     
     if (res.ok) {
-      console.log('[Lumina Daemon] 📁 Archive du live sauvegardée avec succès dans tiktok_archives.');
+      console.log(`[Lumina Daemon] 📁 Archive du live sauvegardée avec succès: ${docId}`);
       stateData = getInitialState(); // Réinitialisation de l'état
     } else {
       console.error('[Lumina Daemon] Erreur sauvegarde archive:', await res.text());
@@ -292,7 +339,6 @@ connectToLive();
 
 // Serveur HTTP basique pour satisfaire les exigences des hébergeurs (Render, Koyeb, etc.)
 // qui nécessitent d'écouter sur un port pour maintenir le service actif.
-import http from 'http';
 const PORT = process.env.PORT || 8080;
 http.createServer((req, res) => {
   res.writeHead(200, { 'Content-Type': 'text/plain' });
