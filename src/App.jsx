@@ -90,7 +90,7 @@ function App() {
 
             const liveRaw = firebaseData.tiktokLiveAPI || {};
             const tiktokLiveClean = {
-              isLive: Boolean(liveRaw.isLive === true && Boolean(liveRaw.roomId)),
+              isLive: Boolean(liveRaw.isLive === true),
               currentViewers: Number(liveRaw.currentViewers || 0),
               peakViewers: Number(liveRaw.peakViewers || 0),
               likes: Number(liveRaw.likes ?? liveRaw.totalLikes ?? liveRaw.likeCount ?? 0),
