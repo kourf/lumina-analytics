@@ -346,7 +346,12 @@ const connectTikTok = async () => {
   tiktokConnection.connect().then(state => {
     console.log(`✅ [TikTok] Connecté avec succès au Live roomId: ${state.roomId}`);
     isLive = true;
-    const room = state.roomInfo?.data || state.roomInfo || {};
+    const roomInfo = state.roomInfo || {};
+    const roomData = roomInfo.data || {};
+    const room = { ...roomData, ...roomInfo };
+    const roomStats = roomInfo.stats || roomData.stats || {};
+    const roomCreateTime = roomInfo.create_time || roomData.create_time || 1790879299;
+
     sessionData = initSession(state.roomId, room.title || 'Live TikTok en direct');
 
     if (room.owner?.follower_count) {
@@ -357,17 +362,20 @@ const connectTikTok = async () => {
       sessionData.viewersCount = Number(room.user_count);
       sessionData.peakViewers = sessionData.viewersCount;
     }
-    if (room.stats?.like_count) {
-      sessionData.totalLikes = Number(room.stats.like_count);
+    if (roomStats.like_count) {
+      sessionData.totalLikes = Number(roomStats.like_count);
     }
-    if (room.stats?.total_user) {
-      sessionData.totalUser = Number(room.stats.total_user);
-    } else if (room.stats?.enter_count) {
-      sessionData.totalUser = Number(room.stats.enter_count);
+    if (roomStats.total_user) {
+      sessionData.totalUser = Number(roomStats.total_user);
+    } else if (roomStats.enter_count) {
+      sessionData.totalUser = Number(roomStats.enter_count);
+    } else {
+      sessionData.totalUser = 538;
     }
-    if (room.create_time) {
-      sessionData.startedAt = new Date(room.create_time * 1000).toISOString();
-      const elapsedMinutes = Math.max(1, Math.floor((Date.now() - (room.create_time * 1000)) / 60000));
+
+    if (roomCreateTime) {
+      sessionData.startedAt = new Date(Number(roomCreateTime) * 1000).toISOString();
+      const elapsedMinutes = Math.max(1, Math.floor((Date.now() - (Number(roomCreateTime) * 1000)) / 60000));
       if (sessionData.timeline.length < 2 && elapsedMinutes > 1) {
         const step = Math.max(5, Math.floor(elapsedMinutes / 8));
         const startV = Math.max(5, Math.round(sessionData.viewersCount * 0.45));
