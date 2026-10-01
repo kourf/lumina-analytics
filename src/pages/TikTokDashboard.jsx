@@ -7,6 +7,7 @@ import { TikTokCompetitorAnalysis } from '../components/tiktok/TikTokCompetitorA
 import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
 import { useTikTokUnifiedData } from '../hooks/useTikTokUnifiedData';
 import { useTikTokLiveStatus } from '../hooks/useTikTokLiveStatus';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { Users, Radio, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -125,20 +126,29 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
 
       {/* SECTION 3 : HUB LIVE STREAMING (Bannière Dynamique / Hub) */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.3s' }}>
-        <TikTokLiveHub 
-          liveData={{
-            ...(liveData || {}),
-            isLive: effectiveIsLive,
-            roomId: resolvedRoomId,
-            currentViewers: resolvedCurrentViewers,
-            peakViewers: resolvedPeakViewers,
-            started_at: resolvedStartedAt,
-            lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
-            status: effectiveIsLive ? 'LIVE' : (verifiedLive.status || 'OFFLINE')
-          }}
-          onRefresh={handleManualRefresh}
-          isRefreshing={verifiedLive.isRefreshing || loading}
-        />
+        <ErrorBoundary
+          fallback={
+            <div className="w-full bg-[#0B0F19] border border-slate-800 rounded-[32px] p-6 text-center">
+              <p className="text-sm font-bold text-white mb-1">Hub Live Streaming en cours de synchronisation</p>
+              <p className="text-xs text-slate-400">Le direct est en cours d'analyse en arrière-plan.</p>
+            </div>
+          }
+        >
+          <TikTokLiveHub 
+            liveData={{
+              ...(liveData || {}),
+              isLive: effectiveIsLive,
+              roomId: resolvedRoomId,
+              currentViewers: resolvedCurrentViewers,
+              peakViewers: resolvedPeakViewers,
+              started_at: resolvedStartedAt,
+              lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
+              status: effectiveIsLive ? 'LIVE' : (verifiedLive.status || 'OFFLINE')
+            }}
+            onRefresh={handleManualRefresh}
+            isRefreshing={verifiedLive.isRefreshing || loading}
+          />
+        </ErrorBoundary>
       </section>
 
       {/* SECTION 4 : CATALOGUE VIDEO */}

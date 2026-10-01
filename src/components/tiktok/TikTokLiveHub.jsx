@@ -26,17 +26,21 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     const startedAt = propLiveData?.started_at || propLiveData?.startedAt || socket.startedAt;
     if (isLive && startedAt) {
       const startMs = new Date(startedAt).getTime();
-      const updateClock = () => {
-        const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
-        const h = Math.floor(diff / 3600);
-        const m = Math.floor((diff % 3600) / 60);
-        const s = diff % 60;
-        setLiveDurationTicker(
-          `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
-        );
-      };
-      updateClock();
-      interval = setInterval(updateClock, 1000);
+      if (!isNaN(startMs) && startMs > 0) {
+        const updateClock = () => {
+          const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+          const h = Math.floor(diff / 3600);
+          const m = Math.floor((diff % 3600) / 60);
+          const s = diff % 60;
+          setLiveDurationTicker(
+            `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+          );
+        };
+        updateClock();
+        interval = setInterval(updateClock, 1000);
+      } else {
+        setLiveDurationTicker(propLiveData?.durationStr || socket.metrics?.uptimeFormatted || '00:00:00');
+      }
     } else {
       setLiveDurationTicker(propLiveData?.durationStr || socket.metrics?.uptimeFormatted || '00:00:00');
     }
@@ -111,18 +115,46 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     }
   };
 
-  const currentViewers = isLive ? (socket.isSocketConnected ? socket.metrics.viewers : (propLiveData?.currentViewers || 0)) : 0;
-  const peakViewers = isLive ? (socket.isSocketConnected ? socket.metrics.peakViewers : (propLiveData?.peakViewers || 0)) : 0;
-  const likes = isLive ? (socket.isSocketConnected ? socket.metrics.likes : (propLiveData?.likes || 0)) : 0;
-  const commentsCount = isLive ? (socket.isSocketConnected ? socket.metrics.comments : (propLiveData?.comments || 0)) : 0;
-  const newFollowers = isLive ? (socket.isSocketConnected ? socket.metrics.followers : (propLiveData?.newFollowers || 0)) : 0;
-  const shares = isLive ? (socket.isSocketConnected ? socket.metrics.shares : (propLiveData?.shares || 0)) : 0;
+  const currentViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.viewers ?? 0) : Number(propLiveData?.currentViewers || 0)) : 0;
+  const peakViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.peakViewers ?? 0) : Number(propLiveData?.peakViewers || 0)) : 0;
+  const likes = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.likes ?? 0) : Number(propLiveData?.likes || 0)) : 0;
+  const commentsCount = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.comments ?? 0) : Number(propLiveData?.comments || 0)) : 0;
+  const newFollowers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.followers ?? 0) : Number(propLiveData?.newFollowers || 0)) : 0;
+  const shares = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.shares ?? 0) : Number(propLiveData?.shares || 0)) : 0;
   
   // Analyse sémantique des questions & TOP 5 spectateurs les plus actifs
-  const topQuestions = propLiveData?.topQuestions || (socket.isSocketConnected ? socket.metrics?.topQuestions : []) || [];
-  const topCommenters = propLiveData?.topCommenters || (socket.isSocketConnected ? socket.metrics?.topContributors : []) || [];
-  const recentComments = propLiveData?.recentComments || (socket.isSocketConnected ? socket.chatMessages : []) || [];
-  const displayTimeline = isLive ? (liveTimeline.length > 0 ? liveTimeline : [{ time: 0, viewers: currentViewers }]) : [];
+  const topQuestions = (Array.isArray(propLiveData?.topQuestions) && propLiveData.topQuestions.length > 0)
+    ? propLiveData.topQuestions
+    : (Array.isArray(socket.metrics?.topQuestions) ? socket.metrics.topQuestions : []);
+
+  const topCommenters = (Array.isArray(propLiveData?.topCommenters) && propLiveData.topCommenters.length > 0)
+    ? propLiveData.topCommenters
+    : (Array.isArray(propLiveData?.topContributors) && propLiveData.topContributors.length > 0)
+      ? propLiveData.topContributors
+      : (Array.isArray(socket.metrics?.topContributors) ? socket.metrics.topContributors : []);
+
+  const recentComments = (Array.isArray(propLiveData?.recentComments) && propLiveData.recentComments.length > 0)
+    ? propLiveData.recentComments
+    : (Array.isArray(socket.chatMessages) ? socket.chatMessages : []);
+
+  // Définition sécurisée de la timeline pour AreaChart (correction du ReferenceError sur liveTimeline)
+  const rawTimeline = (socket.isSocketConnected && Array.isArray(socket.liveTimeline) && socket.liveTimeline.length > 0)
+    ? socket.liveTimeline
+    : (Array.isArray(propLiveData?.timeline) && propLiveData.timeline.length > 0)
+      ? propLiveData.timeline
+      : (Array.isArray(propLiveData?.history) && propLiveData.history.length > 0)
+        ? propLiveData.history
+        : [];
+
+  const displayTimeline = isLive
+    ? (rawTimeline.length > 0
+        ? rawTimeline.map((pt, idx) => ({
+            time: pt?.time ?? pt?.minute ?? idx,
+            viewers: Number(pt?.viewers ?? pt?.count ?? pt?.value ?? 0)
+          }))
+        : [{ time: 0, viewers: Number(currentViewers) || 0 }]
+      )
+    : [];
 
   const handleResetLive = async () => {
     if (window.confirm('Voulez-vous vraiment réinitialiser l\'affichage du live actuel ?')) {
@@ -138,11 +170,11 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   };
 
   const CustomTooltip = ({ active, payload, label }) => {
-    if (active && payload && payload.length) {
+    if (active && payload && payload.length && payload[0]) {
       return (
         <div className="bg-[#1C1F2E] border border-slate-700 p-3 rounded-lg shadow-xl">
-          <p className="text-slate-400 text-xs mb-1">{`Minute ${label}`}</p>
-          <p className="text-[#FE2C55] font-bold">{`${payload[0].value} spectateurs`}</p>
+          <p className="text-slate-400 text-xs mb-1">{`Minute ${label ?? 0}`}</p>
+          <p className="text-[#FE2C55] font-bold">{`${Number(payload[0].value) || 0} spectateurs`}</p>
         </div>
       );
     }
@@ -381,12 +413,13 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
               <span>Questions & Demandes récurrentes détectées par l'algorithme :</span>
               <span className="text-purple-400 font-mono">Total analysé : {commentsCount} commentaires</span>
             </div>
-            {topQuestions.length > 0 ? (
+            {topQuestions.filter(Boolean).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {topQuestions.map((q, idx) => {
-                  const qText = typeof q === 'string' ? q : (q.original || q.text || q.question || 'Question inconnue');
-                  const count = typeof q === 'object' ? (q.count || 1) : 1;
-                  const asker = typeof q === 'object' && q.lastAskedBy ? q.lastAskedBy : 'Spectateur';
+                {topQuestions.filter(Boolean).map((q, idx) => {
+                  const isObj = q !== null && typeof q === 'object';
+                  const qText = typeof q === 'string' ? q : (isObj ? (q.original || q.text || q.question || 'Question inconnue') : 'Question inconnue');
+                  const count = isObj ? (q.count || 1) : 1;
+                  const asker = (isObj && q.lastAskedBy) ? q.lastAskedBy : 'Spectateur';
                   return (
                     <div key={idx} className="bg-slate-900/60 border border-white/5 hover:border-purple-500/30 rounded-xl p-3.5 flex items-start justify-between gap-3 transition-colors">
                       <div className="flex-1 min-w-0">
@@ -423,9 +456,9 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
               </span>
             </div>
 
-            {topCommenters.length > 0 ? (
+            {topCommenters.filter(Boolean).length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                {topCommenters.slice(0, 5).map((user, idx) => (
+                {topCommenters.filter(Boolean).slice(0, 5).map((user, idx) => (
                   <div 
                     key={idx} 
                     className={cn(
@@ -451,21 +484,21 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                           #{idx + 1}
                         </span>
                         <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                          {user.badge || `Top ${idx + 1}`}
+                          {user?.badge || `Top ${idx + 1}`}
                         </span>
                       </div>
 
-                      <div className="font-black text-white text-base truncate mb-1" title={user.nickname || user.name}>
-                        @{user.nickname || user.name || 'Spectateur'}
+                      <div className="font-black text-white text-base truncate mb-1" title={user?.nickname || user?.name}>
+                        @{user?.nickname || user?.name || 'Spectateur'}
                       </div>
                       
                       <div className="text-2xl font-black text-amber-400 font-mono mb-2">
-                        {user.count || user.comments || 0}
+                        {user?.count || user?.comments || 0}
                         <span className="text-xs font-medium text-slate-400 ml-1">msgs</span>
                       </div>
                     </div>
 
-                    {user.lastComment && (
+                    {user?.lastComment && (
                       <div className="text-[11px] text-slate-400 bg-black/30 p-2 rounded-lg truncate italic border border-white/5">
                         "{user.lastComment}"
                       </div>
@@ -487,15 +520,15 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         {activeAiTab === 'chat' && (
           <div className="animate-fade-in space-y-2">
             <div className="text-xs text-slate-400 mb-2">Derniers messages du chat en direct :</div>
-            {recentComments.length > 0 ? (
+            {recentComments.filter(Boolean).length > 0 ? (
               <div className="max-h-[220px] overflow-y-auto space-y-2 pr-2">
-                {recentComments.slice(0, 20).map((msg, i) => (
+                {recentComments.filter(Boolean).slice(0, 20).map((msg, i) => (
                   <div key={i} className="bg-slate-900/50 border border-white/5 rounded-lg p-2.5 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2 truncate">
-                      <span className="text-[#FE2C55] font-bold">@{msg.nickname || 'Spectateur'}:</span>
-                      <span className="text-slate-300 truncate">{msg.comment || msg.content || ''}</span>
+                      <span className="text-[#FE2C55] font-bold">@{msg?.nickname || 'Spectateur'}:</span>
+                      <span className="text-slate-300 truncate">{msg?.comment || msg?.content || ''}</span>
                     </div>
-                    {msg.time && <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">{msg.time}</span>}
+                    {msg?.time && <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">{msg.time}</span>}
                   </div>
                 ))}
               </div>

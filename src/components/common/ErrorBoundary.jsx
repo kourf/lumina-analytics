@@ -18,6 +18,11 @@ export class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback) {
+        return typeof this.props.fallback === 'function' 
+          ? this.props.fallback(this.state.error, () => this.setState({ hasError: false, error: null }))
+          : this.props.fallback;
+      }
       return (
         <div className="min-h-[50vh] flex flex-col items-center justify-center p-8 text-center max-w-lg mx-auto">
           <div className="w-16 h-16 rounded-3xl bg-red-500/10 border border-red-500/20 flex items-center justify-center mb-6 text-red-500 shadow-lg shadow-red-500/10">
