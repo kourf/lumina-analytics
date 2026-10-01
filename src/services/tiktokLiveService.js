@@ -86,14 +86,9 @@ export function validateTrueLiveCondition(roomData, expectedUsername = 'karam.dr
     return false;
   }
 
-  // Vérification stricte de fin de stream (finish_time / finishTime)
-  const finishTime = Number(roomData.finish_time || roomData.finishTime || roomData.finished_at || 0);
-  if (finishTime > 0) {
-    return false; // Le direct est officiellement terminé !
-  }
-
-  // Vérification de rediffusion / replay
-  if (Number(roomData.stats?.replay_viewers || 0) > 0 && Number(roomData.user_count || roomData.currentViewers || 0) <= 20) {
+  // Le statut TikTok Webcast : status === 2 indique formellement un direct en cours.
+  // Status 4 indique que le direct est terminé.
+  if (roomData.status === 4 || roomData.room_status === 4 || roomData.live_status === 4) {
     return false;
   }
 

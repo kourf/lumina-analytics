@@ -1,38 +1,69 @@
 const FIRESTORE_URL = 'https://firestore.googleapis.com/v1/projects/lumina-analytics-kd-2026/databases/(default)/documents/users/karamokho';
+const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 async function updateFirestoreLive(liveData) {
-  const fields = {
-    'tiktokLiveAPI.isLive': { booleanValue: Boolean(liveData.isLive) },
-    'tiktokLiveAPI.roomId': { stringValue: String(liveData.roomId || '') },
-    'tiktokLiveAPI.title': { stringValue: String(liveData.title || (liveData.isLive ? 'Live TikTok en cours' : '')) },
-    'tiktokLiveAPI.currentViewers': { integerValue: Number(liveData.currentViewers || 0) },
-    'tiktokLiveAPI.peakViewers': { integerValue: Number(liveData.peakViewers || 0) },
-    'tiktokLiveAPI.totalUser': { integerValue: Number(liveData.totalUser || 0) },
-    'tiktokLiveAPI.likes': { integerValue: Number(liveData.likes || 0) },
-    'tiktokLiveAPI.comments': { integerValue: Number(liveData.comments || 0) },
-    'tiktokLiveAPI.shares': { integerValue: Number(liveData.shares || 0) },
-    'tiktokLiveAPI.followers': { integerValue: Number(liveData.followers || 0) },
-    'tiktokLiveAPI.lastDetected': { stringValue: new Date().toISOString() },
-    'tiktokAPI.isLive': { booleanValue: Boolean(liveData.isLive) },
-    'isLive': { booleanValue: Boolean(liveData.isLive) }
+  const liveApiFields = {
+    isLive: { booleanValue: Boolean(liveData.isLive) },
+    roomId: { stringValue: String(liveData.roomId || '') },
+    title: { stringValue: String(liveData.title || (liveData.isLive ? 'Live TikTok en cours' : '')) },
+    currentViewers: { integerValue: String(liveData.currentViewers ?? 0) },
+    peakViewers: { integerValue: String(liveData.peakViewers ?? 0) },
+    totalUser: { integerValue: String(liveData.totalUser ?? 0) },
+    likes: { integerValue: String(liveData.likes ?? 0) },
+    totalLikes: { integerValue: String(liveData.likes ?? 0) },
+    comments: { integerValue: String(liveData.comments ?? 0) },
+    shares: { integerValue: String(liveData.shares ?? 0) },
+    followers: { integerValue: String(liveData.followers ?? 0) },
+    lastDetected: { stringValue: new Date().toISOString() }
   };
 
   if (liveData.isLive && liveData.startedAt) {
-    fields['tiktokLiveAPI.startedAt'] = { stringValue: String(liveData.startedAt) };
-    fields['tiktokLiveAPI.started_at'] = { stringValue: String(liveData.startedAt) };
+    liveApiFields.startedAt = { stringValue: String(liveData.startedAt) };
+    liveApiFields.started_at = { stringValue: String(liveData.startedAt) };
   } else if (!liveData.isLive) {
-    fields['tiktokLiveAPI.startedAt'] = { nullValue: null };
-    fields['tiktokLiveAPI.started_at'] = { nullValue: null };
+    liveApiFields.startedAt = { nullValue: null };
+    liveApiFields.started_at = { nullValue: null };
   }
 
-  const updateMask = Object.keys(fields).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
-  const url = `${FIRESTORE_URL}?${updateMask}`;
+  const fieldPaths = [
+    'tiktokLiveAPI.isLive',
+    'tiktokLiveAPI.roomId',
+    'tiktokLiveAPI.title',
+    'tiktokLiveAPI.currentViewers',
+    'tiktokLiveAPI.peakViewers',
+    'tiktokLiveAPI.totalUser',
+    'tiktokLiveAPI.likes',
+    'tiktokLiveAPI.totalLikes',
+    'tiktokLiveAPI.comments',
+    'tiktokLiveAPI.shares',
+    'tiktokLiveAPI.followers',
+    'tiktokLiveAPI.lastDetected',
+    'tiktokLiveAPI.startedAt',
+    'tiktokLiveAPI.started_at',
+    'tiktokAPI.isLive',
+    'isLive'
+  ];
+
+  const updateMask = fieldPaths.map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
+  const url = `${FIRESTORE_URL}?${updateMask}&key=${API_KEY}`;
+
+  const body = {
+    fields: {
+      tiktokLiveAPI: {
+        mapValue: {
+          fields: liveApiFields
+        }
+      },
+      'tiktokAPI.isLive': { booleanValue: Boolean(liveData.isLive) },
+      isLive: { booleanValue: Boolean(liveData.isLive) }
+    }
+  };
 
   const res = await fetch(url, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields })
+    body: JSON.stringify(body)
   });
 
   return res.ok;
@@ -136,10 +167,8 @@ export default {
             const json = await roomRes.json();
             const room = json.data;
             if (room) {
-              // SEUL le status 2 SANS finish_time signifie qu'un live est ACTIF en direct
-              const finishTime = Number(room.finish_time || room.finishTime || 0);
-              const hasEnded = finishTime > 0;
-              const isLive = room.status === 2 && !hasEnded;
+              // Statut TikTok Webcast : status === 2 signifie EN DIRECT ACTIF (status === 4 signifie TERMINÉ)
+              const isLive = room.status === 2;
               const stats = room.stats || {};
               const currentViewers = isLive ? Number(room.user_count || 0) : 0;
               const totalUser = Number(stats.total_user || 0);

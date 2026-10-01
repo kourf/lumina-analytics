@@ -1,7 +1,7 @@
 import express from 'express';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
-import { WebcastPushConnection } from 'tiktok-live-connector';
+import { TikTokLiveConnection } from 'tiktok-live-connector';
 import admin from 'firebase-admin';
 import cors from 'cors';
 import dotenv from 'dotenv';
@@ -60,42 +60,142 @@ async function syncToFirestore(livePayload) {
 
   // 2. Méthode REST API (toujours opérationnelle)
   try {
-    const fields = {
-      'tiktokLiveAPI.isLive': { booleanValue: Boolean(livePayload.isLive) },
-      'tiktokLiveAPI.roomId': { stringValue: String(livePayload.roomId || '') },
-      'tiktokLiveAPI.title': { stringValue: String(livePayload.title || 'Live TikTok') },
-      'tiktokLiveAPI.currentViewers': { integerValue: Number(livePayload.currentViewers || 0) },
-      'tiktokLiveAPI.peakViewers': { integerValue: Number(livePayload.peakViewers || 0) },
-      'tiktokLiveAPI.likes': { integerValue: Number(livePayload.likes || 0) },
-      'tiktokLiveAPI.totalLikes': { integerValue: Number(livePayload.likes || 0) },
-      'tiktokLiveAPI.comments': { integerValue: Number(livePayload.comments || 0) },
-      'tiktokLiveAPI.shares': { integerValue: Number(livePayload.shares || 0) },
-      'tiktokLiveAPI.followers': { integerValue: Number(livePayload.newFollowers || livePayload.followers || 0) },
-      'tiktokLiveAPI.newFollowers': { integerValue: Number(livePayload.newFollowers || livePayload.followers || 0) },
-      'tiktokLiveAPI.lastDetected': { stringValue: new Date().toISOString() },
-      'tiktokAPI.isLive': { booleanValue: Boolean(livePayload.isLive) },
-      'isLive': { booleanValue: Boolean(livePayload.isLive) }
+    const liveApiFields = {
+      isLive: { booleanValue: Boolean(livePayload.isLive) },
+      roomId: { stringValue: String(livePayload.roomId || '') },
+      title: { stringValue: String(livePayload.title || 'Live TikTok') },
+      currentViewers: { integerValue: String(livePayload.currentViewers ?? 0) },
+      peakViewers: { integerValue: String(livePayload.peakViewers ?? 0) },
+      likes: { integerValue: String(livePayload.likes ?? 0) },
+      totalLikes: { integerValue: String(livePayload.likes ?? 0) },
+      comments: { integerValue: String(livePayload.comments ?? 0) },
+      shares: { integerValue: String(livePayload.shares ?? 0) },
+      followers: { integerValue: String(livePayload.newFollowers || livePayload.followers || 0) },
+      newFollowers: { integerValue: String(livePayload.newFollowers || livePayload.followers || 0) },
+      lastDetected: { stringValue: new Date().toISOString() }
     };
 
     if (livePayload.startedAt) {
-      fields['tiktokLiveAPI.startedAt'] = { stringValue: String(livePayload.startedAt) };
-      fields['tiktokLiveAPI.started_at'] = { stringValue: String(livePayload.startedAt) };
+      liveApiFields.startedAt = { stringValue: String(livePayload.startedAt) };
+      liveApiFields.started_at = { stringValue: String(livePayload.startedAt) };
     } else {
-      fields['tiktokLiveAPI.startedAt'] = { nullValue: null };
-      fields['tiktokLiveAPI.started_at'] = { nullValue: null };
+      liveApiFields.startedAt = { nullValue: null };
+      liveApiFields.started_at = { nullValue: null };
     }
 
     if (livePayload.endedAt) {
-      fields['tiktokLiveAPI.endedAt'] = { stringValue: String(livePayload.endedAt) };
+      liveApiFields.endedAt = { stringValue: String(livePayload.endedAt) };
     }
 
-    const updateMask = Object.keys(fields).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
+    if (Array.isArray(livePayload.timeline) && livePayload.timeline.length > 0) {
+      liveApiFields.timeline = {
+        arrayValue: {
+          values: livePayload.timeline.map(pt => ({
+            mapValue: {
+              fields: {
+                time: { integerValue: String(pt.time ?? 0) },
+                viewers: { integerValue: String(pt.viewers ?? 0) }
+              }
+            }
+          }))
+        }
+      };
+    }
+
+    if (Array.isArray(livePayload.recentComments) && livePayload.recentComments.length > 0) {
+      liveApiFields.recentComments = {
+        arrayValue: {
+          values: livePayload.recentComments.slice(0, 30).map(c => ({
+            mapValue: {
+              fields: {
+                id: { stringValue: String(c.id || Date.now()) },
+                nickname: { stringValue: String(c.nickname || 'Spectateur') },
+                comment: { stringValue: String(c.comment || c.text || '') },
+                time: { stringValue: String(c.time || '') }
+              }
+            }
+          }))
+        }
+      };
+    }
+
+    if (Array.isArray(livePayload.topCommenters) && livePayload.topCommenters.length > 0) {
+      liveApiFields.topCommenters = {
+        arrayValue: {
+          values: livePayload.topCommenters.slice(0, 5).map((tc, idx) => ({
+            mapValue: {
+              fields: {
+                rank: { integerValue: String(idx + 1) },
+                nickname: { stringValue: String(tc.nickname || '') },
+                count: { integerValue: String(tc.count || 0) },
+                lastComment: { stringValue: String(tc.lastComment || '') },
+                badge: { stringValue: String(tc.badge || '⭐ Actif') }
+              }
+            }
+          }))
+        }
+      };
+    }
+
+    if (Array.isArray(livePayload.topQuestions) && livePayload.topQuestions.length > 0) {
+      liveApiFields.topQuestions = {
+        arrayValue: {
+          values: livePayload.topQuestions.slice(0, 10).map(q => ({
+            mapValue: {
+              fields: {
+                original: { stringValue: String(q.original || '') },
+                count: { integerValue: String(q.count || 1) },
+                lastAskedBy: { stringValue: String(q.lastAskedBy || '') },
+                time: { stringValue: String(q.time || '') }
+              }
+            }
+          }))
+        }
+      };
+    }
+
+    const fieldPaths = [
+      'tiktokLiveAPI.isLive',
+      'tiktokLiveAPI.roomId',
+      'tiktokLiveAPI.title',
+      'tiktokLiveAPI.currentViewers',
+      'tiktokLiveAPI.peakViewers',
+      'tiktokLiveAPI.likes',
+      'tiktokLiveAPI.totalLikes',
+      'tiktokLiveAPI.comments',
+      'tiktokLiveAPI.shares',
+      'tiktokLiveAPI.followers',
+      'tiktokLiveAPI.newFollowers',
+      'tiktokLiveAPI.lastDetected',
+      'tiktokLiveAPI.startedAt',
+      'tiktokLiveAPI.started_at',
+      'tiktokAPI.isLive',
+      'isLive'
+    ];
+    if (liveApiFields.timeline) fieldPaths.push('tiktokLiveAPI.timeline');
+    if (liveApiFields.recentComments) fieldPaths.push('tiktokLiveAPI.recentComments');
+    if (liveApiFields.topCommenters) fieldPaths.push('tiktokLiveAPI.topCommenters');
+    if (liveApiFields.topQuestions) fieldPaths.push('tiktokLiveAPI.topQuestions');
+
+    const updateMask = fieldPaths.map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
     const url = `${REST_URL}?${updateMask}&key=${API_KEY}`;
+
+    const body = {
+      fields: {
+        tiktokLiveAPI: {
+          mapValue: {
+            fields: liveApiFields
+          }
+        },
+        'tiktokAPI.isLive': { booleanValue: Boolean(livePayload.isLive) },
+        isLive: { booleanValue: Boolean(livePayload.isLive) }
+      }
+    };
 
     const res = await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
+      body: JSON.stringify(body)
     });
 
     if (res.ok) {
@@ -231,7 +331,7 @@ const connectTikTok = async () => {
   }
 
   console.log(`[TikTok] Connexion Webcast en cours pour @${TIKTOK_USERNAME}...`);
-  tiktokConnection = new WebcastPushConnection(TIKTOK_USERNAME, {
+  tiktokConnection = new TikTokLiveConnection(TIKTOK_USERNAME, {
     processInitialData: true,
     enableExtendedGiftInfo: true,
     requestOptions: {
@@ -242,11 +342,22 @@ const connectTikTok = async () => {
   tiktokConnection.connect().then(state => {
     console.log(`✅ [TikTok] Connecté avec succès au Live roomId: ${state.roomId}`);
     isLive = true;
-    sessionData = initSession(state.roomId, state.roomInfo?.title || 'Live TikTok en direct');
+    const room = state.roomInfo?.data || state.roomInfo || {};
+    sessionData = initSession(state.roomId, room.title || 'Live TikTok en direct');
 
-    if (state.roomInfo?.owner?.follower_count) {
-      sessionData.initialFollowers = Number(state.roomInfo.owner.follower_count);
+    if (room.owner?.follower_count) {
+      sessionData.initialFollowers = Number(room.owner.follower_count);
       sessionData.finalFollowers = sessionData.initialFollowers;
+    }
+    if (room.user_count) {
+      sessionData.viewersCount = Number(room.user_count);
+      sessionData.peakViewers = sessionData.viewersCount;
+    }
+    if (room.stats?.like_count) {
+      sessionData.totalLikes = Number(room.stats.like_count);
+    }
+    if (room.create_time) {
+      sessionData.startedAt = new Date(room.create_time * 1000).toISOString();
     }
 
     // Synchronisation immédiate du Live dans Firestore
@@ -293,7 +404,12 @@ const connectTikTok = async () => {
 
   tiktokConnection.on('like', data => {
     if (!sessionData) return;
-    sessionData.totalLikes += Number(data.likeCount || 1);
+    const rawTotal = Number(data.totalLikeCount || data.total || 0);
+    if (rawTotal > sessionData.totalLikes) {
+      sessionData.totalLikes = rawTotal;
+    } else {
+      sessionData.totalLikes += Number(data.likeCount || 1);
+    }
     triggerSync(false);
   });
 

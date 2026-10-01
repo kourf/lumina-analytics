@@ -20,15 +20,11 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     pollInterval: 60000,
     initialData: liveData
   });
-  // Détection d'un état "zombie" (ex: session abandonnée il y a des heures avec 0 spectateurs)
+  // Détection d'un état "zombie" (ex: session abandonnée depuis plus de 24h)
   const rawStartedAt = liveData?.started_at || liveData?.startedAt;
   const startedAtMs = rawStartedAt ? new Date(rawStartedAt).getTime() : 0;
   const isZombieSession = Boolean(
-    liveData?.isLive && 
-    (
-      (startedAtMs > 0 && (Date.now() - startedAtMs) > 18 * 3600 * 1000) ||
-      (Number(liveData?.currentViewers || 0) === 0 && verifiedLive.status === 'OFFLINE')
-    )
+    liveData?.isLive && startedAtMs > 0 && (Date.now() - startedAtMs) > 24 * 3600 * 1000
   );
 
   // Détermination de l'état Live réel et vérifié
@@ -112,6 +108,35 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
         />
       </div>
 
+      {/* SECTION LIVE ACTIVE : Placé IMMÉDIATEMENT TOUT EN HAUT sous la bannière quand le Live est actif */}
+      {effectiveIsLive && (
+        <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.12s' }}>
+          <ErrorBoundary
+            fallback={
+              <div className="w-full bg-[#0B0F19] border border-slate-800 rounded-[32px] p-6 text-center">
+                <p className="text-sm font-bold text-white mb-1">Hub Live Streaming en cours de synchronisation</p>
+                <p className="text-xs text-slate-400">Le direct est en cours d'analyse en arrière-plan.</p>
+              </div>
+            }
+          >
+            <TikTokLiveHub 
+              liveData={{
+                ...(liveData || {}),
+                isLive: effectiveIsLive,
+                roomId: resolvedRoomId,
+                currentViewers: resolvedCurrentViewers,
+                peakViewers: resolvedPeakViewers,
+                started_at: resolvedStartedAt,
+                lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
+                status: 'LIVE'
+              }}
+              onRefresh={handleManualRefresh}
+              isRefreshing={verifiedLive.isRefreshing || loading}
+            />
+          </ErrorBoundary>
+        </section>
+      )}
+
       {/* SECTION 1 : BLOC UNIFIÉ (KPI & ANALYSE STRATÉGIQUE) */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.15s' }}>
         <div className="bg-white dark:bg-[#111827]/80 border border-slate-200 dark:border-[#1F2937] backdrop-blur-xl rounded-[24px] p-6 md:p-8 shadow-sm dark:shadow-none relative overflow-hidden group">
@@ -157,32 +182,34 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
         <TikTokCompetitorAnalysis myData={unifiedData} />
       </section>
 
-      {/* SECTION 3 : HUB LIVE STREAMING (Bannière Dynamique / Hub) */}
-      <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.3s' }}>
-        <ErrorBoundary
-          fallback={
-            <div className="w-full bg-[#0B0F19] border border-slate-800 rounded-[32px] p-6 text-center">
-              <p className="text-sm font-bold text-white mb-1">Hub Live Streaming en cours de synchronisation</p>
-              <p className="text-xs text-slate-400">Le direct est en cours d'analyse en arrière-plan.</p>
-            </div>
-          }
-        >
-          <TikTokLiveHub 
-            liveData={{
-              ...(liveData || {}),
-              isLive: effectiveIsLive,
-              roomId: resolvedRoomId,
-              currentViewers: resolvedCurrentViewers,
-              peakViewers: resolvedPeakViewers,
-              started_at: resolvedStartedAt,
-              lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
-              status: effectiveIsLive ? 'LIVE' : (verifiedLive.status || 'OFFLINE')
-            }}
-            onRefresh={handleManualRefresh}
-            isRefreshing={verifiedLive.isRefreshing || loading}
-          />
-        </ErrorBoundary>
-      </section>
+      {/* SECTION 3 : HUB LIVE STREAMING (affiché ici hors ligne pour archives et historique) */}
+      {!effectiveIsLive && (
+        <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.3s' }}>
+          <ErrorBoundary
+            fallback={
+              <div className="w-full bg-[#0B0F19] border border-slate-800 rounded-[32px] p-6 text-center">
+                <p className="text-sm font-bold text-white mb-1">Hub Live Streaming en cours de synchronisation</p>
+                <p className="text-xs text-slate-400">Le direct est en cours d'analyse en arrière-plan.</p>
+              </div>
+            }
+          >
+            <TikTokLiveHub 
+              liveData={{
+                ...(liveData || {}),
+                isLive: false,
+                roomId: resolvedRoomId,
+                currentViewers: 0,
+                peakViewers: resolvedPeakViewers,
+                started_at: null,
+                lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
+                status: verifiedLive.status || 'OFFLINE'
+              }}
+              onRefresh={handleManualRefresh}
+              isRefreshing={verifiedLive.isRefreshing || loading}
+            />
+          </ErrorBoundary>
+        </section>
+      )}
 
       {/* SECTION 4 : CATALOGUE VIDEO */}
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.4s' }}>
