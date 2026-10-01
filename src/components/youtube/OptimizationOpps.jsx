@@ -1,21 +1,48 @@
-import React from 'react';
-import { Target, AlertCircle, PlayCircle } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Target, AlertCircle, PlayCircle, Sparkles, TrendingDown, ArrowUpRight, Clock } from 'lucide-react';
 
-export const OptimizationOpps = ({ videos }) => {
-  const [activeTab, setActiveTab] = React.useState('videos');
-  const [showWhy, setShowWhy] = React.useState(false);
+export const OptimizationOpps = ({ videos, allVideos }) => {
+  const [activeTab, setActiveTab] = useState('videos');
+  const [showWhy, setShowWhy] = useState(false);
 
-  if (!videos || videos.length === 0) return null;
+  // Utiliser la liste complète si disponible pour garantir au moins 3 par format
+  const sourceVideos = allVideos && allVideos.length > 0 ? allVideos : (videos || []);
 
-  const isLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.isLiveNow;
-  const isShort = (v) => v.type === 'Short';
-  const isClassic = (v) => (v.type === 'Vidéo' || v.type === 'Video') && !isLive(v);
+  const isLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.format === 'live' || v.isLiveNow;
+  const isShort = (v) => !isLive(v) && (v.type === 'Short' || v.format === 'short' || (v.durationSec > 0 && v.durationSec <= 180) || /#(shorts|short|pourtoi|pourtoii|fyp|reels|tiktok)\b/i.test(v.title || ''));
+  const isClassic = (v) => !isLive(v) && !isShort(v);
 
-  const classicVideos = videos.filter(isClassic).slice(0, 3);
-  const shortVideos = videos.filter(isShort).slice(0, 3);
-  const directVideos = videos.filter(isLive).slice(0, 3);
+  // Extraire au moins 3 contenus les moins performants (plus de 48h) pour chaque format
+  const { classicVideos, shortVideos, directVideos } = useMemo(() => {
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    const getWeakest = (filterFn) => {
+      const filtered = sourceVideos.filter(filterFn);
+      // Filtrer de préférence les vidéos de plus de 48h pour laisser le temps de décoller
+      const mature = filtered.filter(v => new Date(v.publishedAt) < twoDaysAgo);
+      const candidates = mature.length >= 3 ? mature : filtered;
+      // Trier par vues croissantes (les moins vues en premier)
+      return [...candidates].sort((a, b) => (a.views || 0) - (b.views || 0)).slice(0, 4);
+    };
+
+    return {
+      classicVideos: getWeakest(isClassic),
+      shortVideos: getWeakest(isShort),
+      directVideos: getWeakest(isLive)
+    };
+  }, [sourceVideos]);
 
   const displayedVideos = activeTab === 'videos' ? classicVideos : activeTab === 'shorts' ? shortVideos : directVideos;
+
+  const formatDuration = (seconds) => {
+    if (!seconds) return '0s';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s > 0 ? `${s}s` : ''}`;
+    return `${s}s`;
+  };
 
   return (
     <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface hover:-translate-y-1 hover:shadow-lg hover:shadow-lumina-primary/10 transition-all duration-300 p-6 rounded-3xl border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm flex flex-col h-full relative overflow-hidden">
@@ -28,8 +55,13 @@ export const OptimizationOpps = ({ videos }) => {
             <Target size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Contenus à optimiser</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Opportunités de relance d'audience</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Contenus à surveiller</h3>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                Min. 3 par format
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Opportunités d'optimisation (titres & miniatures)</p>
           </div>
         </div>
 
@@ -67,41 +99,53 @@ export const OptimizationOpps = ({ videos }) => {
         </div>
       </div>
       
-      <div className="mb-4 relative z-10 mt-2">
+      {/* Explication & Fréquence de calcul */}
+      <div className="mb-4 relative z-10 mt-2 flex items-center justify-between flex-wrap gap-2">
         <button 
           onClick={() => setShowWhy(!showWhy)}
           className="flex items-center gap-1.5 text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 transition-colors bg-indigo-50 dark:bg-indigo-500/10 px-3 py-1.5 rounded-full"
         >
           <AlertCircle size={14} /> Pourquoi ces contenus ?
         </button>
-        {showWhy && (
-          <div className="mt-2 bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-xl border border-indigo-100 dark:border-indigo-800/30 flex gap-2 items-start animate-fade-in">
-            <p className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
-              Ils ont été sélectionnés car ils sont publiés depuis plus de 48h, mais génèrent le moins de vues comparé à vos autres contenus récents de ce format. Testez une nouvelle miniature ou un nouveau titre pour les relancer !
-            </p>
-          </div>
-        )}
+
+        <span className="text-[10px] text-gray-400 dark:text-gray-500 flex items-center gap-1">
+          <Clock size={11} /> Recalculé à chaque synchronisation YouTube (exclut &lt; 48h)
+        </span>
       </div>
 
-      <div className="flex flex-col gap-4 flex-1 relative z-10">
+      {showWhy && (
+        <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 flex gap-2 items-start animate-fade-in relative z-10">
+          <p className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
+            Ces {displayedVideos.length} contenus enregistrent les volumes de vues les plus bas de leur catégorie après au moins 48h de mise en ligne. Changer le titre (pour susciter plus de curiosité) ou tester une nouvelle miniature peut doubler leur taux de clics (CTR).
+          </p>
+        </div>
+      )}
+
+      <div className="flex flex-col gap-3 flex-1 relative z-10">
         {displayedVideos.length === 0 ? (
-          <div className="flex-1 flex items-center justify-center text-sm text-gray-400 py-4">
+          <div className="flex-1 flex items-center justify-center text-sm text-gray-400 py-6">
             Aucun {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Live' : 'vidéo'} à surveiller.
           </div>
         ) : (
-          displayedVideos.map((video) => (
+          displayedVideos.map((video, idx) => (
             <a 
               key={video.id} 
               href={`https://youtube.com/watch?v=${video.id}`}
               target="_blank"
               rel="noreferrer"
-              className="flex gap-4 group p-3 -mx-3 rounded-2xl hover:bg-gray-50 dark:hover:bg-gray-800/50 transition-colors"
+              className="flex gap-3.5 group p-2.5 rounded-2xl bg-gray-50/70 dark:bg-gray-800/40 hover:bg-white dark:hover:bg-gray-800 border border-transparent hover:border-indigo-500/20 transition-all duration-200"
             >
-              <div className={`relative ${activeTab === 'shorts' ? 'w-12 h-20' : 'w-24 h-14'} rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-800 opacity-80 group-hover:opacity-100 transition-opacity`}>
-                <img src={video.thumbnailUrl} alt="" className="w-full h-full object-cover grayscale-[30%]" />
+              {/* Miniature avec overlay durée */}
+              <div className={`relative ${activeTab === 'shorts' ? 'w-14 h-24' : 'w-28 h-16'} rounded-xl overflow-hidden flex-shrink-0 bg-gray-100 dark:bg-gray-800 opacity-90 group-hover:opacity-100 transition-opacity`}>
+                <img src={video.thumbnailUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+                <div className="absolute bottom-1 right-1 px-1 py-0.5 rounded text-[9px] font-bold bg-black/80 text-white backdrop-blur-sm">
+                  {formatDuration(video.durationSec)}
+                </div>
               </div>
-              <div className="flex flex-col justify-center py-0.5 flex-1">
-                <div className="flex items-start gap-2 mb-1">
+
+              {/* Détails & Suggestion */}
+              <div className="flex flex-col justify-center py-0.5 flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider flex-shrink-0 ${
                     activeTab === 'shorts' 
                       ? 'bg-amber-100 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20' 
@@ -111,13 +155,22 @@ export const OptimizationOpps = ({ videos }) => {
                   }`}>
                     {activeTab === 'shorts' ? 'Short' : activeTab === 'directs' ? 'Live' : 'Vidéo'}
                   </span>
+                  
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                    <TrendingDown size={11} /> Opportunité #{idx + 1}
+                  </span>
                 </div>
-                <h4 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2 leading-snug group-hover:text-indigo-500 transition-colors">
+
+                <h4 className="text-xs font-semibold text-gray-900 dark:text-white line-clamp-1 leading-snug group-hover:text-indigo-500 transition-colors">
                   {video.title}
                 </h4>
-                <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  <span className="flex items-center gap-1 font-medium text-gray-700 dark:text-gray-300">
-                    <PlayCircle size={12} className="text-gray-400" /> {video.views.toLocaleString('fr-FR')} vues
+
+                <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+                  <span className="flex items-center gap-1 font-bold text-gray-700 dark:text-gray-200 text-xs">
+                    <PlayCircle size={12} className="text-gray-400" /> {(video.views || 0).toLocaleString('fr-FR')} vues
+                  </span>
+                  <span className="text-[10px] text-indigo-600 dark:text-indigo-400 group-hover:underline flex items-center gap-0.5">
+                    Tester nouveau titre <ArrowUpRight size={10} />
                   </span>
                 </div>
               </div>
@@ -128,4 +181,3 @@ export const OptimizationOpps = ({ videos }) => {
     </div>
   );
 };
-

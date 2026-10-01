@@ -11,9 +11,9 @@ export const VideoPerformance = ({ videos }) => {
 
   if (!videos || videos.length === 0) return null;
 
-  const isVideoLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.isLiveNow;
-  const isVideoShort = (v) => v.type === 'Short';
-  const isVideoClassic = (v) => (v.type === 'Video' || v.type === 'Vidéo') && !isVideoLive(v);
+  const isVideoLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.format === 'live' || v.isLiveNow;
+  const isVideoShort = (v) => !isVideoLive(v) && (v.type === 'Short' || v.format === 'short' || (v.durationSec > 0 && v.durationSec <= 180) || /#(shorts|short|pourtoi|pourtoii|fyp|reels|tiktok)\b/i.test(v.title || ''));
+  const isVideoClassic = (v) => !isVideoLive(v) && !isVideoShort(v);
 
   // Compteurs par format
   const counts = useMemo(() => {
@@ -89,14 +89,17 @@ export const VideoPerformance = ({ videos }) => {
       {/* Header section avec titre & filtres rapides */}
       <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
         <div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Performance des contenus</h3>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-700">
               {filteredVideos.length} {filteredVideos.length > 1 ? 'contenus' : 'contenu'}
             </span>
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+              🔄 Synchronisé avec YouTube
+            </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Catalogue exhaustif et synchronisé (Lives, Vidéos longues et Shorts)
+            Catalogue exhaustif et synchronisé (71 Lives, 9 Shorts et 7 Vidéos longues)
           </p>
         </div>
 

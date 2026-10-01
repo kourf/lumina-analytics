@@ -6,9 +6,9 @@ export const TopVideos = ({ videos }) => {
 
   if (!videos || videos.length === 0) return null;
 
-  const isLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.isLiveNow;
-  const isShort = (v) => v.type === 'Short';
-  const isClassic = (v) => (v.type === 'Vidéo' || v.type === 'Video') && !isLive(v);
+  const isLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.format === 'live' || v.isLiveNow;
+  const isShort = (v) => !isLive(v) && (v.type === 'Short' || v.format === 'short' || (v.durationSec > 0 && v.durationSec <= 180) || /#(shorts|short|pourtoi|pourtoii|fyp|reels|tiktok)\b/i.test(v.title || ''));
+  const isClassic = (v) => !isLive(v) && !isShort(v);
 
   const classicVideos = videos.filter(isClassic).sort((a, b) => b.views - a.views).slice(0, 5);
   const shortVideos = videos.filter(isShort).sort((a, b) => b.views - a.views).slice(0, 5);
@@ -18,14 +18,19 @@ export const TopVideos = ({ videos }) => {
 
   return (
     <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface hover:-translate-y-1 hover:shadow-lg hover:shadow-lumina-primary/10 transition-all duration-300 p-6 rounded-3xl border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm flex flex-col h-full">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
         <div className="flex items-center gap-3">
           <div className="p-2.5 bg-yellow-50 dark:bg-yellow-500/10 rounded-xl text-yellow-500">
             <TrendingUp size={20} />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-gray-900 dark:text-white">Top 5</h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Contenus les plus vus</p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">Top 5</h3>
+              <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-yellow-50 dark:bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 border border-yellow-500/20">
+                ⚡ Temps réel
+              </span>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Contenus les plus vus • Recalculé à chaque synchronisation</p>
           </div>
         </div>
 

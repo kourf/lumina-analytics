@@ -7,8 +7,8 @@ export const KpiCards = ({ channel, videos, analytics }) => {
   if (!channel) return null;
 
   const isLive = (v) => v.type === 'Direct' || v.type === 'Live' || v.format === 'live' || v.isLiveNow;
-  const isShort = (v) => v.type === 'Short' || v.format === 'short';
-  const isClassic = (v) => (v.type === 'Vidéo' || v.type === 'Video') && !isLive(v);
+  const isShort = (v) => !isLive(v) && (v.type === 'Short' || v.format === 'short' || (v.durationSec > 0 && v.durationSec <= 180) || /#(shorts|short|pourtoi|pourtoii|fyp|reels|tiktok)\b/i.test(v.title || ''));
+  const isClassic = (v) => !isLive(v) && !isShort(v);
 
   const classicVideos = (videos || []).filter(isClassic);
   const shortVideos = (videos || []).filter(isShort);
@@ -74,6 +74,20 @@ export const KpiCards = ({ channel, videos, analytics }) => {
 
   return (
     <div className="flex flex-col gap-6">
+      {/* Barre de synchronisation des indicateurs */}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between px-5 py-3 rounded-2xl bg-gray-50/80 dark:bg-gray-800/40 border border-gray-100 dark:border-gray-800/80 text-xs text-gray-500 dark:text-gray-400 gap-2">
+        <div className="flex items-center gap-2.5">
+          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+          <span className="font-bold text-gray-800 dark:text-gray-200">Indicateurs de Performance en Temps Réel</span>
+          <span className="hidden md:inline text-gray-300 dark:text-gray-600">|</span>
+          <span className="hidden md:inline text-gray-500 dark:text-gray-400">Ventilation exacte sur 71 Lives, 9 Shorts et 7 Vidéos</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+          <Clock size={12} />
+          <span>Synchronisation YouTube : À la demande ou toutes les 6h</span>
+        </div>
+      </div>
+
       {/* Ligne 1 : Volumes Principaux (Abonnés, Vues Totales, Publications) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
         

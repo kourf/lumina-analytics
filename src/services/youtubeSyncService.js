@@ -84,7 +84,7 @@ export async function syncYouTubeDirect() {
     if (isLive) {
       type = 'Direct';
       format = 'live';
-    } else if (durationSec > 0 && durationSec <= 60) {
+    } else if (durationSec > 0 && (durationSec <= 180 || /#(shorts|short|pourtoi|pourtoii|fyp|reels|tiktok)\b/i.test(v.snippet?.title || ''))) {
       type = 'Short';
       format = 'short';
     } else {
@@ -104,7 +104,9 @@ export async function syncYouTubeDirect() {
       engagementRate: parseFloat(engagementRate.toFixed(2)),
       type: type,
       format: format,
-      isLiveNow: v.snippet?.liveBroadcastContent === 'live'
+      isLiveNow: v.snippet?.liveBroadcastContent === 'live',
+      actualStartTime: v.liveStreamingDetails?.actualStartTime || null,
+      actualEndTime: v.liveStreamingDetails?.actualEndTime || null
     };
   });
 
@@ -152,7 +154,14 @@ export async function syncYouTubeDirect() {
 
   const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const oldVideos = videosData.filter(v => new Date(v.publishedAt) < twoDaysAgo);
-  const weakVideos = oldVideos.sort((a, b) => a.views - b.views).slice(0, 20);
+  const oldClassic = oldVideos.filter(v => (v.type === 'Vidéo' || v.type === 'Video') && v.format !== 'live').sort((a, b) => a.views - b.views);
+  const oldShorts = oldVideos.filter(v => v.type === 'Short').sort((a, b) => a.views - b.views);
+  const oldLives = oldVideos.filter(v => v.type === 'Direct' || v.type === 'Live' || v.format === 'live').sort((a, b) => a.views - b.views);
+  const weakVideos = [
+    ...oldClassic.slice(0, 5),
+    ...oldShorts.slice(0, 5),
+    ...oldLives.slice(0, 5)
+  ];
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   const payload = {
