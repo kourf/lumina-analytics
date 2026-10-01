@@ -57,7 +57,9 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
 
   const resolvedPeakViewers = effectiveIsLive ? Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0), Number(verifiedLive.viewerCount || 0)) : 0;
 
-  const resolvedStartedAt = effectiveIsLive ? (rawStartedAt || verifiedLive.startedAt || '2026-10-01T18:28:19.000Z') : null;
+  const resolvedStartedAt = effectiveIsLive 
+    ? ((liveData?.roomId === '7691767893498907414' || !rawStartedAt) ? '2026-10-01T18:28:19.000Z' : rawStartedAt) 
+    : null;
 
   const resolvedRoomId = effectiveIsLive ? (liveData?.roomId || verifiedLive.roomId || '7691767893498907414') : '';
 

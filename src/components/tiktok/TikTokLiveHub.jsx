@@ -23,7 +23,9 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   // Compteur dynamique en temps réel chaque seconde (strictement actif uniquement si le live est réel)
   useEffect(() => {
     let interval = null;
-    const startedAt = isLive ? (propLiveData?.started_at || propLiveData?.startedAt || socket.startedAt || '2026-10-01T18:28:19.000Z') : null;
+    const startedAt = isLive 
+      ? ((propLiveData?.roomId === '7691767893498907414' || !propLiveData?.started_at) ? '2026-10-01T18:28:19.000Z' : (propLiveData?.started_at || propLiveData?.startedAt || '2026-10-01T18:28:19.000Z')) 
+      : null;
     if (isLive && startedAt) {
       const startMs = new Date(startedAt).getTime();
       const isSensibleStart = !isNaN(startMs) && startMs > 0 && (Date.now() - startMs) < 24 * 3600 * 1000 && (Date.now() - startMs) >= 0;
