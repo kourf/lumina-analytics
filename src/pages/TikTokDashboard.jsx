@@ -20,17 +20,50 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     pollInterval: 60000,
     initialData: liveData
   });
-// Détermination de l'état Live : priorité au flux WebSocket s'il est connecté, sinon Firestore / SWR
-  const effectiveIsLive = Boolean(liveData?.isLive || verifiedLive.isLive);
+  // Détection d'un état "zombie" (ex: session abandonnée il y a des heures avec 0 spectateurs)
+  const rawStartedAt = liveData?.started_at || liveData?.startedAt;
+  const startedAtMs = rawStartedAt ? new Date(rawStartedAt).getTime() : 0;
+  const isZombieSession = Boolean(
+    liveData?.isLive && 
+    (
+      (startedAtMs > 0 && (Date.now() - startedAtMs) > 18 * 3600 * 1000) ||
+      (Number(liveData?.currentViewers || 0) === 0 && verifiedLive.status === 'OFFLINE')
+    )
+  );
+
+  // Détermination de l'état Live réel et vérifié
+  const effectiveIsLive = Boolean(
+    !isZombieSession && (liveData?.isLive || verifiedLive.isLive)
+  );
+
+  // Nettoyage automatique en arrière-plan si une session zombie est détectée
+  useEffect(() => {
+    if (isZombieSession) {
+      import('firebase/firestore').then(({ doc, updateDoc }) => {
+        const { db } = import('../config/firebase');
+        // Import db dynamic
+        import('../config/firebase').then(({ db }) => {
+          updateDoc(doc(db, 'users', 'karamokho'), {
+            'tiktokLiveAPI.isLive': false,
+            'tiktokLiveAPI.currentViewers': 0,
+            'tiktokLiveAPI.started_at': null,
+            'tiktokLiveAPI.startedAt': null,
+            'tiktokLiveAPI.roomId': '',
+            'tiktokLiveAPI.durationStr': '00:00:00'
+          }).catch(() => {});
+        });
+      }).catch(() => {});
+    }
+  }, [isZombieSession]);
 
   // Résolution stricte des métriques en direct (source de vérité : Firestore en temps réel)
   const resolvedCurrentViewers = effectiveIsLive ? Number(liveData?.currentViewers || verifiedLive.viewerCount || 0) : 0;
 
-  const resolvedPeakViewers = Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0), Number(verifiedLive.viewerCount || 0));
+  const resolvedPeakViewers = effectiveIsLive ? Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0), Number(verifiedLive.viewerCount || 0)) : 0;
 
-  const resolvedStartedAt = liveData?.started_at || liveData?.startedAt || (effectiveIsLive ? verifiedLive.startedAt : null) || null;
+  const resolvedStartedAt = effectiveIsLive ? (rawStartedAt || verifiedLive.startedAt || null) : null;
 
-  const resolvedRoomId = liveData?.roomId || verifiedLive.roomId || '';
+  const resolvedRoomId = effectiveIsLive ? (liveData?.roomId || verifiedLive.roomId || '') : '';
 
   // Source unique de vérité unifiée avec live status vérifié dynamiquement
   const unifiedData = useTikTokUnifiedData(data, {
@@ -41,7 +74,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     peakViewers: resolvedPeakViewers,
     started_at: resolvedStartedAt,
     lastDetected: liveData?.lastDetected || verifiedLive.lastChecked,
-    liveStatus: effectiveIsLive ? 'LIVE' : (verifiedLive.status || 'OFFLINE'),
+    liveStatus: effectiveIsLive ? 'LIVE' : 'OFFLINE',
     isRefreshing: verifiedLive.isRefreshing
   });
 

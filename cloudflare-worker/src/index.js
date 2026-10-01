@@ -5,19 +5,28 @@ async function updateFirestoreLive(liveData) {
   const fields = {
     'tiktokLiveAPI.isLive': { booleanValue: Boolean(liveData.isLive) },
     'tiktokLiveAPI.roomId': { stringValue: String(liveData.roomId || '') },
-    'tiktokLiveAPI.title': { stringValue: String(liveData.title || 'Live TikTok en cours') },
+    'tiktokLiveAPI.title': { stringValue: String(liveData.title || (liveData.isLive ? 'Live TikTok en cours' : '')) },
     'tiktokLiveAPI.currentViewers': { integerValue: Number(liveData.currentViewers || 0) },
-    'tiktokLiveAPI.peakViewers': { integerValue: Number(liveData.peakViewers || liveData.currentViewers || 0) },
+    'tiktokLiveAPI.peakViewers': { integerValue: Number(liveData.peakViewers || 0) },
     'tiktokLiveAPI.totalUser': { integerValue: Number(liveData.totalUser || 0) },
     'tiktokLiveAPI.likes': { integerValue: Number(liveData.likes || 0) },
     'tiktokLiveAPI.comments': { integerValue: Number(liveData.comments || 0) },
     'tiktokLiveAPI.shares': { integerValue: Number(liveData.shares || 0) },
     'tiktokLiveAPI.followers': { integerValue: Number(liveData.followers || 0) },
     'tiktokLiveAPI.lastDetected': { stringValue: new Date().toISOString() },
-    'tiktokAPI.isLive': { booleanValue: Boolean(liveData.isLive) }
+    'tiktokAPI.isLive': { booleanValue: Boolean(liveData.isLive) },
+    'isLive': { booleanValue: Boolean(liveData.isLive) }
   };
 
-  const updateMask = Object.keys(fields).map(k => `updateMask.fieldPaths=${k}`).join('&');
+  if (liveData.isLive && liveData.startedAt) {
+    fields['tiktokLiveAPI.startedAt'] = { stringValue: String(liveData.startedAt) };
+    fields['tiktokLiveAPI.started_at'] = { stringValue: String(liveData.startedAt) };
+  } else if (!liveData.isLive) {
+    fields['tiktokLiveAPI.startedAt'] = { nullValue: null };
+    fields['tiktokLiveAPI.started_at'] = { nullValue: null };
+  }
+
+  const updateMask = Object.keys(fields).map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
   const url = `${FIRESTORE_URL}?${updateMask}`;
 
   const res = await fetch(url, {
@@ -127,27 +136,33 @@ export default {
             const json = await roomRes.json();
             const room = json.data;
             if (room) {
-              // SEUL le status 2 signifie qu'un live est ACTIF en direct (status 4 = TERMINÉ)
-              const isLive = room.status === 2;
+              // SEUL le status 2 SANS finish_time signifie qu'un live est ACTIF en direct
+              const finishTime = Number(room.finish_time || room.finishTime || 0);
+              const hasEnded = finishTime > 0;
+              const isLive = room.status === 2 && !hasEnded;
               const stats = room.stats || {};
               const currentViewers = isLive ? Number(room.user_count || 0) : 0;
-              const totalUser = Number(stats.total_user || 415);
-              const followers = Number(stats.follow_count || 4);
-              const rawLikes = Number(stats.like_count || stats.digg_count || room.like_count || 0);
-              const dynamicLikes = rawLikes > 0 ? rawLikes : Math.round(totalUser * 3.8 + currentViewers * 15);
-              const dynamicComments = Number(stats.comment_count || 0) > 0 ? Number(stats.comment_count) : Math.round(totalUser * 0.35 + currentViewers * 2);
-              const dynamicShares = Number(stats.share_count || 0) > 0 ? Number(stats.share_count) : Math.max(1, Math.round(totalUser * 0.05));
+              const totalUser = Number(stats.total_user || 0);
+              const followers = Number(stats.follow_count || 0);
+              const realLikes = Number(stats.like_count || stats.digg_count || room.like_count || 0);
+              const realComments = Number(stats.comment_count || 0);
+              const realShares = Number(stats.share_count || 0);
+
+              const startedAt = isLive && room.create_time 
+                ? new Date(room.create_time * 1000).toISOString()
+                : null;
 
               const livePayload = {
                 isLive,
                 roomId: isLive ? roomId : '',
-                title: room.title || 'Analyse de votre site !',
+                title: isLive ? (room.title || 'Live TikTok en cours') : '',
+                startedAt,
                 currentViewers,
-                peakViewers: Math.max(34, currentViewers),
+                peakViewers: currentViewers,
                 totalUser,
-                likes: isLive ? dynamicLikes : 0,
-                comments: isLive ? dynamicComments : 0,
-                shares: isLive ? dynamicShares : 0,
+                likes: isLive ? realLikes : 0,
+                comments: isLive ? realComments : 0,
+                shares: isLive ? realShares : 0,
                 followers: isLive ? followers : 0
               };
 

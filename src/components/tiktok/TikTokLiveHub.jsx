@@ -20,13 +20,14 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const [activeAiTab, setActiveAiTab] = useState('questions'); // 'questions' | 'topViewers' | 'chat'
   const [liveDurationTicker, setLiveDurationTicker] = useState('00:00:00');
 
-  // Compteur dynamique en temps réel chaque seconde
+  // Compteur dynamique en temps réel chaque seconde (strictement actif uniquement si le live est réel)
   useEffect(() => {
     let interval = null;
-    const startedAt = propLiveData?.started_at || propLiveData?.startedAt || socket.startedAt;
+    const startedAt = isLive ? (propLiveData?.started_at || propLiveData?.startedAt || socket.startedAt) : null;
     if (isLive && startedAt) {
       const startMs = new Date(startedAt).getTime();
-      if (!isNaN(startMs) && startMs > 0) {
+      const isSensibleStart = !isNaN(startMs) && startMs > 0 && (Date.now() - startMs) < 24 * 3600 * 1000 && (Date.now() - startMs) >= 0;
+      if (isSensibleStart) {
         const updateClock = () => {
           const diff = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
           const h = Math.floor(diff / 3600);
@@ -39,15 +40,15 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         updateClock();
         interval = setInterval(updateClock, 1000);
       } else {
-        setLiveDurationTicker(propLiveData?.durationStr || socket.metrics?.uptimeFormatted || '00:00:00');
+        setLiveDurationTicker('00:00:00');
       }
     } else {
-      setLiveDurationTicker(propLiveData?.durationStr || socket.metrics?.uptimeFormatted || '00:00:00');
+      setLiveDurationTicker('00:00:00');
     }
     return () => {
       if (interval) clearInterval(interval);
     };
-  }, [isLive, propLiveData?.started_at, propLiveData?.startedAt, socket.startedAt, propLiveData?.durationStr, socket.metrics?.uptimeFormatted]);
+  }, [isLive, propLiveData?.started_at, propLiveData?.startedAt, socket.startedAt]);
 
   // Récupération des archives Firestore
   useEffect(() => {
@@ -161,7 +162,15 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       try {
         const { doc, updateDoc } = await import('firebase/firestore');
         const userRef = doc(db, 'users', 'karamokho');
-        await updateDoc(userRef, { 'tiktokLiveAPI.isLive': false });
+        await updateDoc(userRef, { 
+          'tiktokLiveAPI.isLive': false,
+          'tiktokLiveAPI.currentViewers': 0,
+          'tiktokLiveAPI.started_at': null,
+          'tiktokLiveAPI.startedAt': null,
+          'tiktokLiveAPI.roomId': '',
+          'tiktokLiveAPI.durationStr': '00:00:00'
+        });
+        setLiveDurationTicker('00:00:00');
         if (onRefresh) onRefresh();
       } catch (err) {
         console.error('Erreur:', err);

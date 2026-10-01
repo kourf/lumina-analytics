@@ -86,10 +86,21 @@ export function validateTrueLiveCondition(roomData, expectedUsername = 'karam.dr
     return false;
   }
 
+  // Vérification stricte de fin de stream (finish_time / finishTime)
+  const finishTime = Number(roomData.finish_time || roomData.finishTime || roomData.finished_at || 0);
+  if (finishTime > 0) {
+    return false; // Le direct est officiellement terminé !
+  }
+
+  // Vérification de rediffusion / replay
+  if (Number(roomData.stats?.replay_viewers || 0) > 0 && Number(roomData.user_count || roomData.currentViewers || 0) <= 20) {
+    return false;
+  }
+
   // Verify room status code === 2 (Active Live Broadcast)
   const rawStatus = roomData.status ?? roomData.room_status ?? roomData.live_status;
   if (rawStatus === undefined || rawStatus === null) {
-    // Si aucun statut numérique n'est fourni, on exige au minimum isLive explicite
+    // Si aucun statut numérique n'est fourni, on exige au minimum isLive explicite et viewers > 0
     return Boolean(roomData.isLive === true && Number(roomData.currentViewers || roomData.user_count || 0) > 0);
   }
 
