@@ -90,9 +90,10 @@ function App() {
 
             const liveRaw = firebaseData.tiktokLiveAPI || {};
             const tiktokLiveClean = {
-              isLive: Boolean(liveRaw.isLive === true),
+              isLive: Boolean(liveRaw.isLive === true || firebaseData.isLive === true || firebaseData.tiktokAPI?.isLive === true),
               currentViewers: Number(liveRaw.currentViewers || 0),
               peakViewers: Number(liveRaw.peakViewers || 0),
+              totalUser: Number(liveRaw.totalUser || liveRaw.total_user || liveRaw.enter_count || 0),
               likes: Number(liveRaw.likes ?? liveRaw.totalLikes ?? liveRaw.likeCount ?? 0),
               totalLikes: Number(liveRaw.totalLikes ?? liveRaw.likes ?? liveRaw.likeCount ?? 0),
               shares: Number(liveRaw.shares ?? liveRaw.totalShares ?? liveRaw.shareCount ?? 0),
@@ -106,9 +107,11 @@ function App() {
               title: liveRaw.title || '',
               startedAt: liveRaw.startedAt || liveRaw.started_at || null,
               started_at: liveRaw.started_at || liveRaw.startedAt || null,
+              timeline: Array.isArray(liveRaw.timeline) ? liveRaw.timeline : [],
               history: liveRaw.history || [],
               historyArchives: historyArchivesList,
               topQuestions: liveRaw.topQuestions || [],
+              topCommenters: Array.isArray(liveRaw.topCommenters) ? liveRaw.topCommenters : [],
               topContributors: liveRaw.topContributors || [],
               topContributor: liveRaw.topContributor || null,
               topDonator: liveRaw.topDonator || null,
