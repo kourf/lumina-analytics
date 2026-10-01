@@ -24,7 +24,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   useEffect(() => {
     let interval = null;
     const startedAt = isLive 
-      ? ((propLiveData?.roomId === '7691767893498907414' || !propLiveData?.started_at) ? '2026-10-01T18:28:19.000Z' : (propLiveData?.started_at || propLiveData?.startedAt || '2026-10-01T18:28:19.000Z')) 
+      ? (propLiveData?.started_at || propLiveData?.startedAt || null) 
       : null;
     if (isLive && startedAt) {
       const startMs = new Date(startedAt).getTime();
@@ -118,12 +118,12 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     }
   };
 
-  const currentViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.viewers ?? 0) : Number(propLiveData?.currentViewers || propLiveData?.viewerCount || 13)) : 0;
-  const peakViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.peakViewers ?? 0) : Math.max(Number(propLiveData?.peakViewers || 0), currentViewers, 45)) : 0;
-  const totalUser = isLive ? Number(propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 538) : 0;
-  const likes = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.likes ?? 0) : Number(propLiveData?.likes || propLiveData?.totalLikes || 1250)) : 0;
-  const commentsCount = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.comments ?? 0) : Number(propLiveData?.comments || propLiveData?.totalComments || 42)) : 0;
-  const newFollowers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.followers ?? 0) : Number(propLiveData?.newFollowers || propLiveData?.followers || 1)) : 0;
+  const currentViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.viewers ?? 0) : Number(propLiveData?.currentViewers || propLiveData?.viewerCount || 0)) : 0;
+  const peakViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.peakViewers ?? 0) : Math.max(Number(propLiveData?.peakViewers || 0), currentViewers)) : 0;
+  const totalUser = isLive ? Number(propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 0) : 0;
+  const likes = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.likes ?? 0) : Number(propLiveData?.likes || propLiveData?.totalLikes || 0)) : 0;
+  const commentsCount = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.comments ?? 0) : Number(propLiveData?.comments || propLiveData?.totalComments || 0)) : 0;
+  const newFollowers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.followers ?? 0) : Number(propLiveData?.newFollowers || propLiveData?.followers || 0)) : 0;
   const shares = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.shares ?? 0) : Number(propLiveData?.shares || propLiveData?.totalShares || 0)) : 0;
   
   // Données de secours réalistes basées sur les interactions du live en direct
@@ -177,7 +177,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     commentsCount,
     recentComments.length,
     topCommenters.reduce((acc, c) => acc + (c.count || c.comments || 0), 0),
-    42
+    0
   );
 
   // Définition sécurisée de la timeline pour AreaChart
@@ -349,7 +349,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             <Clock className="w-4 h-4 text-[#FE2C55]" />
           </div>
           <div className="text-2xl md:text-3xl font-black text-white mb-1 font-mono">{liveDurationTicker}</div>
-          <div className="text-[11px] text-slate-500">Diffusion continue en temps réel</div>
+          <div className="text-[11px] text-slate-500">{isLive ? "Diffusion continue en temps réel" : "En attente du prochain direct"}</div>
         </div>
 
         {/* Carte 2 : Audience Active */}
@@ -360,9 +360,11 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
           </div>
           <div className="flex items-baseline gap-2 mb-1">
             <span className="text-2xl md:text-3xl font-black text-white">{formatNumber(currentViewers)}</span>
-            <span className="text-xs font-medium text-slate-400">(Pic: {formatNumber(peakViewers)})</span>
+            {isLive && peakViewers > 0 && (
+              <span className="text-xs font-medium text-slate-400">(Pic: {formatNumber(peakViewers)})</span>
+            )}
           </div>
-          <div className="text-[11px] text-slate-500">Spectateurs connectés en ce moment</div>
+          <div className="text-[11px] text-slate-500">{isLive ? "Spectateurs connectés en ce moment" : "Hors ligne • Aucun spectateur actuellement"}</div>
         </div>
 
         {/* Carte 3 : Audience Cumulée (NOUVELLE CARTE DÉDIÉE - 100% OFFICIEL TIKTOK) */}
@@ -378,7 +380,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">API TikTok</span>
           </div>
           <div className="text-[11px] text-slate-400" title="Nombre total de spectateurs uniques ayant rejoint la session depuis le début (propriété officielle enter_count de TikTok)">
-            Spectateurs uniques du live
+            {isLive ? "Spectateurs uniques du live" : "Spectateurs de la session en direct"}
           </div>
         </div>
 
@@ -389,7 +391,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             <Heart className="w-4 h-4 text-[#FE2C55]" />
           </div>
           <div className="text-2xl md:text-3xl font-black text-[#FE2C55] mb-1">{formatNumber(likes)}</div>
-          <div className="text-[11px] text-slate-500">Mentions j'aime reçues en direct</div>
+          <div className="text-[11px] text-slate-500">{isLive ? "Mentions j'aime reçues en direct" : "Mesuré en direct uniquement"}</div>
         </div>
 
         {/* Carte 5 : Partages & Abonnés */}
@@ -405,7 +407,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             </span>
           </div>
           <div className="text-[11px] text-slate-500" title="TikTok ne comptabilise ici que les partages et abonnements cliqués par les spectateurs pendant la diffusion en cours">
-            {shares === 0 ? "0 partage par l'audience pendant ce direct" : "Interactions des spectateurs"}
+            {isLive ? (shares === 0 ? "0 partage par l'audience pendant ce direct" : "Interactions des spectateurs") : "Interactions en temps réel"}
           </div>
         </div>
       </div>

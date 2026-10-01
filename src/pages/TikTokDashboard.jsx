@@ -28,8 +28,11 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   );
 
   // Détermination de l'état Live réel et vérifié
+  // Priorité absolue : si TikTok Webcast confirme OFFLINE, ou si ni verifiedLive ni liveData n'est live
+  const isConfirmedOffline = verifiedLive.status === 'OFFLINE' || (!verifiedLive.isLive && verifiedLive.status !== 'LOADING' && !liveData?.isLive);
+
   const effectiveIsLive = Boolean(
-    !isZombieSession && (liveData?.isLive || verifiedLive.isLive)
+    !isZombieSession && !isConfirmedOffline && (verifiedLive.isLive || liveData?.isLive)
   );
 
   // Nettoyage automatique en arrière-plan si une session zombie est détectée
@@ -57,13 +60,11 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
 
   const resolvedPeakViewers = effectiveIsLive ? Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0), Number(verifiedLive.viewerCount || 0)) : 0;
 
-  const resolvedStartedAt = effectiveIsLive 
-    ? ((liveData?.roomId === '7691767893498907414' || !rawStartedAt) ? '2026-10-01T18:28:19.000Z' : rawStartedAt) 
-    : null;
+  const resolvedStartedAt = effectiveIsLive ? rawStartedAt : null;
 
-  const resolvedRoomId = effectiveIsLive ? (liveData?.roomId || verifiedLive.roomId || '7691767893498907414') : '';
+  const resolvedRoomId = effectiveIsLive ? (liveData?.roomId || verifiedLive.roomId || '') : '';
 
-  const resolvedTotalUser = effectiveIsLive ? Number(liveData?.totalUser || liveData?.total_user || 538) : 0;
+  const resolvedTotalUser = effectiveIsLive ? Number(liveData?.totalUser || liveData?.total_user || 0) : 0;
 
   // Source unique de vérité unifiée avec live status vérifié dynamiquement
   const unifiedData = useTikTokUnifiedData(data, {
