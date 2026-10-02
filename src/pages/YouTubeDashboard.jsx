@@ -17,7 +17,6 @@ import { SponsorshipCalculator } from '../components/youtube/SponsorshipCalculat
 import { PublishRadar } from '../components/youtube/PublishRadar';
 import { AILab } from '../components/youtube/AILab';
 import { CompetitorKeywords } from '../components/youtube/CompetitorKeywords';
-import { LiveArchivesSection } from '../components/youtube/LiveArchivesSection';
 import { Loader2 } from 'lucide-react';
 
 export const YouTubeDashboard = () => {
@@ -139,10 +138,7 @@ export const YouTubeDashboard = () => {
         <OptimizationOpps videos={data.weakVideos} allVideos={data.videos} />
       </div>
       
-      <VideoPerformance videos={data.videos} />
-
-      {/* Section Dédiée : Base de données & Archives des Lives */}
-      <LiveArchivesSection videos={data.videos} />
+      <VideoPerformance videos={data.videos} channel={data.channel} />
       
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <AILab />

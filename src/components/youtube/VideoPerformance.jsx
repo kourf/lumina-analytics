@@ -1,29 +1,126 @@
 import React, { useState, useMemo } from 'react';
-import { Search, PlayCircle, ThumbsUp, MessageCircle, Activity, Info, Radio, Zap, Video as VideoIcon, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { 
+  Search, 
+  PlayCircle, 
+  ThumbsUp, 
+  MessageCircle, 
+  Activity, 
+  Info, 
+  Radio, 
+  Zap, 
+  Video as VideoIcon, 
+  ChevronLeft, 
+  ChevronRight, 
+  X,
+  Clock,
+  Eye,
+  MessageSquare,
+  HelpCircle,
+  BarChart2
+} from 'lucide-react';
 
-export const VideoPerformance = ({ videos }) => {
+export const VideoPerformance = ({ videos, channel }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('date-desc');
   const [typeFilter, setTypeFilter] = useState('all');
   const [showVPHTooltip, setShowVPHTooltip] = useState(false);
+  const [activeKpiTooltip, setActiveKpiTooltip] = useState(null); // 'hours' | 'views' | 'comments' | null
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(15);
 
   if (!videos || videos.length === 0) return null;
 
+  // Découpage rigoureux par format
   const isVideoLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.format === 'live' || v.isLiveNow;
   const isVideoShort = (v) => !isVideoLive(v) && (v.type === 'Short' || v.format === 'short' || (v.durationSec > 0 && v.durationSec <= 180) || /#(shorts|short|pourtoi|pourtoii|fyp|reels|tiktok)\b/i.test(v.title || ''));
   const isVideoClassic = (v) => !isVideoLive(v) && !isVideoShort(v);
+
+  const lives = useMemo(() => videos.filter(isVideoLive), [videos]);
+  const shorts = useMemo(() => videos.filter(isVideoShort), [videos]);
+  const classics = useMemo(() => videos.filter(isVideoClassic), [videos]);
 
   // Compteurs par format
   const counts = useMemo(() => {
     return {
       all: videos.length,
-      live: videos.filter(isVideoLive).length,
-      short: videos.filter(isVideoShort).length,
-      video: videos.filter(isVideoClassic).length
+      live: lives.length,
+      short: shorts.length,
+      video: classics.length
     };
-  }, [videos]);
+  }, [videos, lives, shorts, classics]);
+
+  // 1. Volume total d'heures (Directs, Shorts, Vidéos) et pourcentages
+  const hoursStats = useMemo(() => {
+    const livesSec = lives.reduce((acc, v) => acc + (v.durationSec || 0), 0);
+    const shortsSec = shorts.reduce((acc, v) => acc + (v.durationSec || 0), 0);
+    const classicsSec = classics.reduce((acc, v) => acc + (v.durationSec || 0), 0);
+    const totalSec = livesSec + shortsSec + classicsSec;
+
+    const livesH = livesSec / 3600;
+    const shortsH = shortsSec / 3600;
+    const classicsH = classicsSec / 3600;
+    const totalH = totalSec / 3600;
+
+    const livesPct = totalH > 0 ? (livesH / totalH) * 100 : 0;
+    const shortsPct = totalH > 0 ? (shortsH / totalH) * 100 : 0;
+    const classicsPct = totalH > 0 ? (classicsH / totalH) * 100 : 0;
+
+    return {
+      livesH,
+      shortsH,
+      classicsH,
+      totalH,
+      livesPct,
+      shortsPct,
+      classicsPct
+    };
+  }, [lives, shorts, classics]);
+
+  // 2. Vues cumulées (Directs, Shorts, Vidéos) et pourcentages par rapport au total de la chaîne
+  const viewsStats = useMemo(() => {
+    const livesViews = lives.reduce((acc, v) => acc + (v.views || 0), 0);
+    const shortsViews = shorts.reduce((acc, v) => acc + (v.views || 0), 0);
+    const classicsViews = classics.reduce((acc, v) => acc + (v.views || 0), 0);
+    const catalogTotalViews = livesViews + shortsViews + classicsViews;
+    const channelTotalViews = channel?.totalViews || catalogTotalViews;
+
+    const livesPct = channelTotalViews > 0 ? (livesViews / channelTotalViews) * 100 : 0;
+    const shortsPct = channelTotalViews > 0 ? (shortsViews / channelTotalViews) * 100 : 0;
+    const classicsPct = channelTotalViews > 0 ? (classicsViews / channelTotalViews) * 100 : 0;
+
+    return {
+      livesViews,
+      shortsViews,
+      classicsViews,
+      catalogTotalViews,
+      channelTotalViews,
+      livesPct,
+      shortsPct,
+      classicsPct
+    };
+  }, [lives, shorts, classics, channel]);
+
+  // 3. Nombre de commentaires (Directs, Shorts, Vidéos) et pourcentages
+  const commentsStats = useMemo(() => {
+    const livesCom = lives.reduce((acc, v) => acc + (v.comments || 0), 0);
+    const shortsCom = shorts.reduce((acc, v) => acc + (v.comments || 0), 0);
+    const classicsCom = classics.reduce((acc, v) => acc + (v.comments || 0), 0);
+    const totalCom = livesCom + shortsCom + classicsCom;
+
+    const livesPct = totalCom > 0 ? (livesCom / totalCom) * 100 : 0;
+    const shortsPct = totalCom > 0 ? (shortsCom / totalCom) * 100 : 0;
+    const classicsPct = totalCom > 0 ? (classicsCom / totalCom) * 100 : 0;
+
+    return {
+      livesCom,
+      shortsCom,
+      classicsCom,
+      totalCom,
+      livesPct,
+      shortsPct,
+      classicsPct
+    };
+  }, [lives, shorts, classics]);
 
   const calculateVPH = (publishedAt, views) => {
     if (!publishedAt || !views) return 0;
@@ -85,9 +182,10 @@ export const VideoPerformance = ({ videos }) => {
   };
 
   return (
-    <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface hover:shadow-xl hover:shadow-lumina-primary/5 transition-all duration-300 p-6 lg:p-8 rounded-3xl border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm">
-      {/* Header section avec titre & filtres rapides */}
-      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-6 mb-8">
+    <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface hover:shadow-xl hover:shadow-lumina-primary/5 transition-all duration-300 p-6 lg:p-8 rounded-3xl border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm flex flex-col gap-6">
+      
+      {/* 1. Header section avec titre & badge de synchronisation */}
+      <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
         <div>
           <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white">Performance des contenus</h3>
@@ -95,41 +193,364 @@ export const VideoPerformance = ({ videos }) => {
               {filteredVideos.length} {filteredVideos.length > 1 ? 'contenus' : 'contenu'}
             </span>
             <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-              🔄 Synchronisé avec YouTube
+              🔄 Données calculées en temps réel sur le catalogue
             </span>
           </div>
           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
-            Catalogue exhaustif et synchronisé (71 Lives, 9 Shorts et 7 Vidéos longues)
+            Indicateurs consolidés et catalogue synchronisé ({counts.live} Lives, {counts.short} Shorts et {counts.video} Vidéos longues)
           </p>
         </div>
+      </div>
 
-        {/* Contrôles de filtrage & recherche */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full lg:w-auto">
-          {/* Barre de recherche */}
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
-            <input 
-              type="text" 
-              placeholder="Rechercher par titre..."
-              value={searchTerm}
-              onChange={handleSearchChange}
-              className="w-full pl-9 pr-8 py-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 dark:text-white transition-all"
-            />
-            {searchTerm && (
-              <button 
-                onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
-              >
-                <X size={14} />
-              </button>
-            )}
+      {/* 2. Les 3 Cartes KPI de Répartition (Heures, Vues Cumulées, Commentaires) */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+        
+        {/* CARTE 1 : Volume Total d'Heures */}
+        <div className="bg-gray-50/80 dark:bg-gray-800/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-500/30 hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
+          <div>
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
+                  <Clock size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Volume Total d'Heures
+                  </h4>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">Temps de diffusion cumulé</span>
+                </div>
+              </div>
+
+              {/* Bouton Infobulle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiTooltip(activeKpiTooltip === 'hours' ? null : 'hours')}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                  title="Afficher l'explication"
+                >
+                  <Info size={16} />
+                </button>
+
+                {activeKpiTooltip === 'hours' && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-gray-900 text-white p-3.5 rounded-xl text-xs z-50 shadow-2xl border border-gray-700 animate-fade-in font-normal">
+                    <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-gray-800">
+                      <strong className="text-indigo-400">Calcul du volume d'heures</strong>
+                      <button onClick={() => setActiveKpiTooltip(null)} className="text-gray-400 hover:text-white">
+                        <X size={12} />
+                      </button>
+                    </div>
+                    <p className="text-gray-300 text-[11px] leading-relaxed mb-2">
+                      Somme exacte de la durée de chaque contenu indexé divisée par 3 600 secondes.
+                    </p>
+                    <ul className="space-y-1 text-[11px] text-gray-300">
+                      <li>• <strong className="text-rose-400">Directs :</strong> {hoursStats.livesH.toFixed(1)} h ({hoursStats.livesPct.toFixed(1)}% du total). Format marathon dominant.</li>
+                      <li>• <strong className="text-blue-400">Vidéos :</strong> {hoursStats.classicsH.toFixed(1)} h ({hoursStats.classicsPct.toFixed(1)}% du total). Contenus structurés.</li>
+                      <li>• <strong className="text-amber-400">Shorts :</strong> {hoursStats.shortsH < 1 ? `${Math.round(hoursStats.shortsH * 60)} min` : `${hoursStats.shortsH.toFixed(1)} h`} ({hoursStats.shortsPct.toFixed(1)}% du total).</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Chiffre Principal */}
+            <div className="flex items-baseline gap-2 mb-3">
+              <span className="text-2xl lg:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
+                {hoursStats.totalH.toFixed(1)} h
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">au total</span>
+            </div>
+
+            {/* Barre de répartition segmentée */}
+            <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 flex overflow-hidden mb-3">
+              <div 
+                style={{ width: `${hoursStats.livesPct}%` }} 
+                className="bg-rose-500 h-full transition-all duration-500" 
+                title={`Directs: ${hoursStats.livesPct.toFixed(1)}%`}
+              />
+              <div 
+                style={{ width: `${hoursStats.classicsPct}%` }} 
+                className="bg-blue-500 h-full transition-all duration-500" 
+                title={`Vidéos: ${hoursStats.classicsPct.toFixed(1)}%`}
+              />
+              <div 
+                style={{ width: `${Math.max(hoursStats.shortsPct, 1)}%` }} 
+                className="bg-amber-500 h-full transition-all duration-500" 
+                title={`Shorts: ${hoursStats.shortsPct.toFixed(1)}%`}
+              />
+            </div>
           </div>
 
+          {/* Lignes de ventilation détaillée */}
+          <div className="space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-800/80 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span> Directs
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {hoursStats.livesH.toFixed(1)} h <span className="text-rose-600 dark:text-rose-400 font-semibold ml-1">({hoursStats.livesPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> Vidéos
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {hoursStats.classicsH.toFixed(1)} h <span className="text-blue-600 dark:text-blue-400 font-semibold ml-1">({hoursStats.classicsPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> Shorts
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {hoursStats.shortsH < 1 ? `${Math.round(hoursStats.shortsH * 60)} min` : `${hoursStats.shortsH.toFixed(1)} h`} <span className="text-amber-600 dark:text-amber-400 font-semibold ml-1">({hoursStats.shortsPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* CARTE 2 : Vues Cumulées */}
+        <div className="bg-gray-50/80 dark:bg-gray-800/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-emerald-500/30 hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
+          <div>
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                  <Eye size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Vues Cumulées
+                  </h4>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">Audience par format</span>
+                </div>
+              </div>
+
+              {/* Bouton Infobulle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiTooltip(activeKpiTooltip === 'views' ? null : 'views')}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-emerald-600 dark:hover:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition-colors"
+                  title="Afficher l'explication"
+                >
+                  <Info size={16} />
+                </button>
+
+                {activeKpiTooltip === 'views' && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-gray-900 text-white p-3.5 rounded-xl text-xs z-50 shadow-2xl border border-gray-700 animate-fade-in font-normal">
+                    <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-gray-800">
+                      <strong className="text-emerald-400">Répartition des vues</strong>
+                      <button onClick={() => setActiveKpiTooltip(null)} className="text-gray-400 hover:text-white">
+                        <X size={12} />
+                      </button>
+                    </div>
+                    <p className="text-gray-300 text-[11px] leading-relaxed mb-2">
+                      Rapporte les vues de chaque format au volume global de la chaîne ({viewsStats.channelTotalViews.toLocaleString('fr-FR')} vues).
+                    </p>
+                    <ul className="space-y-1 text-[11px] text-gray-300">
+                      <li>• <strong className="text-rose-400">Directs :</strong> {viewsStats.livesViews.toLocaleString('fr-FR')} vues ({viewsStats.livesPct.toFixed(1)}% chaîne). Moteur d'audience n°1.</li>
+                      <li>• <strong className="text-amber-400">Shorts :</strong> {viewsStats.shortsViews.toLocaleString('fr-FR')} vues ({viewsStats.shortsPct.toFixed(1)}% chaîne). Acquisition rapide.</li>
+                      <li>• <strong className="text-blue-400">Vidéos :</strong> {viewsStats.classicsViews.toLocaleString('fr-FR')} vues ({viewsStats.classicsPct.toFixed(1)}% chaîne). Vues pérennes.</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Chiffre Principal */}
+            <div className="flex items-baseline gap-2 mb-3">
+              <span className="text-2xl lg:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
+                {viewsStats.catalogTotalViews.toLocaleString('fr-FR')}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">vues catalogue</span>
+            </div>
+
+            {/* Barre de répartition segmentée */}
+            <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 flex overflow-hidden mb-3">
+              <div 
+                style={{ width: `${viewsStats.livesPct}%` }} 
+                className="bg-rose-500 h-full transition-all duration-500" 
+                title={`Directs: ${viewsStats.livesPct.toFixed(1)}%`}
+              />
+              <div 
+                style={{ width: `${viewsStats.shortsPct}%` }} 
+                className="bg-amber-500 h-full transition-all duration-500" 
+                title={`Shorts: ${viewsStats.shortsPct.toFixed(1)}%`}
+              />
+              <div 
+                style={{ width: `${viewsStats.classicsPct}%` }} 
+                className="bg-blue-500 h-full transition-all duration-500" 
+                title={`Vidéos: ${viewsStats.classicsPct.toFixed(1)}%`}
+              />
+            </div>
+          </div>
+
+          {/* Lignes de ventilation détaillée */}
+          <div className="space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-800/80 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span> Directs
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {viewsStats.livesViews.toLocaleString('fr-FR')} <span className="text-rose-600 dark:text-rose-400 font-semibold ml-1">({viewsStats.livesPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> Shorts
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {viewsStats.shortsViews.toLocaleString('fr-FR')} <span className="text-amber-600 dark:text-amber-400 font-semibold ml-1">({viewsStats.shortsPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> Vidéos
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {viewsStats.classicsViews.toLocaleString('fr-FR')} <span className="text-blue-600 dark:text-blue-400 font-semibold ml-1">({viewsStats.classicsPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* CARTE 3 : Nombre de Commentaires */}
+        <div className="bg-gray-50/80 dark:bg-gray-800/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-blue-500/30 hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
+          <div>
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                  <MessageSquare size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Nombre de Commentaires
+                  </h4>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">Interactions & retours</span>
+                </div>
+              </div>
+
+              {/* Bouton Infobulle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiTooltip(activeKpiTooltip === 'comments' ? null : 'comments')}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-500/10 transition-colors"
+                  title="Afficher l'explication"
+                >
+                  <Info size={16} />
+                </button>
+
+                {activeKpiTooltip === 'comments' && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-gray-900 text-white p-3.5 rounded-xl text-xs z-50 shadow-2xl border border-gray-700 animate-fade-in font-normal">
+                    <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-gray-800">
+                      <strong className="text-blue-400">Répartition des commentaires</strong>
+                      <button onClick={() => setActiveKpiTooltip(null)} className="text-gray-400 hover:text-white">
+                        <X size={12} />
+                      </button>
+                    </div>
+                    <p className="text-gray-300 text-[11px] leading-relaxed mb-2">
+                      Nombre total de commentaires enregistrés sous les contenus ({commentsStats.totalCom} commentaires).
+                    </p>
+                    <ul className="space-y-1 text-[11px] text-gray-300">
+                      <li>• <strong className="text-blue-400">Vidéos :</strong> {commentsStats.classicsCom} com. ({commentsStats.classicsPct.toFixed(1)}% des messages). Fort taux de questions et remerciements.</li>
+                      <li>• <strong className="text-rose-400">Directs :</strong> {commentsStats.livesCom} com. ({commentsStats.livesPct.toFixed(1)}%). Les spectateurs discutent en direct sur le chat pendant la session.</li>
+                      <li>• <strong className="text-amber-400">Shorts :</strong> {commentsStats.shortsCom} com. ({commentsStats.shortsPct.toFixed(1)}%).</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Chiffre Principal */}
+            <div className="flex items-baseline gap-2 mb-3">
+              <span className="text-2xl lg:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
+                {commentsStats.totalCom.toLocaleString('fr-FR')}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">commentaires au total</span>
+            </div>
+
+            {/* Barre de répartition segmentée */}
+            <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 flex overflow-hidden mb-3">
+              <div 
+                style={{ width: `${commentsStats.classicsPct}%` }} 
+                className="bg-blue-500 h-full transition-all duration-500" 
+                title={`Vidéos: ${commentsStats.classicsPct.toFixed(1)}%`}
+              />
+              <div 
+                style={{ width: `${commentsStats.livesPct}%` }} 
+                className="bg-rose-500 h-full transition-all duration-500" 
+                title={`Directs: ${commentsStats.livesPct.toFixed(1)}%`}
+              />
+              <div 
+                style={{ width: `${commentsStats.shortsPct}%` }} 
+                className="bg-amber-500 h-full transition-all duration-500" 
+                title={`Shorts: ${commentsStats.shortsPct.toFixed(1)}%`}
+              />
+            </div>
+          </div>
+
+          {/* Lignes de ventilation détaillée */}
+          <div className="space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-800/80 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> Vidéos
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {commentsStats.classicsCom} <span className="text-blue-600 dark:text-blue-400 font-semibold ml-1">({commentsStats.classicsPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span> Directs
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {commentsStats.livesCom} <span className="text-rose-600 dark:text-rose-400 font-semibold ml-1">({commentsStats.livesPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> Shorts
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {commentsStats.shortsCom} <span className="text-amber-600 dark:text-amber-400 font-semibold ml-1">({commentsStats.shortsPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* 3. Contrôles de filtrage & recherche */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t border-gray-100 dark:border-gray-800/80">
+        {/* Barre de recherche */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+          <input 
+            type="text" 
+            placeholder="Rechercher par titre (ex: Build Together, Webflow, Bangkok)..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="w-full pl-10 pr-8 py-2.5 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 dark:text-white transition-all placeholder-gray-400"
+          />
+          {searchTerm && (
+            <button 
+              onClick={() => { setSearchTerm(''); setCurrentPage(1); }}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+
+        {/* Filtres & Tri */}
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Sélecteur de format */}
           <select 
             value={typeFilter}
             onChange={(e) => handleFilterChange(e.target.value)}
-            className="pl-3 pr-8 py-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 dark:text-white appearance-none cursor-pointer"
+            className="pl-3 pr-8 py-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 dark:text-white appearance-none cursor-pointer"
             style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.2em 1.2em' }}
           >
             <option value="all">Tous les formats ({counts.all})</option>
@@ -142,12 +563,12 @@ export const VideoPerformance = ({ videos }) => {
           <select 
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value)}
-            className="pl-3 pr-8 py-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 dark:text-white appearance-none cursor-pointer"
+            className="pl-3 pr-8 py-2 bg-gray-50 dark:bg-gray-800/60 border border-gray-200 dark:border-gray-700 rounded-xl text-xs sm:text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-red-500/20 focus:border-red-500 dark:text-white appearance-none cursor-pointer"
             style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%236B7280'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`, backgroundRepeat: 'no-repeat', backgroundPosition: 'right 0.5rem center', backgroundSize: '1.2em 1.2em' }}
           >
             <option value="date-desc">Plus récents d'abord</option>
             <option value="date-asc">Plus anciens d'abord</option>
-            <option value="views">Trier par vues</option>
+            <option value="views">Trier par vues (décroissant)</option>
             <option value="engagement">Trier par engagement</option>
             <option value="vph">Trier par vélocité (VPH)</option>
             <option value="likes">Trier par likes</option>
@@ -156,16 +577,16 @@ export const VideoPerformance = ({ videos }) => {
         </div>
       </div>
 
-      {/* Tableau des contenus */}
+      {/* 4. Tableau des contenus */}
       <div className="overflow-x-auto rounded-2xl border border-gray-100 dark:border-gray-800/80">
         <table className="w-full text-left border-collapse text-xs sm:text-sm">
           <thead>
             <tr className="bg-gray-50/80 dark:bg-gray-800/40 text-[10px] sm:text-xs uppercase tracking-wider text-gray-500 dark:text-gray-400 border-b border-gray-200/60 dark:border-gray-800">
               <th className="px-4 sm:px-6 py-3.5 font-semibold">Contenu</th>
               <th className="px-3 sm:px-4 py-3.5 font-semibold text-center">Format</th>
-              <th className="px-3 sm:px-6 py-3.5 font-semibold">Publié le</th>
-              <th className="px-3 sm:px-6 py-3.5 font-semibold text-right">Vues</th>
-              <th className="px-3 sm:px-6 py-3.5 font-semibold text-right relative group">
+              <th className="px-3 sm:px-4 py-3.5 font-semibold">Publié le</th>
+              <th className="px-3 sm:px-4 py-3.5 font-semibold text-right">Vues</th>
+              <th className="px-3 sm:px-4 py-3.5 font-semibold text-right relative group">
                 <div 
                   className="flex justify-end items-center gap-1 cursor-help"
                   onClick={() => setShowVPHTooltip(!showVPHTooltip)}
@@ -182,9 +603,9 @@ export const VideoPerformance = ({ videos }) => {
                   </div>
                 )}
               </th>
-              <th className="px-3 sm:px-6 py-3.5 font-semibold text-right">Likes</th>
-              <th className="px-3 sm:px-6 py-3.5 font-semibold text-right">Comm.</th>
-              <th className="px-3 sm:px-6 py-3.5 font-semibold text-right">Engagement</th>
+              <th className="px-3 sm:px-4 py-3.5 font-semibold text-right">Likes</th>
+              <th className="px-3 sm:px-4 py-3.5 font-semibold text-right">Comm.</th>
+              <th className="px-3 sm:px-4 py-3.5 font-semibold text-right">Engagement</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800/60 bg-transparent">
@@ -212,7 +633,7 @@ export const VideoPerformance = ({ videos }) => {
                           src={video.thumbnailUrl} 
                           alt="" 
                           className="w-full h-full object-cover group-hover/thumb:scale-105 transition-transform duration-500" 
-                          loading="lazy"
+                          loading="lazy" 
                         />
                         <div className="absolute inset-0 bg-black/10 group-hover/thumb:bg-transparent transition-colors"></div>
 
@@ -257,12 +678,12 @@ export const VideoPerformance = ({ videos }) => {
                         Live
                       </span>
                     ) : isShort ? (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20 shadow-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-amber-500/10 text-amber-600 dark:bg-amber-500/20 dark:text-amber-400 border border-amber-500/20 shadow-xs">
                         <Zap size={11} className="fill-amber-500" />
                         Short
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20 shadow-xs">
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] sm:text-[11px] font-bold uppercase tracking-wider bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400 border border-blue-500/20 shadow-xs">
                         <VideoIcon size={11} />
                         Vidéo
                       </span>
@@ -270,54 +691,46 @@ export const VideoPerformance = ({ videos }) => {
                   </td>
 
                   {/* Date de publication */}
-                  <td className="px-3 sm:px-6 py-3.5 text-xs sm:text-sm text-gray-500 dark:text-gray-400 whitespace-nowrap">
+                  <td className="px-3 sm:px-4 py-3.5 whitespace-nowrap text-gray-500 dark:text-gray-400 text-xs">
                     {new Date(video.publishedAt).toLocaleDateString('fr-FR', {
-                      day: '2-digit',
-                      month: '2-digit',
+                      day: 'numeric',
+                      month: 'short',
                       year: 'numeric'
                     })}
                   </td>
 
                   {/* Vues */}
-                  <td className="px-3 sm:px-6 py-3.5 text-xs sm:text-sm font-semibold text-gray-900 dark:text-white text-right whitespace-nowrap">
-                    <div className="flex justify-end items-center gap-1.5">
-                      {(video.views || 0).toLocaleString('fr-FR')} 
-                      <PlayCircle size={13} className="text-gray-400" />
-                    </div>
+                  <td className="px-3 sm:px-4 py-3.5 text-right font-medium text-gray-900 dark:text-white whitespace-nowrap">
+                    {video.views?.toLocaleString('fr-FR')}
                   </td>
 
                   {/* VPH */}
-                  <td className="px-3 sm:px-6 py-3.5 text-xs sm:text-sm font-bold text-orange-500 text-right whitespace-nowrap">
-                    {vph >= 5 ? (
-                      <span className="flex justify-end items-center gap-1">
-                        {vph.toFixed(1)}/h <span className="animate-pulse">🔥</span>
-                      </span>
-                    ) : (
-                      <span>{vph.toFixed(1)}/h</span>
-                    )}
+                  <td className="px-3 sm:px-4 py-3.5 text-right whitespace-nowrap">
+                    <span className={`inline-flex items-center gap-1 font-semibold ${
+                      vph > 50 ? 'text-red-500 dark:text-red-400' :
+                      vph > 10 ? 'text-orange-500 dark:text-orange-400' :
+                      'text-gray-600 dark:text-gray-400'
+                    }`}>
+                      {vph.toFixed(1)}
+                      {vph > 50 && <span className="text-[10px]">🔥</span>}
+                    </span>
                   </td>
 
                   {/* Likes */}
-                  <td className="px-3 sm:px-6 py-3.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 text-right whitespace-nowrap">
-                    <div className="flex justify-end items-center gap-1.5">
-                      {(video.likes || 0).toLocaleString('fr-FR')} 
-                      <ThumbsUp size={13} className="text-gray-400" />
-                    </div>
+                  <td className="px-3 sm:px-4 py-3.5 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                    {video.likes?.toLocaleString('fr-FR')}
                   </td>
 
                   {/* Commentaires */}
-                  <td className="px-3 sm:px-6 py-3.5 text-xs sm:text-sm text-gray-600 dark:text-gray-300 text-right whitespace-nowrap">
-                    <div className="flex justify-end items-center gap-1.5">
-                      {(video.comments || 0).toLocaleString('fr-FR')} 
-                      <MessageCircle size={13} className="text-gray-400" />
-                    </div>
+                  <td className="px-3 sm:px-4 py-3.5 text-right text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                    {video.comments?.toLocaleString('fr-FR')}
                   </td>
 
                   {/* Taux d'engagement */}
-                  <td className="px-3 sm:px-6 py-3.5 text-xs sm:text-sm font-semibold text-right whitespace-nowrap">
-                    <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-200/50 dark:border-indigo-500/20">
-                      {(video.engagementRate || 0)}% 
-                      <Activity size={12} />
+                  <td className="px-3 sm:px-4 py-3.5 text-right whitespace-nowrap">
+                    <div className="inline-flex items-center gap-1.5 font-bold text-gray-900 dark:text-white">
+                      <span>{video.engagementRate}%</span>
+                      <Activity size={12} className={video.engagementRate > 5 ? 'text-emerald-500' : 'text-gray-400'} />
                     </div>
                   </td>
                 </tr>
@@ -339,9 +752,9 @@ export const VideoPerformance = ({ videos }) => {
         </table>
       </div>
 
-      {/* Barre de pagination */}
+      {/* 5. Barre de pagination */}
       {filteredVideos.length > 0 && (
-        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mt-6 pt-4 border-t border-gray-100 dark:border-gray-800 text-xs text-gray-500 dark:text-gray-400">
+        <div className="flex flex-col sm:flex-row justify-between items-center gap-4 pt-2 text-xs text-gray-500 dark:text-gray-400">
           <div className="flex items-center gap-2">
             <span>Afficher</span>
             <select
