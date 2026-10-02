@@ -188,8 +188,9 @@ async function processChannelData(channelIdOrHandle, isHandle = false) {
       customUrl: snippet.customUrl,
       publishedAt: snippet.publishedAt,
       subscribers: parseInt(stats.subscriberCount || '0', 10),
-      totalViews: parseInt(stats.viewCount || '0', 10),
-      videoCount: parseInt(stats.videoCount || '0', 10),
+      totalViews: sampleViews,
+      publicChannelViews: parseInt(stats.viewCount || '0', 10),
+      videoCount: videosData.length,
       globalEngagementRate: parseFloat(globalEngagementRate.toFixed(2)),
       totalLikes: sampleLikes,
       lastSync: FieldValue.serverTimestamp()

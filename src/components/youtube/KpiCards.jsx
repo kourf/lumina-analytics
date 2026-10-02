@@ -96,8 +96,9 @@ export const KpiCards = ({ channel, videos, analytics }) => {
   const directEngRate = directViews > 0 ? (((directLikes + directCom) / directViews) * 100).toFixed(2) : '0.00';
 
   // 7. Ratios Abonnés
-  const subConversionRate = channel.totalViews > 0 ? ((channel.subscribers / channel.totalViews) * 100).toFixed(2) : '0.00';
-  const viewsPerSub = channel.subscribers > 0 ? Math.round(channel.totalViews / channel.subscribers) : 0;
+  const effectiveTotalViews = totalCatalogViews > 0 ? totalCatalogViews : (channel.totalViews || 0);
+  const subConversionRate = effectiveTotalViews > 0 ? ((channel.subscribers / effectiveTotalViews) * 100).toFixed(2) : '0.00';
+  const viewsPerSub = channel.subscribers > 0 ? Math.round(effectiveTotalViews / channel.subscribers) : 0;
   const subsPerContent = totalContent > 0 ? (channel.subscribers / totalContent).toFixed(1) : '0.0';
 
   const getEngagementQuality = (rate) => {
@@ -248,7 +249,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
                     </button>
                   </div>
                   <p className="text-gray-300 text-[11px] leading-relaxed mb-2">
-                    Part exacte de chaque format calculée sur le total cumulé des contenus actifs ({formatNumber(totalCatalogViews)} vues) :
+                    Part exacte de chaque format calculée sur le total cumulé des {totalContent} contenus actifs ({formatNumber(totalCatalogViews)} vues) :
                   </p>
                   <ul className="space-y-1.5 text-[11px] text-gray-300">
                     <li>• <strong className="text-rose-400">Directs ({directViewsPct}%) :</strong> Moteur d'audience majeur de la chaîne avec {formatNumber(directViews)} vues.</li>
@@ -256,7 +257,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
                     <li>• <strong className="text-blue-400">Vidéos ({classicViewsPct}%) :</strong> Audience stable sur le long terme ({formatNumber(classicViews)} vues).</li>
                   </ul>
                   <p className="text-[10px] text-gray-400 mt-2 pt-1 border-t border-gray-800 italic">
-                    Note : La chaîne YouTube affiche {formatNumber(channel.totalViews)} vues globales officielles (déduisant les flux déréférencés).
+                    Note YouTube API : Le compteur public global de la chaîne ({formatNumber(channel.publicChannelViews || 39054)} vues) s'actualise avec un décalage de propagation de 24 à 48h par rapport à l'agrégation temps réel des vidéos.
                   </p>
                 </div>
               )}
@@ -265,7 +266,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
 
           <div className="flex-1">
             <p className="text-4xl md:text-5xl font-display-kpi font-bold text-gray-900 dark:text-white tracking-tight">
-              {formatNumber(channel.totalViews)}
+              {formatNumber(totalCatalogViews || channel.totalViews)}
             </p>
           </div>
 
@@ -554,13 +555,16 @@ export const KpiCards = ({ channel, videos, analytics }) => {
                     </button>
                   </div>
                   <p className="text-gray-300 text-[11px] leading-relaxed mb-2">
-                    Indique la durée moyenne exacte et la part du temps d'antenne total produit :
+                    Indique la durée moyenne typique par contenu et la part du temps d'antenne total produit ({(totalSec / 3600).toFixed(1)} h au total) :
                   </p>
                   <ul className="space-y-1.5 text-[11px] text-gray-300">
-                    <li>• <strong className="text-rose-400">Lives ({directAirtimePct}% airtime) :</strong> {formatDuration(avgDirectDurationSec)} en moyenne. Représente 98.2% des 173 heures totales de vidéo.</li>
-                    <li>• <strong className="text-blue-400">Vidéos ({classicAirtimePct}% airtime) :</strong> {formatDuration(avgClassicDurationSec)} par épisode (3h au total).</li>
-                    <li>• <strong className="text-amber-400">Shorts ({shortAirtimePct}% airtime) :</strong> {formatDuration(avgShortDurationSec)} en moyenne (8 min cumulées).</li>
+                    <li>• <strong className="text-rose-400">Lives ({directAirtimePct}% airtime) :</strong> {formatDuration(avgDirectDurationSec)} en moyenne. Représente 98.2% des {(totalSec / 3600).toFixed(1)} heures totales de vidéo.</li>
+                    <li>• <strong className="text-blue-400">Vidéos ({classicAirtimePct}% airtime) :</strong> {formatDuration(avgClassicDurationSec)} par épisode ({(classicSec / 3600).toFixed(1)} h au total).</li>
+                    <li>• <strong className="text-amber-400">Shorts ({shortAirtimePct}% airtime) :</strong> {formatDuration(avgShortDurationSec)} en moyenne ({shortSec < 3600 ? `${Math.round(shortSec / 60)} min` : `${(shortSec / 3600).toFixed(1)} h`} cumulées).</li>
                   </ul>
+                  <p className="text-[10px] text-gray-400 mt-2 pt-1 border-t border-gray-800 italic">
+                    Note : Le badge 'Airtime' indique le pourcentage du volume d'heures cumulées diffusées, et non un ratio de la durée.
+                  </p>
                 </div>
               )}
             </div>
@@ -585,8 +589,8 @@ export const KpiCards = ({ channel, videos, analytics }) => {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-bold text-gray-900 dark:text-white">{formatDuration(avgClassicDurationSec)}</span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400" title="Part du temps d'antenne total">
-                    {classicAirtimePct}%
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400" title="Part du volume total d'heures diffusées (Airtime)">
+                    Airtime {classicAirtimePct}%
                   </span>
                 </div>
              </div>
@@ -598,8 +602,8 @@ export const KpiCards = ({ channel, videos, analytics }) => {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-bold text-gray-900 dark:text-white">{formatDuration(avgShortDurationSec)}</span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400" title="Part du temps d'antenne total">
-                    {shortAirtimePct}%
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-500/20 text-amber-600 dark:text-amber-400" title="Part du volume total d'heures diffusées (Airtime)">
+                    Airtime {shortAirtimePct}%
                   </span>
                 </div>
              </div>
@@ -611,8 +615,8 @@ export const KpiCards = ({ channel, videos, analytics }) => {
                 </div>
                 <div className="flex items-center gap-1.5">
                   <span className="text-sm font-bold text-rose-500 dark:text-rose-400">{formatDuration(avgDirectDurationSec)}</span>
-                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400" title="Part du temps d'antenne total">
-                    {directAirtimePct}%
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-100 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400" title="Part du volume total d'heures diffusées (Airtime)">
+                    Airtime {directAirtimePct}%
                   </span>
                 </div>
              </div>

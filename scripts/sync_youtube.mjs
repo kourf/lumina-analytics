@@ -181,8 +181,9 @@ export async function runYouTubeFullSync() {
       customUrl: snippet.customUrl || '@karamdrm',
       publishedAt: snippet.publishedAt,
       subscribers: parseInt(stats.subscriberCount || '0', 10),
-      totalViews: parseInt(stats.viewCount || '0', 10),
-      videoCount: parseInt(stats.videoCount || '0', 10),
+      totalViews: sampleViews,
+      publicChannelViews: parseInt(stats.viewCount || '0', 10),
+      videoCount: videosData.length,
       globalEngagementRate: parseFloat(globalEngagementRate.toFixed(2)),
       totalLikes: sampleLikes,
       lastSync: {

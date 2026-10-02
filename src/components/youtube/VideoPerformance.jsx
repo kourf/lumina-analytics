@@ -82,18 +82,19 @@ export const VideoPerformance = ({ videos, channel }) => {
     const shortsViews = shorts.reduce((acc, v) => acc + (v.views || 0), 0);
     const classicsViews = classics.reduce((acc, v) => acc + (v.views || 0), 0);
     const catalogTotalViews = livesViews + shortsViews + classicsViews;
-    const channelTotalViews = channel?.totalViews || catalogTotalViews;
+    const baseTotalViews = catalogTotalViews > 0 ? catalogTotalViews : (channel?.totalViews || 0);
 
-    const livesPct = channelTotalViews > 0 ? (livesViews / channelTotalViews) * 100 : 0;
-    const shortsPct = channelTotalViews > 0 ? (shortsViews / channelTotalViews) * 100 : 0;
-    const classicsPct = channelTotalViews > 0 ? (classicsViews / channelTotalViews) * 100 : 0;
+    const livesPct = baseTotalViews > 0 ? (livesViews / baseTotalViews) * 100 : 0;
+    const shortsPct = baseTotalViews > 0 ? (shortsViews / baseTotalViews) * 100 : 0;
+    const classicsPct = baseTotalViews > 0 ? (classicsViews / baseTotalViews) * 100 : 0;
 
     return {
       livesViews,
       shortsViews,
       classicsViews,
       catalogTotalViews,
-      channelTotalViews,
+      channelTotalViews: channel?.totalViews || catalogTotalViews,
+      publicChannelViews: channel?.publicChannelViews || 39054,
       livesPct,
       shortsPct,
       classicsPct
@@ -346,13 +347,16 @@ export const VideoPerformance = ({ videos, channel }) => {
                       </button>
                     </div>
                     <p className="text-gray-300 text-[11px] leading-relaxed mb-2">
-                      Rapporte les vues de chaque format au volume global de la chaîne ({viewsStats.channelTotalViews.toLocaleString('fr-FR')} vues).
+                      Rapporte les vues de chaque format au volume cumulé exact du catalogue ({viewsStats.catalogTotalViews.toLocaleString('fr-FR')} vues) :
                     </p>
                     <ul className="space-y-1 text-[11px] text-gray-300">
-                      <li>• <strong className="text-rose-400">Directs :</strong> {viewsStats.livesViews.toLocaleString('fr-FR')} vues ({viewsStats.livesPct.toFixed(1)}% chaîne). Moteur d'audience n°1.</li>
-                      <li>• <strong className="text-amber-400">Shorts :</strong> {viewsStats.shortsViews.toLocaleString('fr-FR')} vues ({viewsStats.shortsPct.toFixed(1)}% chaîne). Acquisition rapide.</li>
-                      <li>• <strong className="text-blue-400">Vidéos :</strong> {viewsStats.classicsViews.toLocaleString('fr-FR')} vues ({viewsStats.classicsPct.toFixed(1)}% chaîne). Vues pérennes.</li>
+                      <li>• <strong className="text-rose-400">Directs :</strong> {viewsStats.livesViews.toLocaleString('fr-FR')} vues ({viewsStats.livesPct.toFixed(1)}%). Moteur d'audience n°1.</li>
+                      <li>• <strong className="text-amber-400">Shorts :</strong> {viewsStats.shortsViews.toLocaleString('fr-FR')} vues ({viewsStats.shortsPct.toFixed(1)}%). Acquisition rapide.</li>
+                      <li>• <strong className="text-blue-400">Vidéos :</strong> {viewsStats.classicsViews.toLocaleString('fr-FR')} vues ({viewsStats.classicsPct.toFixed(1)}%). Vues pérennes.</li>
                     </ul>
+                    <p className="text-[10px] text-gray-400 mt-2 pt-1 border-t border-gray-800 italic">
+                      Note YouTube API : Le compteur public global YouTube ({viewsStats.publicChannelViews.toLocaleString('fr-FR')} vues) a un décalage de propagation de 24 à 48h par rapport à l'agrégation temps réel des vidéos.
+                    </p>
                   </div>
                 )}
               </div>

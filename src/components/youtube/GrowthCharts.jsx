@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Calendar, Info } from 'lucide-react';
 
-export const GrowthCharts = ({ channel }) => {
+export const GrowthCharts = ({ channel, videos }) => {
   const [activeMetric, setActiveMetric] = useState('views');
   const [timeRange, setTimeRange] = useState('weekly');
   const [showEngagementTooltip, setShowEngagementTooltip] = useState(false);
@@ -11,7 +11,8 @@ export const GrowthCharts = ({ channel }) => {
   const chartData = useMemo(() => {
     if (!channel) return { weekly: [], monthly: [], yearly: [] };
     
-    const currentViews = channel.totalViews || 0;
+    const catalogViews = (videos || []).reduce((acc, v) => acc + (v.views || 0), 0);
+    const currentViews = catalogViews > 0 ? catalogViews : (channel.totalViews || 0);
     const currentSubs = channel.subscribers || 0;
     const currentEng = channel.globalEngagementRate || 0;
 
