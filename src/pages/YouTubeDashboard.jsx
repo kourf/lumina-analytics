@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { db } from '../config/firebase';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, updateDoc, deleteField } from 'firebase/firestore';
 import { syncYouTubeDirect } from '../services/youtubeSyncService';
 import { YouTubeHeader } from '../components/youtube/YouTubeHeader';
 import { KpiCards } from '../components/youtube/KpiCards';
@@ -23,23 +23,38 @@ export const YouTubeDashboard = () => {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [youtubeToken, setYoutubeToken] = useState(null);
+  const [privateStatsData, setPrivateStatsData] = useState(null);
+  const [lastPrivateSync, setLastPrivateSync] = useState(null);
 
-  // Écoute en temps réel de Firestore pour une réactivité instantanée
+  // Écoute en temps réel de Firestore pour une réactivité instantanée multi-appareils
   useEffect(() => {
     const docRef = doc(db, 'users', 'karamokho');
     const unsubscribe = onSnapshot(docRef, (docSnap) => {
-      if (docSnap.exists() && docSnap.data().youtubeAPI) {
-        const ytData = docSnap.data().youtubeAPI;
-        if (ytData.videos) {
-          ytData.videos = ytData.videos.filter(v => v.id !== '2kFVi1l41Eo');
+      if (docSnap.exists()) {
+        const docData = docSnap.data();
+        if (docData.youtubeAPI) {
+          const ytData = { ...docData.youtubeAPI };
+          if (ytData.videos) {
+            ytData.videos = ytData.videos.filter(v => v.id !== '2kFVi1l41Eo');
+          }
+          if (ytData.topVideos) {
+            ytData.topVideos = ytData.topVideos.filter(v => v.id !== '2kFVi1l41Eo');
+          }
+          if (ytData.weakVideos) {
+            ytData.weakVideos = ytData.weakVideos.filter(v => v.id !== '2kFVi1l41Eo');
+          }
+          setData(ytData);
         }
-        if (ytData.topVideos) {
-          ytData.topVideos = ytData.topVideos.filter(v => v.id !== '2kFVi1l41Eo');
+
+        // Récupération des statistiques privées persistées dans le cloud
+        if (docData.youtubePrivateStats) {
+          const pStats = docData.youtubePrivateStats;
+          setPrivateStatsData(pStats.stats || pStats);
+          setLastPrivateSync(pStats.updatedAt || null);
+        } else {
+          setPrivateStatsData(null);
+          setLastPrivateSync(null);
         }
-        if (ytData.weakVideos) {
-          ytData.weakVideos = ytData.weakVideos.filter(v => v.id !== '2kFVi1l41Eo');
-        }
-        setData(ytData);
       }
       setLoading(false);
     }, (error) => {
@@ -66,6 +81,34 @@ export const YouTubeDashboard = () => {
 
     // 2. Fallback direct client garanti à 100%
     await syncYouTubeDirect();
+  };
+
+  const handleSavePrivateStats = async (freshStats) => {
+    try {
+      const docRef = doc(db, 'users', 'karamokho');
+      await updateDoc(docRef, {
+        youtubePrivateStats: {
+          updatedAt: new Date().toISOString(),
+          stats: freshStats
+        }
+      });
+    } catch (err) {
+      console.error("Erreur sauvegarde youtubePrivateStats dans Firestore:", err);
+    }
+  };
+
+  const handleClearPrivateStats = async () => {
+    try {
+      const docRef = doc(db, 'users', 'karamokho');
+      await updateDoc(docRef, {
+        youtubePrivateStats: deleteField()
+      });
+      setYoutubeToken(null);
+      setPrivateStatsData(null);
+      setLastPrivateSync(null);
+    } catch (err) {
+      console.error("Erreur suppression youtubePrivateStats dans Firestore:", err);
+    }
   };
 
   const handleRemoveCompetitorLocal = (competitorId) => {
@@ -151,8 +194,21 @@ export const YouTubeDashboard = () => {
         onRemoveLocal={handleRemoveCompetitorLocal}
       />
       
-      <YouTubeConnect onTokenReceived={setYoutubeToken} />
-      {youtubeToken && <YouTubePrivateStats accessToken={youtubeToken} channelId={data.channel?.id} />}
+      <YouTubeConnect 
+        isConnected={!!youtubeToken || !!privateStatsData}
+        lastSynced={lastPrivateSync}
+        onTokenReceived={(token) => setYoutubeToken(token)}
+        onDisconnect={handleClearPrivateStats}
+      />
+      {(youtubeToken || privateStatsData) && (
+        <YouTubePrivateStats 
+          accessToken={youtubeToken} 
+          cachedStats={privateStatsData}
+          channelId={data.channel?.id}
+          allVideos={data.videos || []}
+          onStatsUpdated={handleSavePrivateStats}
+        />
+      )}
 
       <DataAvailability />
     </div>
