@@ -123,6 +123,21 @@ export const VideoPerformance = ({ videos, channel }) => {
     };
   }, [lives, shorts, classics]);
 
+  // 4. Rendement de production (Vues générées par heure de vidéo diffusée)
+  const roiStats = useMemo(() => {
+    const totalVPH = hoursStats.totalH > 0 ? Math.round(viewsStats.catalogTotalViews / hoursStats.totalH) : 0;
+    const shortsVPH = hoursStats.shortsH > 0 ? Math.round(viewsStats.shortsViews / hoursStats.shortsH) : 0;
+    const classicsVPH = hoursStats.classicsH > 0 ? Math.round(viewsStats.classicsViews / hoursStats.classicsH) : 0;
+    const livesVPH = hoursStats.livesH > 0 ? Math.round(viewsStats.livesViews / hoursStats.livesH) : 0;
+
+    return {
+      totalVPH,
+      shortsVPH,
+      classicsVPH,
+      livesVPH
+    };
+  }, [hoursStats, viewsStats]);
+
   const calculateVPH = (publishedAt, views) => {
     if (!publishedAt || !views) return 0;
     const hours = (new Date() - new Date(publishedAt)) / (1000 * 60 * 60);
@@ -203,8 +218,8 @@ export const VideoPerformance = ({ videos, channel }) => {
         </div>
       </div>
 
-      {/* 2. Les 3 Cartes KPI de Répartition (Heures, Vues Cumulées, Commentaires) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+      {/* 2. Les 4 Cartes KPI de Répartition (Heures, Vues Cumulées, Commentaires, Rendement ROI) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-5">
         
         {/* CARTE 1 : Volume Total d'Heures */}
         <div className="bg-gray-50/80 dark:bg-gray-800/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-indigo-500/30 hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
@@ -519,6 +534,111 @@ export const VideoPerformance = ({ videos, channel }) => {
               </span>
               <span className="font-bold text-gray-900 dark:text-white">
                 {commentsStats.shortsCom} <span className="text-amber-600 dark:text-amber-400 font-semibold ml-1">({commentsStats.shortsPct.toFixed(1)}%)</span>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* CARTE 4 : Rendement de Production (ROI) */}
+        <div className="bg-gray-50/80 dark:bg-gray-800/40 p-5 rounded-2xl border border-gray-100 dark:border-gray-800 hover:border-amber-500/30 hover:shadow-md transition-all duration-300 flex flex-col justify-between relative group">
+          <div>
+            <div className="flex justify-between items-start mb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-amber-50 dark:bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">
+                  <Zap size={18} />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+                    Rendement Horaire
+                  </h4>
+                  <span className="text-[10px] text-gray-400 dark:text-gray-500">Vues / heure produite</span>
+                </div>
+              </div>
+
+              {/* Bouton Infobulle */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setActiveKpiTooltip(activeKpiTooltip === 'roi' ? null : 'roi')}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-amber-600 dark:hover:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-500/10 transition-colors"
+                  title="Afficher l'explication du rendement horaire"
+                >
+                  <Info size={16} />
+                </button>
+
+                {activeKpiTooltip === 'roi' && (
+                  <div className="absolute right-0 top-full mt-2 w-72 bg-gray-900 text-white p-3.5 rounded-xl text-xs z-50 shadow-2xl border border-gray-700 animate-fade-in font-normal">
+                    <div className="flex justify-between items-center mb-1.5 pb-1 border-b border-gray-800">
+                      <strong className="text-amber-400">Rendement de production (ROI)</strong>
+                      <button onClick={() => setActiveKpiTooltip(null)} className="text-gray-400 hover:text-white">
+                        <X size={12} />
+                      </button>
+                    </div>
+                    <p className="text-gray-300 text-[11px] leading-relaxed mb-2">
+                      Rapporte le nombre de vues au temps total diffusé. Révèle le retour sur investissement de chaque heure passée à produire selon le format :
+                    </p>
+                    <ul className="space-y-1 text-[11px] text-gray-300">
+                      <li>• <strong className="text-amber-400">Shorts :</strong> {roiStats.shortsVPH.toLocaleString('fr-FR')} vues/h. Efficacité virale explosive pour un temps de production court.</li>
+                      <li>• <strong className="text-blue-400">Vidéos :</strong> {roiStats.classicsVPH.toLocaleString('fr-FR')} vues/h. Excellent ROI long terme (tutoriels).</li>
+                      <li>• <strong className="text-rose-400">Directs :</strong> {roiStats.livesVPH.toLocaleString('fr-FR')} vues/h. Moteur de volume global et de watch time.</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Chiffre Principal */}
+            <div className="flex items-baseline gap-2 mb-3">
+              <span className="text-2xl lg:text-3xl font-black text-gray-900 dark:text-white tracking-tight">
+                {roiStats.totalVPH.toLocaleString('fr-FR')}
+              </span>
+              <span className="text-xs text-gray-500 dark:text-gray-400 font-medium">vues / heure produite</span>
+            </div>
+
+            {/* Barre de répartition segmentée */}
+            <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-gray-700 flex overflow-hidden mb-3">
+              <div 
+                style={{ width: '45%' }} 
+                className="bg-amber-500 h-full" 
+                title="Shorts: ROI viral maximum"
+              />
+              <div 
+                style={{ width: '35%' }} 
+                className="bg-blue-500 h-full" 
+                title="Vidéos: ROI pérenne"
+              />
+              <div 
+                style={{ width: '20%' }} 
+                className="bg-rose-500 h-full" 
+                title="Lives: Volume de fidélisation"
+              />
+            </div>
+          </div>
+
+          {/* Lignes de ventilation détaillée */}
+          <div className="space-y-1.5 pt-2 border-t border-gray-100 dark:border-gray-800/80 text-xs">
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span> Shorts
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {roiStats.shortsVPH.toLocaleString('fr-FR')} <span className="text-amber-600 dark:text-amber-400 font-semibold ml-1">vues/h 🔥</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span> Vidéos
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {roiStats.classicsVPH.toLocaleString('fr-FR')} <span className="text-blue-600 dark:text-blue-400 font-semibold ml-1">vues/h</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400 font-medium">
+                <span className="w-2 h-2 rounded-full bg-rose-500"></span> Directs
+              </span>
+              <span className="font-bold text-gray-900 dark:text-white">
+                {roiStats.livesVPH.toLocaleString('fr-FR')} <span className="text-rose-600 dark:text-rose-400 font-semibold ml-1">vues/h</span>
               </span>
             </div>
           </div>

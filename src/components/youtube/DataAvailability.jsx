@@ -33,9 +33,10 @@ export const DataAvailability = () => {
             </h5>
             <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
               <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Nom, avatar et abonnés de la chaîne</li>
-              <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Liste de vos 50 dernières vidéos publiques</li>
-              <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Vues, likes et commentaires par vidéo</li>
-              <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Calcul du taux d'engagement global</li>
+              <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Indexation intégrale du catalogue (89 contenus : Lives, Shorts, Vidéos)</li>
+              <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Vues, likes et commentaires en direct par vidéo</li>
+              <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Durée de visionnage, volume d'heures (Airtime) et rendement horaire</li>
+              <li className="flex items-start gap-2"><div className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5"></div> Calcul des taux d'engagement et des médianes comparatives</li>
             </ul>
           </div>
 
