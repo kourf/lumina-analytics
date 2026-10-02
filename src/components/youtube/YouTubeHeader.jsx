@@ -94,7 +94,7 @@ export const YouTubeHeader = ({ channel, onRefresh }) => {
           <div className="flex flex-col items-start md:items-end text-xs text-gray-400 dark:text-gray-500 gap-1">
             <div className="flex items-center gap-1.5 font-medium text-emerald-600 dark:text-emerald-400">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-              Temps réel Firestore (&lt; 1s) • Synchro API : À la demande (ou 6h)
+              Temps réel Firestore (&lt; 1s) • Synchro API : Automatique (toutes les heures) ou à la demande
             </div>
             <div>
               Dernière synchro YouTube : <strong className="text-gray-700 dark:text-gray-300 font-semibold">{lastSyncDate}</strong>

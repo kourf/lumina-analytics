@@ -1,0 +1,25 @@
+name: YouTube Auto Sync Cron (Hourly 0€)
+
+on:
+  schedule:
+    # Exécution automatique toutes les heures (à la minute 15 pour décaler de TikTok)
+    - cron: '15 * * * *'
+  workflow_dispatch: # Déclenchement manuel depuis GitHub
+
+jobs:
+  sync-youtube-metrics:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Firebase Dependencies
+        run: npm install firebase
+
+      - name: Execute Live YouTube Sync to Firestore
+        run: node scripts/sync_youtube.mjs

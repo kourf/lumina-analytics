@@ -140,7 +140,7 @@ export const KpiCards = ({ channel, videos, analytics }) => {
         </div>
         <div className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
           <Clock size={12} />
-          <span>Synchronisation YouTube : À la demande ou toutes les 6h</span>
+          <span>Synchronisation YouTube : Automatique (toutes les heures) ou à la demande</span>
         </div>
       </div>
 
