@@ -1,18 +1,19 @@
 import React, { useState, useMemo } from 'react';
-import { Target, AlertCircle, PlayCircle, Sparkles, TrendingDown, ArrowUpRight, Clock } from 'lucide-react';
+import { Target, AlertCircle, PlayCircle, Sparkles, TrendingDown, ArrowUpRight, Clock, Info, X } from 'lucide-react';
 
 export const OptimizationOpps = ({ videos, allVideos }) => {
   const [activeTab, setActiveTab] = useState('videos');
   const [showWhy, setShowWhy] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
 
-  // Utiliser la liste complète si disponible pour garantir au moins 3 par format
+  // Utiliser la liste complète si disponible pour garantir 5 par format
   const sourceVideos = allVideos && allVideos.length > 0 ? allVideos : (videos || []);
 
   const isLive = (v) => v.type === 'Live' || v.type === 'Direct' || v.format === 'live' || v.isLiveNow;
   const isShort = (v) => !isLive(v) && (v.type === 'Short' || v.format === 'short' || (v.durationSec > 0 && v.durationSec <= 180) || /#(shorts|short|pourtoi|pourtoii|fyp|reels|tiktok)\b/i.test(v.title || ''));
   const isClassic = (v) => !isLive(v) && !isShort(v);
 
-  // Extraire au moins 3 contenus les moins performants (plus de 48h) pour chaque format
+  // Extraire les 5 contenus les moins performants (plus de 48h) pour chaque format
   const { classicVideos, shortVideos, directVideos } = useMemo(() => {
     const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
@@ -20,9 +21,9 @@ export const OptimizationOpps = ({ videos, allVideos }) => {
       const filtered = sourceVideos.filter(filterFn);
       // Filtrer de préférence les vidéos de plus de 48h pour laisser le temps de décoller
       const mature = filtered.filter(v => new Date(v.publishedAt) < twoDaysAgo);
-      const candidates = mature.length >= 3 ? mature : filtered;
-      // Trier par vues croissantes (les moins vues en premier)
-      return [...candidates].sort((a, b) => (a.views || 0) - (b.views || 0)).slice(0, 4);
+      const candidates = mature.length >= 5 ? mature : filtered;
+      // Trier par vues croissantes (les moins vues en premier) et prendre les 5 premières
+      return [...candidates].sort((a, b) => (a.views || 0) - (b.views || 0)).slice(0, 5);
     };
 
     return {
@@ -45,27 +46,78 @@ export const OptimizationOpps = ({ videos, allVideos }) => {
   };
 
   return (
-    <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface hover:-translate-y-1 hover:shadow-lg hover:shadow-lumina-primary/10 transition-all duration-300 p-6 rounded-3xl border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm flex flex-col h-full relative overflow-hidden">
+    <div className="bg-lumina-lightSurface dark:bg-lumina-darkSurface hover:-translate-y-1 hover:shadow-lg hover:shadow-lumina-primary/10 transition-all duration-300 p-6 rounded-3xl border border-lumina-lightBorder dark:border-lumina-darkBorder shadow-sm flex flex-col h-full relative overflow-visible">
       {/* Decorative gradient */}
       <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/5 rounded-full blur-3xl -mr-10 -mt-10 pointer-events-none"></div>
 
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-2 relative z-10">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-500">
+          <div className="p-2.5 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl text-indigo-500 flex-shrink-0">
             <Target size={20} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-lg font-bold text-gray-900 dark:text-white">Contenus à surveiller</h3>
               <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border border-indigo-500/20">
-                Min. 3 par format
+                Top 5 par format
               </span>
+
+              {/* Bouton Infobulle Utilité */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => setShowTooltip(!showTooltip)}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-500/10 transition-colors"
+                  title="Comprendre l'utilité de la section Contenus à surveiller"
+                >
+                  <Info size={16} />
+                </button>
+
+                {showTooltip && (
+                  <div className="absolute left-0 sm:left-auto sm:right-0 top-full mt-2 w-80 sm:w-96 bg-gray-900 text-white p-4 rounded-2xl text-xs z-50 shadow-2xl border border-gray-700 animate-fade-in font-normal leading-relaxed">
+                    <div className="flex justify-between items-center mb-2 pb-1.5 border-b border-gray-800">
+                      <div className="flex items-center gap-1.5">
+                        <Target size={14} className="text-indigo-400" />
+                        <strong className="text-indigo-400 font-bold">Utilité de cette section</strong>
+                      </div>
+                      <button onClick={() => setShowTooltip(false)} className="text-gray-400 hover:text-white p-1">
+                        <X size={13} />
+                      </button>
+                    </div>
+
+                    <p className="text-gray-300 text-[11px] mb-2.5">
+                      Cette section isole automatiquement les <strong>5 contenus les moins vus</strong> de chaque format (Vidéos, Shorts, Directs) ayant plus de 48h d'existence.
+                    </p>
+
+                    <div className="space-y-2 text-[11px] text-gray-300 bg-gray-800/60 p-2.5 rounded-xl border border-gray-700/50 mb-2.5">
+                      <div>
+                        <strong className="text-amber-300">🎯 Pourquoi c'est votre plus grand levier ?</strong>
+                        <p className="text-gray-400 text-[10.5px] mt-0.5">
+                          Sur YouTube, une vidéo qui stagne en vues n'a souvent qu'un seul problème : son <strong>packaging</strong> (titre trop neutre ou miniature peu incitative). Elle a une bonne rétention mais les spectateurs ne cliquent pas (faible CTR).
+                        </p>
+                      </div>
+                      <div>
+                        <strong className="text-emerald-300">🚀 L'effet "Second Souffle" de l'algorithme :</strong>
+                        <p className="text-gray-400 text-[10.5px] mt-0.5">
+                          YouTube re-teste constamment les vidéos dont le titre ou la miniature changent. Modifier une cover peut relancer les impressions et doubler vos vues sans créer de nouvelle vidéo !
+                        </p>
+                      </div>
+                    </div>
+
+                    <ul className="space-y-1 text-[10.5px] text-gray-300">
+                      <li>• <strong>Plan Titre :</strong> Formulez une promesse claire ou une question forte qui attise la curiosité.</li>
+                      <li>• <strong>Plan Miniature :</strong> Augmentez le contraste, 3 mots lisibles sur smartphone max, visage expressif.</li>
+                      <li>• <strong>SEO :</strong> Enrichissez la description et les premiers chapitres pour capter la recherche.</li>
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
             <p className="text-xs text-gray-500 dark:text-gray-400">Opportunités d'optimisation (titres & miniatures)</p>
           </div>
         </div>
 
-        <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl">
+        <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl flex-shrink-0">
           <button
             onClick={() => setActiveTab('videos')}
             className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
@@ -114,9 +166,17 @@ export const OptimizationOpps = ({ videos, allVideos }) => {
       </div>
 
       {showWhy && (
-        <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 flex gap-2 items-start animate-fade-in relative z-10">
-          <p className="text-xs text-indigo-800 dark:text-indigo-300 leading-relaxed">
-            Ces {displayedVideos.length} contenus enregistrent les volumes de vues les plus bas de leur catégorie après au moins 48h de mise en ligne. Changer le titre (pour susciter plus de curiosité) ou tester une nouvelle miniature peut doubler leur taux de clics (CTR).
+        <div className="mb-4 bg-indigo-50 dark:bg-indigo-900/20 p-3.5 rounded-2xl border border-indigo-100 dark:border-indigo-800/30 flex flex-col gap-1.5 animate-fade-in relative z-10 text-xs">
+          <div className="flex items-center justify-between">
+            <strong className="text-indigo-900 dark:text-indigo-200 font-semibold flex items-center gap-1.5">
+              <Sparkles size={14} className="text-indigo-500" /> Guide d'optimisation rapide :
+            </strong>
+            <button onClick={() => setShowWhy(false)} className="text-gray-400 hover:text-indigo-600 dark:hover:text-white">
+              <X size={12} />
+            </button>
+          </div>
+          <p className="text-indigo-800 dark:text-indigo-300 leading-relaxed text-[11px]">
+            Ces 5 contenus enregistrent les volumes de vues les plus bas de leur catégorie après au moins 48h de diffusion. Cliquez sur <strong>« Tester nouveau titre »</strong> pour ouvrir YouTube Studio et ajuster le titre ou la miniature afin de réveiller la distribution algorithmique.
           </p>
         </div>
       )}
