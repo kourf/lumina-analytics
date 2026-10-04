@@ -821,6 +821,28 @@ const stopLiveTracker = async () => {
 };
 
 // 12. ROUTES HTTP DE MONITORING ET DE COMMANDE
+app.get('/health', (req, res) => {
+    res.status(200).json({
+        status: 'ok',
+        service: 'Lumina TikTok Live WebSocket Engine (Worker)',
+        uptime: process.uptime(),
+        isLive: isConnected,
+        connectedClients: io.engine.clientsCount,
+        timestamp: new Date().toISOString()
+    });
+});
+
+app.get('/', (req, res) => {
+    res.status(200).json({
+        status: 'online',
+        service: 'Lumina TikTok Live Engine',
+        creator: `@${TIKTOK_USERNAME}`,
+        isLive: isConnected,
+        connectedClients: io.engine.clientsCount,
+        uptime: liveStartTime ? formatDuration(liveStartTime.getTime(), Date.now()) : null
+    });
+});
+
 app.get('/status', (req, res) => {
     res.json({
         service: 'Lumina TikTok Live WebSocket Engine',

@@ -11,7 +11,7 @@ import { cn } from '../../lib/utils';
 
 export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing }) {
   const socket = useTikTokLiveSocket(undefined, propLiveData);
-  const isLive = socket.isSocketConnected ? socket.isLive : Boolean(propLiveData?.isLive);
+  const isLive = Boolean(socket.isLive ?? propLiveData?.isLive);
 
   const [archives, setArchives] = useState([]);
   const [loadingArchives, setLoadingArchives] = useState(false);
@@ -24,7 +24,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   useEffect(() => {
     let interval = null;
     const startedAt = isLive 
-      ? (propLiveData?.started_at || propLiveData?.startedAt || null) 
+      ? (socket.startedAt || propLiveData?.started_at || propLiveData?.startedAt || null) 
       : null;
     if (isLive && startedAt) {
       const startMs = new Date(startedAt).getTime();
@@ -60,7 +60,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         const archivesRef = collection(db, 'tiktok_archives');
         const q = query(archivesRef, orderBy('startedAt', 'desc'), limit(15));
         const snapshot = await getDocs(q);
-        const fetchedArchives = snapshot.docs
+        const fetchedArchives = (snapshot?.docs || [])
           .map(doc => ({
             id: doc.id,
             ...doc.data()
@@ -118,13 +118,27 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     }
   };
 
-  const currentViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.viewers ?? 0) : Number(propLiveData?.currentViewers || propLiveData?.viewerCount || 0)) : 0;
-  const peakViewers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.peakViewers ?? 0) : Math.max(Number(propLiveData?.peakViewers || 0), currentViewers)) : 0;
-  const totalUser = isLive ? Number(propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 0) : 0;
-  const likes = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.likes ?? 0) : Number(propLiveData?.likes || propLiveData?.totalLikes || 0)) : 0;
-  const commentsCount = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.comments ?? 0) : Number(propLiveData?.comments || propLiveData?.totalComments || 0)) : 0;
-  const newFollowers = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.followers ?? 0) : Number(propLiveData?.newFollowers || propLiveData?.followers || 0)) : 0;
-  const shares = isLive ? (socket.isSocketConnected ? Number(socket.metrics?.shares ?? 0) : Number(propLiveData?.shares || propLiveData?.totalShares || 0)) : 0;
+  const currentViewers = isLive 
+    ? Number(socket.metrics?.viewers ?? propLiveData?.currentViewers ?? propLiveData?.viewerCount ?? 0) 
+    : 0;
+  const peakViewers = isLive 
+    ? Math.max(Number(socket.metrics?.peakViewers ?? propLiveData?.peakViewers ?? 0), currentViewers) 
+    : 0;
+  const totalUser = isLive 
+    ? Number(propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 0) 
+    : 0;
+  const likes = isLive 
+    ? Number(socket.metrics?.likes ?? propLiveData?.likes ?? propLiveData?.totalLikes ?? 0) 
+    : 0;
+  const commentsCount = isLive 
+    ? Number(socket.metrics?.comments ?? propLiveData?.comments ?? propLiveData?.totalComments ?? 0) 
+    : 0;
+  const newFollowers = isLive 
+    ? Number(socket.metrics?.followers ?? propLiveData?.newFollowers ?? propLiveData?.followers ?? 0) 
+    : 0;
+  const shares = isLive 
+    ? Number(socket.metrics?.shares ?? propLiveData?.shares ?? propLiveData?.totalShares ?? 0) 
+    : 0;
   
   // Données de secours réalistes basées sur les interactions du live en direct
   const fallbackTopQuestions = [
@@ -153,24 +167,24 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   ];
 
   // Analyse sémantique des questions & TOP 5 spectateurs les plus actifs
-  const topQuestions = (Array.isArray(propLiveData?.topQuestions) && propLiveData.topQuestions.length > 0)
-    ? propLiveData.topQuestions
-    : (Array.isArray(socket.metrics?.topQuestions) && socket.metrics.topQuestions.length > 0)
-      ? socket.metrics.topQuestions
+  const topQuestions = (Array.isArray(socket.metrics?.topQuestions) && socket.metrics.topQuestions.length > 0)
+    ? socket.metrics.topQuestions
+    : (Array.isArray(propLiveData?.topQuestions) && propLiveData.topQuestions.length > 0)
+      ? propLiveData.topQuestions
       : (isLive ? fallbackTopQuestions : []);
 
-  const topCommenters = (Array.isArray(propLiveData?.topCommenters) && propLiveData.topCommenters.length > 0)
-    ? propLiveData.topCommenters
-    : (Array.isArray(propLiveData?.topContributors) && propLiveData.topContributors.length > 0)
-      ? propLiveData.topContributors
-      : (Array.isArray(socket.metrics?.topContributors) && socket.metrics.topContributors.length > 0)
-        ? socket.metrics.topContributors
+  const topCommenters = (Array.isArray(socket.metrics?.topContributors) && socket.metrics.topContributors.length > 0)
+    ? socket.metrics.topContributors
+    : (Array.isArray(propLiveData?.topCommenters) && propLiveData.topCommenters.length > 0)
+      ? propLiveData.topCommenters
+      : (Array.isArray(propLiveData?.topContributors) && propLiveData.topContributors.length > 0)
+        ? propLiveData.topContributors
         : (isLive ? fallbackTopCommenters : []);
 
-  const recentComments = (Array.isArray(propLiveData?.recentComments) && propLiveData.recentComments.length > 0)
-    ? propLiveData.recentComments
-    : (Array.isArray(socket.chatMessages) && socket.chatMessages.length > 0)
-      ? socket.chatMessages
+  const recentComments = (Array.isArray(socket.chatMessages) && socket.chatMessages.length > 0)
+    ? socket.chatMessages
+    : (Array.isArray(propLiveData?.recentComments) && propLiveData.recentComments.length > 0)
+      ? propLiveData.recentComments
       : (isLive ? fallbackRecentComments : []);
 
   const totalCommentsAnalyzed = Math.max(
@@ -303,6 +317,17 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                 <Users className="w-4 h-4 text-slate-400" />
                 {formatNumber(currentViewers)} spectateurs
               </div>
+              {socket.isSocketConnected ? (
+                <span className="hidden md:inline-flex text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-3 py-1.5 rounded-full border border-emerald-500/20 items-center gap-1.5" title="Connecté au Worker Render (latence sub-seconde)">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                  WebSocket Direct
+                </span>
+              ) : (
+                <span className="hidden md:inline-flex text-[11px] font-bold text-cyan-400 bg-cyan-500/10 px-3 py-1.5 rounded-full border border-cyan-500/20 items-center gap-1.5" title="Secours Firestore actif (Worker en réveil ou bascule automatique)">
+                  <span className="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                  Secours Firestore
+                </span>
+              )}
               <button 
                 onClick={handleResetLive}
                 className="text-slate-400 hover:text-white px-3 py-2 border border-white/10 rounded-xl text-sm flex items-center gap-2 transition-colors cursor-pointer"

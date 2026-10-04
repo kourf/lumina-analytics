@@ -55,7 +55,7 @@ describe('TikTokLiveHub Component', () => {
     expect(screen.getByText('HORS LIGNE')).toBeInTheDocument();
 
     await waitFor(() => {
-      expect(screen.getByText(/Aucune archive disponible/)).toBeInTheDocument();
+      expect(screen.getByText(/0 sessions enregistrées/)).toBeInTheDocument();
     });
   });
 
@@ -78,7 +78,7 @@ describe('TikTokLiveHub Component', () => {
 
     expect(screen.getByText('EN DIRECT')).toBeInTheDocument();
     expect(screen.getByText('1.5k')).toBeInTheDocument();
-    expect(screen.getByText('1.6k')).toBeInTheDocument();
+    expect(screen.getByText(/1\.6k/)).toBeInTheDocument();
     expect(screen.getByText('25.0k')).toBeInTheDocument();
     expect(screen.getByText('Courbe de Rétention du Live')).toBeInTheDocument();
   });

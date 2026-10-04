@@ -608,7 +608,13 @@ app.get('/', (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.status(200).send('OK');
+  res.status(200).json({
+    status: 'ok',
+    service: 'Lumina Analytics TikTok Live Engine (Backend)',
+    uptime: process.uptime(),
+    isLive,
+    timestamp: new Date().toISOString()
+  });
 });
 
 app.get('/api/live', (req, res) => {

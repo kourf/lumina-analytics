@@ -1,0 +1,50 @@
+name: Render Worker Keep-Alive (100% Gratuit)
+
+# Ce workflow s'exécute automatiquement toutes les 10 minutes (0€).
+# Il envoie une requête GET sur l'endpoint /health de votre worker Render
+# pour empêcher sa mise en veille (Render Free Tier spin-down après 15 min d'inactivité).
+
+on:
+  schedule:
+    # Exécution automatique toutes les 10 minutes
+    - cron: '*/10 * * * *'
+  workflow_dispatch: # Permet de déclencher manuellement le ping depuis GitHub
+
+jobs:
+  keepalive-ping:
+    name: Ping Render Worker /health
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+
+    steps:
+      - name: Ping Worker Health Endpoint
+        run: |
+          # Récupération de l'URL cible (via Secret GitHub RENDER_WORKER_URL ou variable par défaut)
+          TARGET_URL="${{ secrets.RENDER_WORKER_URL }}"
+          
+          if [ -z "$TARGET_URL" ]; then
+            echo "⚠️ Secret RENDER_WORKER_URL non défini dans les Settings du dépôt GitHub."
+            echo "💡 Ajoutez le secret 'RENDER_WORKER_URL' (ex: https://votre-worker.onrender.com) dans Settings > Secrets and variables > Actions."
+            # Si aucun secret n'est défini, on quitte proprement sans faire échouer le workflow
+            exit 0
+          fi
+
+          # Nettoyage de l'URL (suppression du slash final éventuel)
+          TARGET_URL="${TARGET_URL%/}"
+
+          echo "🚀 Envoi du Keep-Alive vers : $TARGET_URL/health"
+          
+          # Requête curl avec timeout de 20s et suivi des redirections
+          HTTP_RESPONSE=$(curl -s -o /tmp/health_response.json -w "%{http_code}" --max-time 25 "$TARGET_URL/health" || echo "FAILED")
+          
+          echo "📊 Code statut HTTP reçu : $HTTP_RESPONSE"
+          
+          if [ "$HTTP_RESPONSE" = "200" ]; then
+            echo "✅ Succès : Worker Render actif et réveillé !"
+            cat /tmp/health_response.json || true
+          elif [ "$HTTP_RESPONSE" = "FAILED" ]; then
+            echo "⚠️ Échec de la connexion ou Worker en cours de démarrage à froid."
+          else
+            echo "ℹ️ Réponse reçue ($HTTP_RESPONSE). Le serveur Render a bien reçu la requête entrante et réinitialisé son compteur de 15 minutes."
+            cat /tmp/health_response.json || true
+          fi
