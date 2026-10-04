@@ -106,6 +106,7 @@ let reconnectAttempts = 0;
 let isDetecting = false;
 let detectionTimer = null;
 let timelineInterval = null;
+let followerUpdateInterval = null;
 
 // Compteurs volatils en temps réel
 let viewersCount = 0;
@@ -322,9 +323,20 @@ const startLiveTracker = async () => {
         reconnectAttempts = 0;
         currentRoomId = state.roomId.toString();
         const createTimeSec = state.roomInfo?.data?.create_time;
-        liveStartTime = (createTimeSec && typeof createTimeSec === 'number' && createTimeSec > 1000000000) 
+        
+        // Retrieve previous start time from Firestore to prevent duration reset on reconnect
+        let previousStartedAt = null;
+        try {
+            const userDoc = await db.collection('users').doc(TARGET_FIRESTORE_USER).get();
+            const liveApi = userDoc.data()?.tiktokLiveAPI;
+            if (liveApi && String(liveApi.roomId) === currentRoomId && liveApi.startedAt) {
+                previousStartedAt = new Date(liveApi.startedAt);
+            }
+        } catch (err) {}
+
+        liveStartTime = previousStartedAt || ((createTimeSec && typeof createTimeSec === 'number' && createTimeSec > 1000000000) 
             ? new Date(createTimeSec * 1000) 
-            : new Date();
+            : new Date());
         
         // Génération d'un session_id unique et immutable pour l'archivage
         const dateStamp = liveStartTime.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
@@ -454,6 +466,35 @@ const startLiveTracker = async () => {
             }, { merge: true }).catch(() => {});
         }, 60000);
 
+        // Intervalle de verification des abonnes (toutes les 10 minutes)
+        if (followerUpdateInterval) clearInterval(followerUpdateInterval);
+        followerUpdateInterval = setInterval(async () => {
+            if (!isConnected || initialFollowersSnapshot === null) return;
+            try {
+                const profileRes = await fetch(`https://www.tiktok.com/@${TIKTOK_USERNAME}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                });
+                if (profileRes.ok) {
+                    const html = await profileRes.text();
+                    const idx = html.indexOf('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+                    if (idx !== -1) {
+                        const tagClose = html.indexOf('>', idx);
+                        const endTag = html.indexOf('</script>', tagClose);
+                        const json = JSON.parse(html.substring(tagClose + 1, endTag));
+                        const userDetail = json.__DEFAULT_SCOPE__?.['webapp.user-detail'];
+                        if (userDetail?.userInfo?.stats?.followerCount) {
+                            const currentSnapshot = userDetail.userInfo.stats.followerCount;
+                            const diff = currentSnapshot - initialFollowersSnapshot;
+                            if (diff > newFollowers) {
+                                newFollowers = diff;
+                                broadcastMetrics();
+                            }
+                        }
+                    }
+                }
+            } catch (err) {}
+        }, 600000);
+
         // 9. ATTACHEMENT DES ÉVÉNEMENTS WEBCASHPUSH
 
         // Concurrent Viewers
@@ -496,17 +537,14 @@ const startLiveTracker = async () => {
             broadcastMetrics();
         };
 
-        // Likes de session (cumulatif automatique ou batch)
+        // Likes de session (cumulatif officiel TikTok)
         currentConnection.on('like', (data) => {
-            const rawTotal = typeof data?.total === 'number' ? data.total : parseInt(data?.total || data?.totalLikeCount || 0);
-            const rawCount = typeof data?.count === 'number' ? data.count : parseInt(data?.count || data?.likeCount || 1);
-            
-            if (!isNaN(rawTotal) && rawTotal > 0) {
-                totalLikes = Math.max(totalLikes, rawTotal);
-            } else if (!isNaN(rawCount) && rawCount > 0) {
-                totalLikes += rawCount;
+            const officialTotal = data?.totalLikeCount;
+            if (typeof officialTotal === 'number' && officialTotal > 0) {
+                totalLikes = Math.max(totalLikes, officialTotal);
             } else {
-                totalLikes += 1;
+                const rawCount = typeof data?.likeCount === 'number' ? data.likeCount : 1;
+                totalLikes += rawCount;
             }
             broadcastMetrics();
         });
@@ -686,6 +724,8 @@ const stopLiveTracker = async () => {
              console.warn("Could not fetch final follower snapshot", e.message);
         }
     }
+
+    if (followerUpdateInterval) { clearInterval(followerUpdateInterval); followerUpdateInterval = null; }
 
     if (timelineInterval) {
         clearInterval(timelineInterval);

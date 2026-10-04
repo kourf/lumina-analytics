@@ -366,7 +366,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       </div>
 
       {/* KPI Cards (5 Cartes Professionnelles Unifiées avec Audience Cumulée TikTok API) */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 md:gap-4 mb-6 relative z-10">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-6 relative z-10">
         {/* Carte 1 : Durée du Direct */}
         <div className="bg-[#131825] border border-white/5 rounded-2xl p-4 md:p-5 hover:border-white/10 transition-colors">
           <div className="flex items-center justify-between mb-3">
@@ -419,24 +419,30 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
           <div className="text-[11px] text-slate-500">{isLive ? "Mentions j'aime reçues en direct" : "Mesuré en direct uniquement"}</div>
         </div>
 
-        {/* Carte 5 : Partages & Abonnés */}
-        <div className="bg-[#131825] border border-white/5 rounded-2xl p-4 md:p-5 hover:border-white/10 transition-colors col-span-2 lg:col-span-1">
+        {/* Carte 5 : Partages */}
+        <div className="bg-[#131825] border border-white/5 rounded-2xl p-4 md:p-5 hover:border-white/10 transition-colors">
           <div className="flex items-center justify-between mb-3">
-            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">PARTAGES & ABONNÉS</span>
-            <Share2 className="w-4 h-4 text-emerald-400" />
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">PARTAGES DU LIVE</span>
+            <Share2 className="w-4 h-4 text-blue-400" />
           </div>
-          <div className="flex items-baseline gap-2 mb-1">
-            <span className="text-2xl md:text-3xl font-black text-white">{formatNumber(shares)}</span>
-            <span className="text-xs font-medium text-emerald-400 flex items-center ml-2">
-              <Activity className="w-3 h-3 mr-1" />+{formatNumber(newFollowers)} abos
-            </span>
+          <div className="text-2xl md:text-3xl font-black text-white mb-1">{formatNumber(shares)}</div>
+          <div className="text-[11px] text-slate-500">
+            {isLive ? "Partages du direct" : "Partages de la session"}
           </div>
-          <div className="text-[11px] text-slate-500" title="TikTok ne comptabilise ici que les partages et abonnements cliqués par les spectateurs pendant la diffusion en cours">
-            {isLive ? (shares === 0 ? "0 partage par l'audience pendant ce direct" : "Interactions des spectateurs") : "Interactions en temps réel"}
+        </div>
+
+        {/* Carte 6 : Abonnés */}
+        <div className="bg-[#131825] border border-white/5 rounded-2xl p-4 md:p-5 hover:border-white/10 transition-colors">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">NOUVEAUX ABONNÉS</span>
+            <UserCheck className="w-4 h-4 text-emerald-400" />
+          </div>
+          <div className="text-2xl md:text-3xl font-black text-emerald-400 mb-1">+{formatNumber(newFollowers)}</div>
+          <div className="text-[11px] text-slate-500" title="Abonnements détectés sur le profil pendant le live">
+            {isLive ? "Croissance pendant le direct" : "Acquis pendant le live"}
           </div>
         </div>
       </div>
-
       {/* Retention Chart */}
       <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 mb-6 relative z-10">
         <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
