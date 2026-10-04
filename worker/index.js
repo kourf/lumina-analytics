@@ -125,6 +125,7 @@ let topContributor = { nickname: 'Aucun', count: 0 };
 let topDonator = { nickname: 'Aucun', diamonds: 0 };
 let questionClusters = [];
 let liveTimelinePoints = []; // [{ time: '0m', timestamp: ISO, viewers: 10 }]
+let recentChatMessages = []; // For Firestore fallback
 
 // Helper similarité Jaccard pour clustering de questions
 const getJaccardSimilarity = (str1, str2) => {
@@ -229,6 +230,12 @@ const syncMetricsToFirestore = async () => {
                 topContributor: topContributor,
                 topDonator: topDonator,
                 topQuestions: questionClusters.slice(0, 4),
+                topContributors: Object.values(userMessagesCount)
+                    .sort((a, b) => b.count - a.count)
+                    .slice(0, 5)
+                    .map((entry, index) => ({ rank: index + 1, nickname: entry.nickname, badge: "Top Fan", count: entry.count })),
+                timeline: liveTimelinePoints,
+                recentComments: recentChatMessages,
                 lastDetected: FieldValue.serverTimestamp(),
                 workerLastHeartbeat: FieldValue.serverTimestamp()
             }
@@ -364,6 +371,7 @@ const startLiveTracker = async () => {
             timestamp: liveStartTime.toISOString(),
             viewers: viewersCount
         }];
+        recentChatMessages = [];
 
         // Enregistrement initial dans la collection d'archives tiktokLiveSessions
         await db.collection('tiktokLiveSessions').doc(currentSessionId).set({
@@ -567,7 +575,7 @@ const startLiveTracker = async () => {
             }
 
             // Émission WebSocket instantanée du message au composant Tchat
-            io.emit('chatMessage', {
+            const wsMessage = {
                 id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                 user: nickname,
                 uniqueId: data?.uniqueId || '',
@@ -575,7 +583,13 @@ const startLiveTracker = async () => {
                 isQuestion,
                 avatar: data?.profilePictureUrl || null,
                 timestamp: new Date().toISOString()
-            });
+            };
+            io.emit('chatMessage', wsMessage);
+
+            recentChatMessages.unshift(wsMessage);
+            if (recentChatMessages.length > 50) {
+                recentChatMessages.pop();
+            }
 
             // Enregistrement asynchrone non-bloquant du message dans la sous-collection Firestore
             if (currentSessionId) {
@@ -783,10 +797,16 @@ const stopLiveTracker = async () => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     fields: {
-                        'tiktokLiveAPI.isLive': { booleanValue: false },
-                        'tiktokLiveAPI.currentViewers': { integerValue: 0 },
-                        'tiktokLiveAPI.roomId': { stringValue: '' },
-                        'tiktokLiveAPI.endedAt': { stringValue: streamEndTime.toISOString() },
+                        'tiktokLiveAPI': {
+                            mapValue: {
+                                fields: {
+                                    'isLive': { booleanValue: false },
+                                    'currentViewers': { integerValue: '0' },
+                                    'roomId': { stringValue: '' },
+                                    'endedAt': { stringValue: streamEndTime.toISOString() }
+                                }
+                            }
+                        },
                         'tiktokAPI.isLive': { booleanValue: false }
                     }
                 })
@@ -1075,16 +1095,30 @@ server.listen(PORT, () => {
 
             db.collection('users').doc(TARGET_FIRESTORE_USER).set({
                 tiktokLiveAPI: {
+                    isLive: true,
+                    startedAt: liveStartTime ? liveStartTime.toISOString() : null,
+                    started_at: liveStartTime ? liveStartTime.toISOString() : null,
                     currentViewers: viewersCount,
                     peakViewers: peakViewers,
                     likes: totalLikes,
+                    totalLikes: totalLikes,
+                    comments: totalComments,
+                    totalComments: totalComments,
                     shares: totalShares,
+                    totalShares: totalShares,
                     followers: newFollowers,
                     diamonds: totalDiamonds,
                     topContributor: topContributor,
                     topDonator: topDonator,
                     topQuestions: questionClusters.slice(0, 4),
-                    lastUpdated: FieldValue.serverTimestamp()
+                    topContributors: Object.values(userMessagesCount)
+                        .sort((a, b) => b.count - a.count)
+                        .slice(0, 5)
+                        .map((entry, index) => ({ rank: index + 1, nickname: entry.nickname, badge: "Top Fan", count: entry.count })),
+                    timeline: liveTimelinePoints,
+                    recentComments: recentChatMessages, // We need a way to store recent chat messages if we want to sync them
+                    lastUpdated: FieldValue.serverTimestamp(),
+                    workerLastHeartbeat: FieldValue.serverTimestamp()
                 }
             }, { merge: true }).catch(() => {});
         }

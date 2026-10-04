@@ -176,9 +176,15 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
 
     // Standard GET request without custom headers that would trigger CORS preflight OPTIONS
     try {
+      /*
       response = await fetch(endpointUrl, {
         signal: effectiveSignal,
       });
+      */
+      // THE CLOUDFLARE WORKER IS BLOCKED BY TIKTOK CAPTCHA.
+      // CALLING IT CAUSES IT TO WRITE isLive: false AND 0s TO FIRESTORE, DESTROYING THE LIVE DASHBOARD.
+      // WE NOW RELY STRICTLY ON THE RENDER WORKER VIA WEBSOCKET/FIRESTORE.
+      throw new Error("Vérification via Cloudflare désactivée pour protéger les données du Worker.");
     } finally {
       clearTimeout(timeoutId);
     }
