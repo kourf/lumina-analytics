@@ -44,6 +44,7 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
   const [metrics, setMetrics] = useState({
     viewers: Number(fallbackData?.currentViewers || fallbackData?.viewerCount || 0),
     peakViewers: Number(fallbackData?.peakViewers || 0),
+    totalUser: Number(fallbackData?.totalUser || 0),
     likes: Number(fallbackData?.likes ?? fallbackData?.totalLikes ?? 0),
     comments: Number(fallbackData?.comments ?? fallbackData?.totalComments ?? 0),
     shares: Number(fallbackData?.shares ?? fallbackData?.totalShares ?? 0),
@@ -241,6 +242,7 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
         ...prev,
         viewers: data.viewersCount !== undefined ? data.viewersCount : prev.viewers,
         peakViewers: Math.max(prev.peakViewers, data.peakViewers || 0),
+        totalUser: data.totalUser !== undefined ? data.totalUser : prev.totalUser,
         likes: data.totalLikes !== undefined ? data.totalLikes : prev.likes,
         comments: data.totalComments !== undefined ? data.totalComments : prev.comments,
         shares: data.totalShares !== undefined ? data.totalShares : prev.shares,
@@ -278,6 +280,7 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
       setMetrics({
         viewers: 0,
         peakViewers: 0,
+        totalUser: 0,
         likes: 0,
         comments: 0,
         shares: 0,

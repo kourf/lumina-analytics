@@ -117,6 +117,7 @@ let totalShares = 0;
 let newFollowers = 0;
 let initialFollowersSnapshot = null;
 let totalDiamonds = 0;
+let totalUserCount = 0; // Cumulative unique viewers
 
 // Tracking Contributeurs & IA
 let userMessagesCount = {};
@@ -218,6 +219,7 @@ const syncMetricsToFirestore = async () => {
                 started_at: liveStartTime ? liveStartTime.toISOString() : null,
                 currentViewers: viewersCount,
                 peakViewers: peakViewers,
+                totalUser: totalUserCount,
                 likes: totalLikes,
                 totalLikes: totalLikes,
                 shares: totalShares,
@@ -279,6 +281,7 @@ const broadcastMetrics = () => {
         timestamp: new Date().toISOString(),
         viewersCount,
         peakViewers,
+        totalUser: totalUserCount,
         totalLikes,
         totalComments,
         totalShares,
@@ -340,6 +343,7 @@ const startLiveTracker = async () => {
         totalLikes = Number(initialStats.like_count || 0);
         totalComments = Number(initialStats.comment_count || 0);
         totalShares = Number(initialStats.share_count || 0);
+        totalUserCount = Number(initialStats.total_user || 0);
 
         // Follower snapshot
         const hostProfileRes = await fetch(`https://www.tiktok.com/@${TIKTOK_USERNAME}`, {
@@ -1100,6 +1104,7 @@ server.listen(PORT, () => {
                     started_at: liveStartTime ? liveStartTime.toISOString() : null,
                     currentViewers: viewersCount,
                     peakViewers: peakViewers,
+                    totalUser: totalUserCount,
                     likes: totalLikes,
                     totalLikes: totalLikes,
                     comments: totalComments,
