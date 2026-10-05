@@ -28,6 +28,7 @@ async function detect() {
     let currentViewers = 0;
     let roomId = '';
     let title = '';
+    let r = null;
 
     if (idx !== -1) {
       const tagClose = html.indexOf('>', idx);
@@ -47,7 +48,7 @@ async function detect() {
           }
         });
         const rJson = await roomRes.json();
-        const r = rJson.data;
+        r = rJson.data;
         currentViewers = r?.user_count || 0;
         title = r?.title || '';
         console.log('STATUS:', r?.status, 'TITLE:', r?.title, 'VIEWERS:', r?.user_count, 'STATS:', r?.stats);
@@ -55,13 +56,31 @@ async function detect() {
     }
 
     const userRef = doc(db, 'users', 'karamokho');
-    await updateDoc(userRef, {
+    const updateData = {
       'tiktokLiveAPI.isLive': isLive,
       'tiktokLiveAPI.currentViewers': currentViewers,
       'tiktokLiveAPI.roomId': roomId,
       'tiktokLiveAPI.title': title,
       'tiktokLiveAPI.lastChecked': new Date().toISOString()
-    });
+    };
+
+    if (isLive) {
+      if (r?.stats?.like_count || r?.stats?.digg_count) {
+        updateData['tiktokLiveAPI.totalLikes'] = r?.stats?.like_count || r?.stats?.digg_count || 0;
+      }
+      if (r?.stats?.share_count !== undefined) {
+        updateData['tiktokLiveAPI.totalShares'] = r?.stats?.share_count || 0;
+      }
+      if (r?.stats?.follow_count !== undefined) {
+        updateData['tiktokLiveAPI.newFollowers'] = r?.stats?.follow_count || 0;
+      }
+      if (r?.stats?.total_user !== undefined) {
+        updateData['tiktokLiveAPI.totalUser'] = r?.stats?.total_user || 0;
+      }
+      updateData['tiktokLiveAPI.startedAt'] = new Date().toISOString();
+    }
+
+    await updateDoc(userRef, updateData);
 
     console.log(`Firestore mis à jour - isLive: ${isLive}, Viewers: ${currentViewers}`);
     process.exit(0);
