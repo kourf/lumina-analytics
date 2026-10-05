@@ -692,24 +692,24 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 text-left">
               <h4 className="text-base font-bold text-white mb-4 flex items-center gap-2">
                 <Clock className="w-5 h-5 text-purple-400" />
-                Dernier Live Archivé ({formatArchiveDate(archives[0].startedAt || archives[0].started_at)})
+                Dernier Live Archivé ({formatArchiveDate(archives[0]?.startedAt || archives[0]?.started_at)})
               </h4>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
                   <div className="text-xs text-slate-400 mb-1">Pic d'audience</div>
-                  <div className="text-lg font-bold text-white">{formatNumber(archives[0].peakViewers || archives[0].views || 0)}</div>
+                  <div className="text-lg font-bold text-white">{formatNumber(archives[0]?.peakViewers || archives[0]?.views || 0)}</div>
                 </div>
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
                   <div className="text-xs text-slate-400 mb-1">Likes</div>
-                  <div className="text-lg font-bold text-[#FE2C55]">{formatNumber(archives[0].likes || 0)}</div>
+                  <div className="text-lg font-bold text-[#FE2C55]">{formatNumber(archives[0]?.likes || 0)}</div>
                 </div>
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
                   <div className="text-xs text-slate-400 mb-1">Durée</div>
-                  <div className="text-lg font-bold text-purple-400">{archives[0].durationStr || 'N/A'}</div>
+                  <div className="text-lg font-bold text-purple-400">{archives[0]?.durationStr || 'N/A'}</div>
                 </div>
                 <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
                   <div className="text-xs text-slate-400 mb-1">Nouveaux abonnés</div>
-                  <div className="text-lg font-bold text-emerald-400">+{formatNumber(archives[0].newFollowers || archives[0].followers || 0)}</div>
+                  <div className="text-lg font-bold text-emerald-400">+{formatNumber(archives[0]?.newFollowers || archives[0]?.followers || 0)}</div>
                 </div>
               </div>
             </div>
