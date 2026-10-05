@@ -36,6 +36,8 @@ jobs:
 
       - name: Compilation Vite
         run: npm run build
+        env:
+          VITE_TIKTOK_WORKER_WS_URL: ${{ secrets.RENDER_WORKER_URL }}
 
       - name: Déploiement sur Firebase Hosting
         uses: FirebaseExtended/action-hosting-deploy@v0
