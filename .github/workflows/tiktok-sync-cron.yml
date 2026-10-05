@@ -1,9 +1,9 @@
-﻿name: TikTok Auto Sync Cron (Hourly 0€)
+name: TikTok Auto Sync Cron (Hourly 0€)
 
 on:
   schedule:
-    # Exécution automatique toutes les heures (0 * * * *)
-    - cron: '0 * * * *'
+    # Exécution automatique toutes les 10 minutes
+    - cron: '*/10 * * * *'
   workflow_dispatch: # Déclenchement manuel
 
 jobs:
@@ -25,4 +25,4 @@ jobs:
         env:
           TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
           TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
-        run: node scripts/sync-tiktok.mjs
+        run: node scripts/detect_live_profile.mjs

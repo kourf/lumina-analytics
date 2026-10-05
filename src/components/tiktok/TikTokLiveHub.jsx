@@ -365,6 +365,8 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         </div>
       </div>
 
+      {isLive ? (
+        <>
       {/* KPI Cards (5 Cartes Professionnelles Unifiées avec Audience Cumulée TikTok API) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4 mb-6 relative z-10">
         {/* Carte 1 : Durée du Direct */}
@@ -676,6 +678,44 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
           </div>
         )}
       </div>
+
+        </>
+      ) : (
+        <div className="bg-slate-900/50 border border-dashed border-white/10 rounded-2xl p-10 text-center mb-8 relative z-10">
+          <Radio className="w-12 h-12 text-slate-600 mx-auto mb-4 opacity-50" />
+          <h3 className="text-xl font-bold text-white mb-2">Actuellement Hors Ligne</h3>
+          <p className="text-slate-400 max-w-lg mx-auto mb-6">
+            Le stream TikTok est actuellement arrêté. Les statistiques en temps réel s'afficheront automatiquement ici dès le lancement du prochain live.
+          </p>
+          
+          {archives.length > 0 && (
+            <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 text-left">
+              <h4 className="text-base font-bold text-white mb-4 flex items-center gap-2">
+                <Clock className="w-5 h-5 text-purple-400" />
+                Dernier Live Archivé ({formatArchiveDate(archives[0].startedAt || archives[0].started_at)})
+              </h4>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
+                  <div className="text-xs text-slate-400 mb-1">Pic d'audience</div>
+                  <div className="text-lg font-bold text-white">{formatNumber(archives[0].peakViewers || archives[0].views || 0)}</div>
+                </div>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
+                  <div className="text-xs text-slate-400 mb-1">Likes</div>
+                  <div className="text-lg font-bold text-[#FE2C55]">{formatNumber(archives[0].likes || 0)}</div>
+                </div>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
+                  <div className="text-xs text-slate-400 mb-1">Durée</div>
+                  <div className="text-lg font-bold text-purple-400">{archives[0].durationStr || 'N/A'}</div>
+                </div>
+                <div className="bg-slate-800/50 p-4 rounded-xl border border-white/5">
+                  <div className="text-xs text-slate-400 mb-1">Nouveaux abonnés</div>
+                  <div className="text-lg font-bold text-emerald-400">+{formatNumber(archives[0].newFollowers || archives[0].followers || 0)}</div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* History & Archives Bar */}
       <div className="bg-[#131825] border border-white/5 rounded-2xl p-5 relative z-10">
