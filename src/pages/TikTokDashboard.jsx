@@ -6,7 +6,6 @@ import { TikTokVideoAnalytics } from '../components/tiktok/TikTokVideoAnalytics'
 import { TikTokCompetitorAnalysis } from '../components/tiktok/TikTokCompetitorAnalysis';
 import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
 import { useTikTokUnifiedData } from '../hooks/useTikTokUnifiedData';
-import { useTikTokLiveStatus } from '../hooks/useTikTokLiveStatus';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
 import { Users, Radio, ShieldAlert } from 'lucide-react';
 import { cn } from '../lib/utils';
@@ -14,12 +13,6 @@ import { cn } from '../lib/utils';
 export const TikTokDashboard = ({ data, auth, liveData }) => {
   const [loading, setLoading] = useState(false);
 
-  // Dynamic, verified live status check with SWR (Stale-While-Revalidate) 60s cache
-  const verifiedLive = useTikTokLiveStatus('karam.drame', {
-    autoCheck: true,
-    pollInterval: 60000,
-    initialData: liveData
-  });
   // Détection d'un état "zombie" (ex: session abandonnée depuis plus de 24h)
   const rawStartedAt = liveData?.started_at || liveData?.startedAt;
   const startedAtMs = rawStartedAt ? new Date(rawStartedAt).getTime() : 0;
@@ -28,18 +21,13 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   );
 
   // Détermination de l'état Live réel et vérifié
-  // Priorité absolue : si TikTok Webcast confirme OFFLINE, ou si ni verifiedLive ni liveData n'est live
-  const isConfirmedOffline = verifiedLive.status === 'OFFLINE' || (!verifiedLive.isLive && verifiedLive.status !== 'LOADING' && !liveData?.isLive);
-
-  const effectiveIsLive = Boolean(
-    !isZombieSession && !isConfirmedOffline && (verifiedLive.isLive || liveData?.isLive)
-  );
+  // Priorité absolue : On se fie STRICTEMENT à la base de données mise à jour par le Worker Node.js
+  const effectiveIsLive = Boolean(liveData?.isLive && !isZombieSession);
 
   // Nettoyage automatique en arrière-plan si une session zombie est détectée
   useEffect(() => {
     if (isZombieSession) {
       import('firebase/firestore').then(({ doc, updateDoc }) => {
-        const { db } = import('../config/firebase');
         // Import db dynamic
         import('../config/firebase').then(({ db }) => {
           updateDoc(doc(db, 'users', 'karamokho'), {
@@ -55,14 +43,14 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     }
   }, [isZombieSession]);
 
-  // Résolution stricte des métriques en direct (source de vérité : Firestore en temps réel & TikTok Webcast)
-  const resolvedCurrentViewers = effectiveIsLive ? Number(liveData?.currentViewers || verifiedLive.viewerCount || 0) : 0;
+  // Résolution stricte des métriques en direct (source de vérité : Firestore en temps réel & WebSocket)
+  const resolvedCurrentViewers = effectiveIsLive ? Number(liveData?.currentViewers || 0) : 0;
 
-  const resolvedPeakViewers = effectiveIsLive ? Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0), Number(verifiedLive.viewerCount || 0)) : 0;
+  const resolvedPeakViewers = effectiveIsLive ? Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0)) : 0;
 
   const resolvedStartedAt = effectiveIsLive ? rawStartedAt : null;
 
-  const resolvedRoomId = effectiveIsLive ? (liveData?.roomId || verifiedLive.roomId || '') : '';
+  const resolvedRoomId = effectiveIsLive ? (liveData?.roomId || '') : '';
 
   const resolvedTotalUser = effectiveIsLive ? Number(liveData?.totalUser || liveData?.total_user || 0) : 0;
 
@@ -76,9 +64,9 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     totalUser: resolvedTotalUser,
     started_at: resolvedStartedAt,
     startedAt: resolvedStartedAt,
-    lastDetected: liveData?.lastDetected || verifiedLive.lastChecked,
+    lastDetected: liveData?.lastDetected,
     liveStatus: effectiveIsLive ? 'LIVE' : 'OFFLINE',
-    isRefreshing: verifiedLive.isRefreshing
+    isRefreshing: loading
   });
 
   // Forcer le Dark Mode absolu pour le Dashboard TikTok Cyber Neon
@@ -136,11 +124,12 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
                 totalUser: resolvedTotalUser,
                 started_at: resolvedStartedAt,
                 startedAt: resolvedStartedAt,
-                lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
+                startedAt: resolvedStartedAt,
+                lastChecked: liveData?.lastDetected,
                 status: 'LIVE'
               }}
               onRefresh={handleManualRefresh}
-              isRefreshing={verifiedLive.isRefreshing || loading}
+              isRefreshing={loading}
             />
           </ErrorBoundary>
         </section>
@@ -210,11 +199,12 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
                 currentViewers: 0,
                 peakViewers: resolvedPeakViewers,
                 started_at: null,
-                lastChecked: liveData?.lastDetected || verifiedLive.lastChecked,
-                status: verifiedLive.status || 'OFFLINE'
+                started_at: null,
+                lastChecked: liveData?.lastDetected,
+                status: 'OFFLINE'
               }}
               onRefresh={handleManualRefresh}
-              isRefreshing={verifiedLive.isRefreshing || loading}
+              isRefreshing={loading}
             />
           </ErrorBoundary>
         </section>
