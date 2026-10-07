@@ -506,12 +506,14 @@ const startLiveTracker = async () => {
 
         // Concurrent Viewers
         currentConnection.on('roomUser', (data) => {
-            viewersCount = Math.max(0, Number(data?.viewerCount) || 0);
-            viewerSamples.push(viewersCount);
-            if (viewersCount > peakViewers) {
-                peakViewers = viewersCount;
+            if (typeof data?.viewerCount === 'number') {
+                viewersCount = data.viewerCount;
+                viewerSamples.push(viewersCount);
+                if (viewersCount > peakViewers) {
+                    peakViewers = viewersCount;
+                }
+                broadcastMetrics();
             }
-            broadcastMetrics();
         });
 
         // Tracking dédoublonné pour éviter les doubles incrémentations entre 'social' et 'share'/'follow'
