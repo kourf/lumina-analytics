@@ -3,6 +3,11 @@ const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
 const USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 
 async function updateFirestoreLive(liveData) {
+  // --- NOTE : DÉSACTIVÉ POUR ÉVITER LES CONFLITS AVEC LE WORKER RENDER ---
+  // Le Worker Render gère déjà 100% de la synchronisation temps réel.
+  // Les requêtes Cloudflare écrasent les données temps réel (startedAt, commentaires, etc).
+  return true;
+
   const liveApiFields = {
     isLive: { booleanValue: Boolean(liveData.isLive) },
     roomId: { stringValue: String(liveData.roomId || '') },

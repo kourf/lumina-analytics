@@ -536,67 +536,13 @@ exports.forceSyncTikTok = functions.https.onRequest(async (req, res) => {
       liveMetrics: FieldValue.delete()
     };
 
-        // --- CHECK LIVE STATUS VIA TIKTOK LIVE CONNECTOR ---
-    let isLive = false;
-    let roomId = null;
-    let currentViewers = null;
-    
-    try {
-      const { TikTokLiveConnection } = await import('tiktok-live-connector');
-      const connection = new TikTokLiveConnection('karam.drame', { processInitialData: false });
-      const state = await connection.connect();
-      const roomInfo = state.roomInfo;
-      
-      let fetchedStats = {};
-      if (roomInfo && roomInfo.data && roomInfo.data.status === 2) {
-        isLive = true;
-        roomId = roomInfo.data.id_str || roomInfo.data.roomId || '';
-        currentViewers = roomInfo.data.user_count || roomInfo.data.viewerCount || null;
-        fetchedStats = roomInfo.data.stats || {};
-      }
-      connection.disconnect();
-    } catch(e) {
-      console.error('Erreur tiktok-live-connector:', e);
-    }
-    const existingData = docSnap.data().tiktokLiveAPI || {};
-    
-    // Si on n'est plus en live mais qu'on l'était, on pourrait archiver. 
-    // Pour l'instant, on met juste à jour.
-    let history = existingData.history || [];
-    let peakViewers = existingData.peakViewers || 0;
-    
-    // Si c'est un NOUVEAU live (nouveau roomId), on reset l'historique
-    if (isLive && roomId !== existingData.roomId) {
-      history = [];
-      peakViewers = 0;
-    }
-    
-    if (isLive && currentViewers != null) {
-      if (currentViewers > peakViewers) peakViewers = currentViewers;
-      
-      const nowString = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      history.push({ time: nowString, viewers: currentViewers });
-      
-      // Garder seulement les 30 derniers points pour le graphique
-      if (history.length > 30) history = history.slice(history.length - 30);
-    } else if (!isLive) {
-      // Si le live est fini, on reset le graphe courant (ou on le garde, selon le besoin)
-      // Ici on le garde pour pouvoir l'archiver plus tard ou l'afficher hors-ligne
-    }
-
-    const liveApiData = {
-      ...existingData,
-      isLive: isLive,
-      roomId: roomId || "",
-      lastDetected: isLive ? FieldValue.serverTimestamp() : (existingData.lastDetected || null),
-      currentViewers: currentViewers,
-      peakViewers: peakViewers,
-      history: history
-    };
+    // --- NOTE : CHECK LIVE STATUS EST MAINTENANT GÉRÉ EXCLUSIVEMENT PAR LE WORKER RENDER (Node.js) ---
+    // Pour éviter les conflits de données (écrasement de started_at, reset des likes, etc),
+    // Firebase Functions ne met plus à jour tiktokLiveAPI.
 
     await userRef.set({ 
-      tiktokAPI: tiktokData,
-      tiktokLiveAPI: liveApiData
+      tiktokAPI: tiktokData
+      // tiktokLiveAPI est mis à jour en temps réel par worker/index.js sur Render
     }, { merge: true });
     
     res.status(200).send({ success: true, data: tiktokData, liveData: liveApiData });
@@ -878,75 +824,13 @@ exports.scrapeCompetitor = functions.https.onCall(async (data, context) => {
       liveMetrics: FieldValue.delete()
     };
 
-    // --- CHECK LIVE STATUS VIA TIKTOK LIVE CONNECTOR ---
-    let isLive = false;
-    let roomId = null;
-    let currentViewers = null;
-    
-    try {
-      const { TikTokLiveConnection } = require('tiktok-live-connector');
-      const connection = new TikTokLiveConnection('karam.drame', { processInitialData: false });
-      const state = await connection.connect();
-      const roomInfo = state.roomInfo;
-      
-      // status 2 = live
-      if (roomInfo && roomInfo.data && roomInfo.data.status === 2) {
-        isLive = true;
-        roomId = roomInfo.data.id_str || roomInfo.data.roomId || "";
-        currentViewers = roomInfo.data.user_count || roomInfo.data.viewerCount || null;
-      }
-      connection.disconnect();
-    } catch(e) {
-      console.error("Erreur tiktok-live-connector:", e);
-    }
-
-    const existingData = docSnap.data().tiktokLiveAPI || {};
-    
-    // Si on n'est plus en live mais qu'on l'était, on pourrait archiver. 
-    // Pour l'instant, on met juste à jour.
-    let history = existingData.history || [];
-    let peakViewers = existingData.peakViewers || 0;
-    
-    // Si c'est un NOUVEAU live (nouveau roomId), on reset l'historique
-    if (isLive && roomId !== existingData.roomId) {
-      history = [];
-      peakViewers = 0;
-    }
-    
-    if (isLive && currentViewers != null) {
-      if (currentViewers > peakViewers) peakViewers = currentViewers;
-      
-      const nowString = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-      history.push({ time: nowString, viewers: currentViewers });
-      
-      // Garder seulement les 30 derniers points pour le graphique
-      // if (history.length > 30) history = history.slice(history.length - 30);
-    } else if (!isLive) {
-      // Si le live est fini, on reset le graphe courant (ou on le garde, selon le besoin)
-      // Ici on le garde pour pouvoir l'archiver plus tard ou l'afficher hors-ligne
-    }
-
-    const liveApiData = {
-      ...existingData,
-      isLive: isLive,
-      roomId: roomId || "",
-      lastDetected: isLive ? FieldValue.serverTimestamp() : (existingData.lastDetected || null),
-      currentViewers: currentViewers,
-      peakViewers: peakViewers,
-      history: history,
-      likes: Math.max(existingData.likes || 0, (typeof fetchedStats !== 'undefined' && fetchedStats.like_count) ? fetchedStats.like_count : (existingData.likes || 0)),
-      shares: Math.max(existingData.shares || 0, (typeof fetchedStats !== 'undefined' && fetchedStats.share_count) ? fetchedStats.share_count : (existingData.shares || 0)),
-      followers: Math.max(existingData.followers || 0, (typeof fetchedStats !== 'undefined' && fetchedStats.follow_count) ? fetchedStats.follow_count : (existingData.followers || 0)),
-      comments: Math.max(existingData.comments || 0, (typeof fetchedStats !== 'undefined' && fetchedStats.comment_count) ? fetchedStats.comment_count : (existingData.comments || 0)),
-      diamonds: Math.max(existingData.diamonds || 0, (typeof fetchedStats !== 'undefined' && fetchedStats.fan_ticket) ? fetchedStats.fan_ticket : (existingData.diamonds || 0)),
-      topQuestions: existingData.topQuestions || [],
-      topComments: existingData.topComments || [],
-      recentComments: existingData.recentComments || []
-    };
+    // --- NOTE : CHECK LIVE STATUS EST MAINTENANT GÉRÉ EXCLUSIVEMENT PAR LE WORKER RENDER (Node.js) ---
+    // Pour éviter les conflits de données (écrasement de started_at, reset des likes, etc),
+    // Firebase Functions ne met plus à jour tiktokLiveAPI.
 
     await userRef.set({ 
-      tiktokAPI: tiktokData,
-      tiktokLiveAPI: liveApiData
+      tiktokAPI: tiktokData
+      // tiktokLiveAPI est mis à jour en temps réel par worker/index.js sur Render
     }, { merge: true });
     
     res.status(200).send({ success: true, data: tiktokData, liveData: liveApiData });

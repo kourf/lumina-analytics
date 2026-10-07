@@ -169,7 +169,7 @@ io.on('connection', (socket) => {
         topContributors: Object.values(userMessagesCount)
             .sort((a, b) => b.count - a.count)
             .slice(0, 5) // Top 5 contributors
-            .map((entry, index) => ({ rank: index + 1, name: entry.nickname, badge: "Top Fan", comments: entry.count })),
+            .map((entry, index) => ({ rank: index + 1, nickname: entry.nickname, badge: "Top Fan", count: entry.count })),
         timeline: liveTimelinePoints
     });
 
@@ -292,7 +292,11 @@ const broadcastMetrics = () => {
         uptimeFormatted: uptimeStr,
         topContributor,
         topDonator,
-        topQuestions: questionClusters.slice(0, 4)
+        topQuestions: questionClusters.slice(0, 4),
+        topContributors: Object.values(userMessagesCount)
+            .sort((a, b) => b.count - a.count)
+            .slice(0, 5)
+            .map((entry, index) => ({ rank: index + 1, nickname: entry.nickname, badge: "Top Fan", count: entry.count }))
     });
 
     // Déclenchement de la synchronisation groupée Firestore (sub-3s)
@@ -622,9 +626,9 @@ const startLiveTracker = async () => {
             // Émission WebSocket instantanée du message au composant Tchat
             const wsMessage = {
                 id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
-                user: nickname,
+                nickname: nickname,
                 uniqueId: data?.uniqueId || '',
-                text: msg,
+                comment: msg,
                 isQuestion,
                 avatar: data?.profilePictureUrl || null,
                 timestamp: new Date().toISOString()
