@@ -14,7 +14,7 @@ const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const { Server } = require('socket.io');
-const { WebcastPushConnection } = require('tiktok-live-connector/legacy');
+const { TikTokLiveConnection } = require('tiktok-live-connector');
 const { initializeApp, getApps, cert } = require('firebase-admin/app');
 const { getFirestore, FieldValue } = require('firebase-admin/firestore');
 const Redis = require('ioredis');
@@ -306,9 +306,8 @@ const startLiveTracker = async () => {
     isDetecting = true;
     console.log(`[TikTok] Vérification de l'état Live pour @${TIKTOK_USERNAME} (Tentative ${reconnectAttempts + 1})...`);
 
-    currentConnection = new WebcastPushConnection(TIKTOK_USERNAME, {
+    currentConnection = new TikTokLiveConnection(TIKTOK_USERNAME, {
         processInitialData: true,
-        enableExtendedGiftInfo: true,
         requestOptions: {
             timeout: 10000
         }
@@ -324,38 +323,42 @@ const startLiveTracker = async () => {
         currentRoomId = state.roomId.toString();
         const createTimeSec = state.roomInfo?.data?.create_time;
         
-        // Retrieve previous start time from Firestore to prevent duration reset on reconnect
+        // Retrieve previous start time & metrics from Firestore to prevent reset on reconnect
         let previousStartedAt = null;
+        let prevStats = {};
         try {
             const userDoc = await db.collection('users').doc(TARGET_FIRESTORE_USER).get();
             const liveApi = userDoc.data()?.tiktokLiveAPI;
-            if (liveApi && String(liveApi.roomId) === currentRoomId && liveApi.startedAt) {
-                previousStartedAt = new Date(liveApi.startedAt);
+            if (liveApi && String(liveApi.roomId) === currentRoomId) {
+                if (liveApi.startedAt) previousStartedAt = new Date(liveApi.startedAt);
+                prevStats = liveApi;
             }
         } catch (err) {}
 
-        liveStartTime = previousStartedAt || ((createTimeSec && typeof createTimeSec === 'number' && createTimeSec > 1000000000) 
-            ? new Date(createTimeSec * 1000) 
-            : new Date());
+        let trueStartTime = null;
+        if (createTimeSec && typeof createTimeSec === 'number' && createTimeSec > 1000000000) {
+            trueStartTime = new Date(createTimeSec * 1000);
+        }
+        liveStartTime = trueStartTime || previousStartedAt || new Date();
         
         // Génération d'un session_id unique et immutable pour l'archivage
         const dateStamp = liveStartTime.toISOString().replace(/[-:T.]/g, '').slice(0, 14);
-        currentSessionId = `live_${TIKTOK_USERNAME}_${dateStamp}_${currentRoomId}`;
+        currentSessionId = prevStats.session_id || `live_${TIKTOK_USERNAME}_${dateStamp}_${currentRoomId}`;
 
         console.log(`🔥 [TikTok] LIVE EN COURS DÉTECTÉ !`);
         console.log(`- Room ID: ${currentRoomId}`);
         console.log(`- Session ID: ${currentSessionId}`);
         console.log(`- Début: ${liveStartTime.toISOString()}`);
 
-        // Initialisation avec les statistiques réelles fournies par TikTok
+        // Initialisation avec les statistiques réelles fournies par TikTok ou restauration Firestore
         const initialStats = state.roomInfo?.data?.stats || {};
         viewersCount = Number(state.roomInfo?.data?.user_count || 0);
-        peakViewers = viewersCount;
+        peakViewers = Math.max(viewersCount, Number(prevStats.peakViewers || 0));
         viewerSamples = viewersCount > 0 ? [viewersCount] : [];
-        totalLikes = Number(initialStats.like_count || 0);
-        totalComments = Number(initialStats.comment_count || 0);
-        totalShares = Number(initialStats.share_count || 0);
-        totalUserCount = Number(initialStats.total_user || 0);
+        totalLikes = Math.max(Number(initialStats.like_count || 0), Number(prevStats.likes || prevStats.totalLikes || 0));
+        totalComments = Math.max(Number(initialStats.comment_count || 0), Number(prevStats.comments || prevStats.totalComments || 0));
+        totalShares = Math.max(Number(initialStats.share_count || 0), Number(prevStats.shares || prevStats.totalShares || 0));
+        totalUserCount = Math.max(Number(initialStats.total_user || 0), Number(prevStats.totalUser || prevStats.total_user || 0));
 
         // Follower snapshot
         const hostProfileRes = await fetch(`https://www.tiktok.com/@${TIKTOK_USERNAME}`, {
@@ -668,6 +671,7 @@ const startLiveTracker = async () => {
         });
 
     } catch (err) {
+        console.warn(`⚠️ [TikTok] Erreur de connexion au Webcast: ${err.message}`);
         // En cas d'erreur (ex: utilisateur hors ligne), on programme la vérification suivante
         isDetecting = false;
         isConnected = false;

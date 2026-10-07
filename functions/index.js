@@ -1248,6 +1248,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                 isLive: true,
                 roomId: state.roomId,
                 started_at: startedAt,
+                startedAt: startedAt,
                 workerLastHeartbeat: FieldValue.serverTimestamp(),
                 likes: totalLikes,
                 shares: totalShares,

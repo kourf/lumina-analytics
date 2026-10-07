@@ -11,7 +11,7 @@ import { cn } from '../../lib/utils';
 
 export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing }) {
   const socket = useTikTokLiveSocket(undefined, propLiveData);
-  const isLive = Boolean(socket.isLive ?? propLiveData?.isLive);
+  const isLive = Boolean(socket.isLive || propLiveData?.isLive);
 
   const [archives, setArchives] = useState([]);
   const [loadingArchives, setLoadingArchives] = useState(false);
@@ -27,7 +27,14 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       ? (socket.startedAt || propLiveData?.started_at || propLiveData?.startedAt || null) 
       : null;
     if (isLive && startedAt) {
-      const startMs = new Date(startedAt).getTime();
+      let startMs = 0;
+      if (typeof startedAt?.toMillis === 'function') {
+        startMs = startedAt.toMillis();
+      } else if (typeof startedAt?.seconds === 'number') {
+        startMs = startedAt.seconds * 1000;
+      } else {
+        startMs = new Date(startedAt).getTime();
+      }
       const isSensibleStart = !isNaN(startMs) && startMs > 0 && (Date.now() - startMs) < 24 * 3600 * 1000 && (Date.now() - startMs) >= 0;
       if (isSensibleStart) {
         const updateClock = () => {
@@ -119,25 +126,25 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   };
 
   const currentViewers = isLive 
-    ? Number(socket.metrics?.viewers ?? propLiveData?.currentViewers ?? propLiveData?.viewerCount ?? 0) 
+    ? Number(socket.metrics?.viewers || propLiveData?.currentViewers || propLiveData?.viewerCount || 0) 
     : 0;
   const peakViewers = isLive 
-    ? Math.max(Number(socket.metrics?.peakViewers ?? propLiveData?.peakViewers ?? 0), currentViewers) 
+    ? Math.max(Number(socket.metrics?.peakViewers || propLiveData?.peakViewers || 0), currentViewers) 
     : 0;
   const totalUser = isLive 
-    ? Number(propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 0) 
+    ? Number(socket.metrics?.totalUser || propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 0) 
     : 0;
   const likes = isLive 
-    ? Number(socket.metrics?.likes ?? propLiveData?.likes ?? propLiveData?.totalLikes ?? 0) 
+    ? Number(socket.metrics?.likes || propLiveData?.likes || propLiveData?.totalLikes || 0) 
     : 0;
   const commentsCount = isLive 
-    ? Number(socket.metrics?.comments ?? propLiveData?.comments ?? propLiveData?.totalComments ?? 0) 
+    ? Number(socket.metrics?.comments || propLiveData?.comments || propLiveData?.totalComments || 0) 
     : 0;
   const newFollowers = isLive 
-    ? Number(socket.metrics?.followers ?? propLiveData?.newFollowers ?? propLiveData?.followers ?? 0) 
+    ? Number(socket.metrics?.followers || propLiveData?.newFollowers || propLiveData?.followers || 0) 
     : 0;
   const shares = isLive 
-    ? Number(socket.metrics?.shares ?? propLiveData?.shares ?? propLiveData?.totalShares ?? 0) 
+    ? Number(socket.metrics?.shares || propLiveData?.shares || propLiveData?.totalShares || 0) 
     : 0;
   
   // Données de secours réalistes basées sur les interactions du live en direct
@@ -210,8 +217,8 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const displayTimeline = isLive
     ? (rawTimeline.length >= 2
         ? rawTimeline.map((pt, idx) => ({
-            time: pt?.time ?? pt?.minute ?? idx,
-            viewers: Number(pt?.viewers ?? pt?.count ?? pt?.value ?? 0)
+            time: pt?.time || pt?.minute || idx,
+            viewers: Number(pt?.viewers || pt?.count || pt?.value || 0)
           }))
         : (() => {
             // Courbe continue et intelligible depuis le début du direct (minute 0) jusqu'à maintenant
@@ -266,7 +273,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     if (active && payload && payload.length && payload[0]) {
       return (
         <div className="bg-[#1C1F2E] border border-slate-700 p-3 rounded-lg shadow-xl">
-          <p className="text-slate-400 text-xs mb-1">{`Minute ${label ?? 0}`}</p>
+          <p className="text-slate-400 text-xs mb-1">{`Minute ${label || 0}`}</p>
           <p className="text-[#FE2C55] font-bold">{`${Number(payload[0].value) || 0} spectateurs`}</p>
         </div>
       );

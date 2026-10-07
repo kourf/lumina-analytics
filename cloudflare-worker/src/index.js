@@ -39,11 +39,13 @@ async function updateFirestoreLive(liveData) {
     'tiktokLiveAPI.shares',
     'tiktokLiveAPI.followers',
     'tiktokLiveAPI.lastDetected',
-    'tiktokLiveAPI.startedAt',
-    'tiktokLiveAPI.started_at',
     'tiktokAPI.isLive',
     'isLive'
   ];
+
+  if ((liveData.isLive && liveData.startedAt) || !liveData.isLive) {
+    fieldPaths.push('tiktokLiveAPI.startedAt', 'tiktokLiveAPI.started_at');
+  }
 
   const updateMask = fieldPaths.map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
   const url = `${FIRESTORE_URL}?${updateMask}&key=${API_KEY}`;

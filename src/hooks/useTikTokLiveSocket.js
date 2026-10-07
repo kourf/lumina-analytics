@@ -140,6 +140,7 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
             shares: Number(liveApi.shares ?? liveApi.totalShares ?? prev.shares),
             followers: Number(liveApi.newFollowers ?? liveApi.followers ?? prev.followers),
             diamonds: Number(liveApi.totalDiamonds ?? liveApi.diamonds ?? prev.diamonds),
+            totalUser: Number(liveApi.totalUser ?? liveApi.total_user ?? liveApi.enter_count ?? prev.totalUser),
             topContributor: liveApi.topContributor || prev.topContributor,
             topDonator: liveApi.topDonator || prev.topDonator,
             topQuestions: (Array.isArray(liveApi.topQuestions) && liveApi.topQuestions.length > 0)
