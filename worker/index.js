@@ -359,7 +359,7 @@ const startLiveTracker = async () => {
 
         // Initialisation avec les statistiques réelles fournies par TikTok ou restauration Firestore
         const initialStats = state.roomInfo?.data?.stats || {};
-        viewersCount = Number(state.roomInfo?.data?.user_count || 0);
+        viewersCount = Number(state.roomInfo?.data?.user_count || prevStats.currentViewers || 0);
         peakViewers = Math.max(viewersCount, Number(prevStats.peakViewers || 0));
         viewerSamples = viewersCount > 0 ? [viewersCount] : [];
         totalLikes = Math.max(Number(initialStats.like_count || 0), Number(prevStats.likes || prevStats.totalLikes || 0));
@@ -520,13 +520,14 @@ const startLiveTracker = async () => {
                         if (stats.total_user && typeof stats.total_user === 'number') {
                             totalUserCount = Math.max(totalUserCount, stats.total_user);
                         }
-                        if (stats.like_count && typeof stats.like_count === 'number') {
-                            totalLikes = Math.max(totalLikes, stats.like_count);
+                        if (stats.like_count && typeof stats.like_count === 'number' && stats.like_count > 0) {
+                            totalLikes = Math.max(totalLikes, stats.like_count); // Le compteur officiel peut être en retard, on garde max
                         }
-                        if (stats.share_count && typeof stats.share_count === 'number') {
-                            totalShares = Math.max(totalShares, stats.share_count);
+                        if (stats.share_count && typeof stats.share_count === 'number' && stats.share_count > 0) {
+                            // On fait confiance au compteur officiel TikTok pour les partages pour éviter de surgonfler avec les doublons
+                            totalShares = stats.share_count;
                         }
-                        if (stats.comment_count && typeof stats.comment_count === 'number') {
+                        if (stats.comment_count && typeof stats.comment_count === 'number' && stats.comment_count > 0) {
                             totalComments = Math.max(totalComments, stats.comment_count);
                         }
                         broadcastMetrics();
@@ -585,6 +586,7 @@ const startLiveTracker = async () => {
             if (typeof officialTotal === 'number' && officialTotal > 0) {
                 totalLikes = Math.max(totalLikes, officialTotal);
             } else {
+                // Seulement si TikTok ne nous donne pas le vrai total officiel, on ajoute manuellement
                 const rawCount = typeof data?.likeCount === 'number' ? data.likeCount : 1;
                 totalLikes += rawCount;
             }
