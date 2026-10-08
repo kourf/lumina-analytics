@@ -122,7 +122,7 @@ export const PinScreen = ({ onUnlock }) => {
           initial={{ y: '100%' }}
           animate={{ y: showWelcome ? '0%' : '100%' }}
           transition={{ duration: 0.85, ease: [0.4, 0, 0.2, 1] }}
-          className="absolute inset-0 z-[5] bg-lumina-primary/20"
+          className="absolute inset-0 z-[5] bg-lumina-primary"
         />
 
         <AnimatePresence mode="wait">
