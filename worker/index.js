@@ -107,6 +107,8 @@ let isDetecting = false;
 let detectionTimer = null;
 let timelineInterval = null;
 let followerUpdateInterval = null;
+let statsPollingInterval = null;
+let isLiveStreamActive = false;
 
 // Compteurs volatils en temps réel
 let viewersCount = 0;
@@ -154,7 +156,7 @@ io.on('connection', (socket) => {
 
     // Envoi de l'état initial complet dès la connexion
     socket.emit('liveStatus', {
-        isLive: isConnected,
+        isLive: isLiveStreamActive,
         username: TIKTOK_USERNAME,
         roomId: currentRoomId,
         sessionId: currentSessionId,
@@ -175,7 +177,7 @@ io.on('connection', (socket) => {
 
     socket.on('requestState', () => {
         socket.emit('liveStatus', {
-            isLive: isConnected,
+            isLive: isLiveStreamActive,
             username: TIKTOK_USERNAME,
             roomId: currentRoomId,
             sessionId: currentSessionId,
@@ -322,6 +324,7 @@ const startLiveTracker = async () => {
         
         // LE STREAM EST ACTIF !
         isConnected = true;
+        isLiveStreamActive = true;
         isDetecting = false;
         reconnectAttempts = 0;
         currentRoomId = state.roomId.toString();
@@ -443,7 +446,7 @@ const startLiveTracker = async () => {
 
         // Notification WebSocket immédiate à tous les dashboards
         io.emit('liveStatus', {
-            isLive: true,
+            isLive: isLiveStreamActive,
             username: TIKTOK_USERNAME,
             roomId: currentRoomId,
             sessionId: currentSessionId,
@@ -501,6 +504,36 @@ const startLiveTracker = async () => {
                 }
             } catch (err) {}
         }, 600000);
+
+        // Intervalle de vérification des statistiques officielles (toutes les 10 secondes)
+        if (statsPollingInterval) clearInterval(statsPollingInterval);
+        statsPollingInterval = setInterval(async () => {
+            if (!isLiveStreamActive || !currentRoomId) return;
+            try {
+                const roomRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=${currentRoomId}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                });
+                if (roomRes.ok) {
+                    const json = await roomRes.json();
+                    if (json?.data?.stats) {
+                        const stats = json.data.stats;
+                        if (stats.total_user && typeof stats.total_user === 'number') {
+                            totalUserCount = Math.max(totalUserCount, stats.total_user);
+                        }
+                        if (stats.like_count && typeof stats.like_count === 'number') {
+                            totalLikes = Math.max(totalLikes, stats.like_count);
+                        }
+                        if (stats.share_count && typeof stats.share_count === 'number') {
+                            totalShares = Math.max(totalShares, stats.share_count);
+                        }
+                        if (stats.comment_count && typeof stats.comment_count === 'number') {
+                            totalComments = Math.max(totalComments, stats.comment_count);
+                        }
+                        broadcastMetrics();
+                    }
+                }
+            } catch (err) {}
+        }, 10000);
 
         // 9. ATTACHEMENT DES ÉVÉNEMENTS WEBCASHPUSH
 
@@ -700,6 +733,12 @@ const handleAutoReconnect = () => {
     reconnectAttempts++;
     console.log(`[Reconnexion] Prochaine vérification programmée dans ${Math.round(backoffDelay / 1000)}s (Tentative ${reconnectAttempts})...`);
 
+    if (isLiveStreamActive && reconnectAttempts > MAX_RECONNECT_ATTEMPTS) {
+        console.warn(`[Reconnexion] Trop de tentatives d'échec (${reconnectAttempts}). Fermeture de la session live.`);
+        stopLiveTracker();
+        return;
+    }
+
     detectionTimer = setTimeout(async () => {
         if (!isConnected) {
             await startLiveTracker();
@@ -736,6 +775,8 @@ const stopLiveTracker = async () => {
     }
 
     if (followerUpdateInterval) { clearInterval(followerUpdateInterval); followerUpdateInterval = null; }
+    if (statsPollingInterval) { clearInterval(statsPollingInterval); statsPollingInterval = null; }
+    isLiveStreamActive = false;
 
     if (timelineInterval) {
         clearInterval(timelineInterval);
