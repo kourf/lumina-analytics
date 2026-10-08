@@ -1,4 +1,5 @@
 const functions = require("firebase-functions/v1");
+const { onSchedule } = require("firebase-functions/v2/scheduler");
 const admin = require("firebase-admin");
 const { getFirestore, FieldValue } = require("firebase-admin/firestore");
 const { getSecret } = require("./secrets");
@@ -904,7 +905,6 @@ exports.scrapeCompetitor = functions.https.onCall(async (data, context) => {
   }
 });
 
-const { onSchedule } = require("firebase-functions/v2/scheduler");
 
 exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeconds: 540, memory: "512MiB" }, async (event) => {
     const username = 'karam.drame';
