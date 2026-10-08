@@ -112,17 +112,18 @@ export const PinScreen = ({ onUnlock }) => {
     <AnimatePresence mode="wait">
       <motion.div
         key="pin-screen-overlay"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 0, filter: 'grayscale(0%)' }}
+        animate={{ opacity: 1, filter: showWelcome ? 'grayscale(100%)' : 'grayscale(0%)' }}
         exit={{ opacity: 0, transition: { duration: 0.5, delay: 0.2 } }}
+        transition={{ duration: 0.8 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-xl overflow-hidden"
       >
-        {/* La Vague de Couleur (Rideau) */}
+        {/* Le Rideau Mat / Encre (Effet NXTPAPER) */}
         <motion.div
-          initial={{ y: '100%' }}
-          animate={{ y: showWelcome ? '0%' : '100%' }}
-          transition={{ duration: 0.85, ease: [0.4, 0, 0.2, 1] }}
-          className="absolute inset-0 z-[5] bg-lumina-primary"
+          initial={{ clipPath: 'polygon(0 100%, 100% 100%, 100% 100%, 0 100%)' }}
+          animate={{ clipPath: showWelcome ? 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' : 'polygon(0 100%, 100% 100%, 100% 100%, 0 100%)' }}
+          transition={{ duration: 0.9, ease: [0.4, 0, 0.2, 1] }}
+          className="absolute inset-0 z-[15] bg-[#111113]"
         />
 
         <AnimatePresence mode="wait">
@@ -236,16 +237,20 @@ export const PinScreen = ({ onUnlock }) => {
           ) : (
             <motion.div
               key="success-message"
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
               animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 1.1, filter: 'blur(8px)' }}
-              transition={{ duration: 0.4, type: 'spring' }}
-              className="flex flex-col items-center justify-center text-center px-6 relative z-10"
+              exit={{ opacity: 0, scale: 1.05, filter: 'blur(8px)' }}
+              transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+              className="flex flex-col items-center justify-center text-center px-6 relative z-20"
             >
-              <div className="w-20 h-20 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-6 shadow-[0_0_40px_rgba(16,185,129,0.3)]">
-                <Unlock className="w-10 h-10" />
+              {/* Style Esquisse / Dessin au trait */}
+              <div className="w-20 h-20 rounded-full border-[1.5px] border-gray-500 flex items-center justify-center text-gray-400 mb-6 bg-transparent shadow-none">
+                <Unlock className="w-10 h-10" strokeWidth={1} />
               </div>
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              <h1 
+                className="text-2xl sm:text-3xl font-semibold tracking-tight text-transparent"
+                style={{ WebkitTextStroke: '1px #9ca3af' }}
+              >
                 Bienvenue dans votre tableau de bord réseaux sociaux
               </h1>
             </motion.div>
