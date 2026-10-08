@@ -126,25 +126,25 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   };
 
   const currentViewers = isLive 
-    ? Number(socket.metrics?.viewers || propLiveData?.currentViewers || propLiveData?.viewerCount || 0) 
+    ? (socket.metrics?.viewers !== undefined && socket.metrics.viewers !== null ? socket.metrics.viewers : Number(propLiveData?.currentViewers || propLiveData?.viewerCount || 0))
     : 0;
   const peakViewers = isLive 
     ? Math.max(Number(socket.metrics?.peakViewers || propLiveData?.peakViewers || 0), currentViewers) 
     : 0;
   const totalUser = isLive 
-    ? Number(socket.metrics?.totalUser || propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 0) 
+    ? (socket.metrics?.totalUser !== undefined && socket.metrics.totalUser !== null ? socket.metrics.totalUser : Number(propLiveData?.totalUser || propLiveData?.total_user || propLiveData?.enter_count || 0))
     : 0;
   const likes = isLive 
-    ? Number(socket.metrics?.likes || propLiveData?.likes || propLiveData?.totalLikes || 0) 
+    ? (socket.metrics?.likes !== undefined && socket.metrics.likes !== null ? socket.metrics.likes : Number(propLiveData?.likes || propLiveData?.totalLikes || 0))
     : 0;
   const commentsCount = isLive 
-    ? Number(socket.metrics?.comments || propLiveData?.comments || propLiveData?.totalComments || 0) 
+    ? (socket.metrics?.comments !== undefined && socket.metrics.comments !== null ? socket.metrics.comments : Number(propLiveData?.comments || propLiveData?.totalComments || 0))
     : 0;
   const newFollowers = isLive 
-    ? Number(socket.metrics?.followers || propLiveData?.newFollowers || propLiveData?.followers || 0) 
+    ? (socket.metrics?.followers !== undefined && socket.metrics.followers !== null ? socket.metrics.followers : Number(propLiveData?.newFollowers || propLiveData?.followers || 0))
     : 0;
   const shares = isLive 
-    ? Number(socket.metrics?.shares || propLiveData?.shares || propLiveData?.totalShares || 0) 
+    ? (socket.metrics?.shares !== undefined && socket.metrics.shares !== null ? socket.metrics.shares : Number(propLiveData?.shares || propLiveData?.totalShares || 0))
     : 0;
   
   // Données de secours réalistes basées sur les interactions du live en direct
@@ -201,8 +201,8 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     0
   );
 
-  // Définition sécurisée de la timeline pour AreaChart
-  const rawTimeline = (socket.isSocketConnected && Array.isArray(socket.liveTimeline) && socket.liveTimeline.length > 0)
+  // Définition sécurisée de la timeline pour AreaChart (Fonctionne même en Firestore Fallback)
+  const rawTimeline = (Array.isArray(socket.liveTimeline) && socket.liveTimeline.length > 0)
     ? socket.liveTimeline
     : (Array.isArray(propLiveData?.timeline) && propLiveData.timeline.length > 0)
       ? propLiveData.timeline

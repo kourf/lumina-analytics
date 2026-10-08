@@ -60,9 +60,24 @@ exports.tiktokLiveWebhook = functions.https.onRequest(async (req, res) => {
     // Ce webhook officiel reçoit la vraie valeur totale.
     // On utilise Math.max pour ne JAMAIS faire reculer les compteurs si le Worker est en avance.
 
-    const newLikes = Math.max(existingLiveAPI.likes || existingLiveAPI.totalLikes || 0, likeCount);
-    const newViewers = viewerCount > 0 ? viewerCount : (existingLiveAPI.currentViewers || existingLiveAPI.viewerCount || 0); // L'audience peut baisser, on prend la valeur webhook si > 0
-    const newComments = Math.max(existingLiveAPI.comments || existingLiveAPI.totalComments || 0, commentCount);
+    // VÉRIFICATION DE L'ÉTAT DU WORKER :
+    // Si le worker a émis un heartbeat dans les 60 dernières secondes, on le considère comme actif.
+    const workerHeartbeat = existingLiveAPI.workerLastHeartbeat?.toDate?.() || new Date(0);
+    const isWorkerActive = (Date.now() - workerHeartbeat.getTime()) < 60000;
+
+    // Si le worker est actif, on ne touche pas à l'audience en direct ni aux compteurs temps réel
+    // car le webhook est souvent en retard de plusieurs minutes.
+    const newLikes = isWorkerActive 
+      ? Math.max(existingLiveAPI.likes || 0, likeCount) // On respecte le max
+      : Math.max(existingLiveAPI.likes || existingLiveAPI.totalLikes || 0, likeCount);
+      
+    const newViewers = isWorkerActive 
+      ? (existingLiveAPI.currentViewers || 0) // On ne touche pas à l'audience si le worker est en vie
+      : (viewerCount > 0 ? viewerCount : (existingLiveAPI.currentViewers || existingLiveAPI.viewerCount || 0));
+      
+    const newComments = isWorkerActive 
+      ? Math.max(existingLiveAPI.comments || 0, commentCount)
+      : Math.max(existingLiveAPI.comments || existingLiveAPI.totalComments || 0, commentCount);
 
     const updatedLiveAPI = {
       ...existingLiveAPI,
