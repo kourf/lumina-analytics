@@ -55,21 +55,54 @@ exports.tiktokLiveWebhook = functions.https.onRequest(async (req, res) => {
     const existingLiveAPI = existingUserData.tiktokLiveAPI || {};
     let archives = existingLiveAPI.historyArchives || existingUserData.historyArchives || [];
 
-      // --- NOTE : DÉSACTIVÉ POUR ÉVITER LES CONFLITS AVEC LE WORKER RENDER ---
-      // Le Worker Render gère déjà 100% de la synchronisation temps réel de 'tiktokLiveAPI'.
-      // Le fait que ce webhook mette à jour 'users/karamokho' écrasait les données temps réel (tchat, likes, followers).
-      
-      /*
-      // Si le live se termine (live_end), on l'archive définitivement dans l'historique permanent
-      if (event === 'live_end') {
-        ...
-      } else {
-        // Le live est en cours ou mis à jour
-        ...
-      }
-      */
+    // --- NOTE : RÉACTIVATION SÉCURISÉE DU WEBHOOK COMME "HEALER" ---
+    // Le Worker Render peut manquer des likes si TikTok ne les envoie pas dans le Webcast (ou s'il plante).
+    // Ce webhook officiel reçoit la vraie valeur totale.
+    // On utilise Math.max pour ne JAMAIS faire reculer les compteurs si le Worker est en avance.
 
-    return res.status(200).send({ success: true });
+    const newLikes = Math.max(existingLiveAPI.likes || existingLiveAPI.totalLikes || 0, likeCount);
+    const newViewers = viewerCount > 0 ? viewerCount : (existingLiveAPI.currentViewers || existingLiveAPI.viewerCount || 0); // L'audience peut baisser, on prend la valeur webhook si > 0
+    const newComments = Math.max(existingLiveAPI.comments || existingLiveAPI.totalComments || 0, commentCount);
+
+    const updatedLiveAPI = {
+      ...existingLiveAPI,
+      likes: newLikes,
+      currentViewers: newViewers,
+      comments: newComments,
+      isLive: event !== 'live_end',
+      lastEvent: event,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    };
+
+    if (event === 'live_end') {
+      // Nettoyage pour la fin du live
+      updatedLiveAPI.isLive = false;
+      
+      // On peut ajouter l'archivage ici si besoin, comme avant
+      const archiveSession = {
+        sessionId: existingLiveAPI.roomId || liveId,
+        startedAt: existingLiveAPI.startedAt || new Date().toISOString(),
+        endedAt: new Date().toISOString(),
+        metrics: {
+          peakViewers: existingLiveAPI.peakViewers || newViewers,
+          totalLikes: newLikes,
+          totalComments: newComments,
+          totalShares: existingLiveAPI.shares || 0,
+        }
+      };
+      
+      await userDocRef.set({
+        tiktokLiveAPI: updatedLiveAPI,
+        historyArchives: admin.firestore.FieldValue.arrayUnion(archiveSession)
+      }, { merge: true });
+    } else {
+      // Mise à jour normale pendant le live
+      await userDocRef.set({
+        tiktokLiveAPI: updatedLiveAPI
+      }, { merge: true });
+    }
+
+    return res.status(200).send({ success: true, healedLikes: newLikes });
   } catch (e) {
     console.error('TikTok Live webhook error:', e.message);
     return res.status(500).send({ success: false, error: 'Internal Server Error' });
