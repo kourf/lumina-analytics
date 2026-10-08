@@ -94,9 +94,9 @@ export const PinScreen = ({ onUnlock }) => {
     },
     exit: { 
       opacity: 0, 
-      scale: 1.05, 
-      filter: 'blur(10px)',
-      transition: { duration: 0.5, ease: 'easeInOut' } 
+      scale: 0.85, 
+      filter: 'grayscale(100%) blur(15px)',
+      transition: { duration: 0.7, ease: [0.76, 0, 0.24, 1] } 
     }
   };
 
@@ -118,12 +118,20 @@ export const PinScreen = ({ onUnlock }) => {
         transition={{ duration: 0.8 }}
         className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-xl overflow-hidden"
       >
-        {/* Le Rideau Mat / Encre (Effet NXTPAPER) */}
+        {/* Rideau 1 : Voile de transition rapide */}
         <motion.div
           initial={{ clipPath: 'polygon(0 100%, 100% 100%, 100% 100%, 0 100%)' }}
           animate={{ clipPath: showWelcome ? 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' : 'polygon(0 100%, 100% 100%, 100% 100%, 0 100%)' }}
-          transition={{ duration: 0.9, ease: [0.4, 0, 0.2, 1] }}
-          className="absolute inset-0 z-[15] bg-[#111113]"
+          transition={{ duration: 0.7, ease: [0.76, 0, 0.24, 1] }}
+          className="absolute inset-0 z-[14] bg-lumina-primary/10 backdrop-blur-md"
+        />
+
+        {/* Rideau 2 : Le Papier Mat Sombre (Slanted Wipe) */}
+        <motion.div
+          initial={{ clipPath: 'polygon(0 120%, 100% 100%, 100% 100%, 0 100%)' }}
+          animate={{ clipPath: showWelcome ? 'polygon(0 0, 100% 0, 100% 100%, 0 100%)' : 'polygon(0 120%, 100% 100%, 100% 100%, 0 100%)' }}
+          transition={{ duration: 1.1, ease: [0.76, 0, 0.24, 1], delay: 0.08 }}
+          className="absolute inset-0 z-[15] bg-gradient-to-t from-[#050505] to-[#121214]"
         />
 
         <AnimatePresence mode="wait">
@@ -237,22 +245,35 @@ export const PinScreen = ({ onUnlock }) => {
           ) : (
             <motion.div
               key="success-message"
-              initial={{ opacity: 0, scale: 0.95, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0, scale: 1.05, filter: 'blur(8px)' }}
-              transition={{ duration: 0.5, delay: 0.2, ease: "easeOut" }}
+              transition={{ duration: 0.5, delay: 0.2 }}
               className="flex flex-col items-center justify-center text-center px-6 relative z-20"
             >
-              {/* Style Esquisse / Dessin au trait */}
-              <div className="w-20 h-20 rounded-full border-[1.5px] border-gray-500 flex items-center justify-center text-gray-400 mb-6 bg-transparent shadow-none">
-                <Unlock className="w-10 h-10" strokeWidth={1} />
-              </div>
-              <h1 
-                className="text-2xl sm:text-3xl font-semibold tracking-tight text-transparent"
-                style={{ WebkitTextStroke: '1px #9ca3af' }}
+              {/* Cercle Esquisse avec Spin */}
+              <motion.div 
+                initial={{ scale: 0, rotate: -180, opacity: 0 }}
+                animate={{ scale: 1, rotate: 0, opacity: 1 }}
+                transition={{ type: "spring", duration: 1.2, delay: 0.5, bounce: 0.4 }}
+                className="w-24 h-24 rounded-full border-[1.5px] border-[#4a4a52] flex items-center justify-center text-[#a1a1aa] mb-8 bg-transparent shadow-[0_0_50px_rgba(255,255,255,0.02)]"
               >
-                Bienvenue dans votre tableau de bord réseaux sociaux
-              </h1>
+                <Unlock className="w-10 h-10" strokeWidth={1} />
+              </motion.div>
+
+              {/* Titre avec effet d'apparition Blur & Glow */}
+              <motion.h1 
+                initial={{ opacity: 0, y: 30, filter: 'blur(12px)', scale: 0.9 }}
+                animate={{ opacity: 1, y: 0, filter: 'blur(0px)', scale: 1 }}
+                transition={{ duration: 0.9, delay: 0.7, ease: [0.22, 1, 0.36, 1] }}
+                className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tighter text-transparent"
+                style={{ 
+                  WebkitTextStroke: '1.2px #b4b4b8',
+                  textShadow: '0px 10px 40px rgba(255,255,255,0.05)'
+                }}
+              >
+                BIENVENUE DANS VOTRE ESPACE
+              </motion.h1>
             </motion.div>
           )}
         </AnimatePresence>
