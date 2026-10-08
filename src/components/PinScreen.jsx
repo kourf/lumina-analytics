@@ -115,8 +115,16 @@ export const PinScreen = ({ onUnlock }) => {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0, transition: { duration: 0.5, delay: 0.2 } }}
-        className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-xl"
+        className="fixed inset-0 z-50 flex items-center justify-center bg-background/95 backdrop-blur-xl overflow-hidden"
       >
+        {/* La Vague de Couleur (Rideau) */}
+        <motion.div
+          initial={{ y: '100%' }}
+          animate={{ y: showWelcome ? '0%' : '100%' }}
+          transition={{ duration: 0.85, ease: [0.4, 0, 0.2, 1] }}
+          className="absolute inset-0 z-[5] bg-lumina-primary/20"
+        />
+
         <AnimatePresence mode="wait">
           {!showWelcome ? (
             <motion.div
@@ -125,7 +133,7 @@ export const PinScreen = ({ onUnlock }) => {
               initial="hidden"
               animate="visible"
               exit="exit"
-              className="w-full max-w-[340px] px-6"
+              className="w-full max-w-[340px] px-6 relative z-10"
             >
               <div className="flex flex-col items-center">
                 <motion.div 
@@ -232,7 +240,7 @@ export const PinScreen = ({ onUnlock }) => {
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 1.1, filter: 'blur(8px)' }}
               transition={{ duration: 0.4, type: 'spring' }}
-              className="flex flex-col items-center justify-center text-center px-6"
+              className="flex flex-col items-center justify-center text-center px-6 relative z-10"
             >
               <div className="w-20 h-20 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-6 shadow-[0_0_40px_rgba(16,185,129,0.3)]">
                 <Unlock className="w-10 h-10" />
