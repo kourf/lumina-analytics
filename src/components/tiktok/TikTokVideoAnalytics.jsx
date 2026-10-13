@@ -1,11 +1,21 @@
 import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, LabelList } from 'recharts';
-import { Activity, MessageCircle, Heart, Info, TrendingUp, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon, Sparkles, Calendar, X } from 'lucide-react';
+import { Activity, MessageCircle, Heart, Info, TrendingUp, TrendingDown, Zap, Share2, Globe, Users, BarChart2, TrendingUp as TrendingUpIcon, Sparkles, Calendar, X, Clock, ShieldCheck, Film, Layers } from 'lucide-react';
+
+const getWeekNumber = (d) => {
+  const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  target.setUTCDate(target.getUTCDate() + 4 - (target.getUTCDay() || 7));
+  const yearStart = new Date(Date.UTC(target.getUTCFullYear(), 0, 1));
+  return Math.ceil((((target - yearStart) / 86400000) + 1) / 7);
+};
 
 export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], followers = 0 }) => {
   const [activeMetric, setActiveMetric] = useState('views');
   const [chartType, setChartType] = useState('bar');
   const [monthlyChartType, setMonthlyChartType] = useState('bar');
+  const [viewMode, setViewMode] = useState('temporal'); // 'temporal' | 'video'
+  const [timeGranularity, setTimeGranularity] = useState('monthly'); // 'monthly' | 'weekly' | 'yearly' | 'daily'
+  const [monthlyGranularity, setMonthlyGranularity] = useState('monthly'); // 'monthly' | 'weekly'
   const [mobileModal, setMobileModal] = useState(null);
   const [hoveredCard, setHoveredCard] = useState(null);
 
@@ -167,6 +177,189 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
     };
   });
 
+  // Agrégations temporelles exhaustives (Mois, Semaine, Année, Jour)
+  const temporalAggregations = useMemo(() => {
+    const monthMap = {};
+    const weekMap = {};
+    const yearMap = {};
+    const dayMap = {};
+
+    sortedChronologicalVideos.forEach((video) => {
+      let d = null;
+      if (video.date) {
+        d = new Date(video.date);
+      } else if (video.create_time || video.timestamp) {
+        d = new Date((video.create_time || video.timestamp) * 1000);
+      }
+      if (!d || isNaN(d.getTime())) return;
+
+      const views = Number(video.views || 0);
+      const likes = Number(video.likes || 0);
+      const comments = Number(video.comments || 0);
+      const shares = Number(video.shares || 0);
+
+      // --- Mensuel ---
+      const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      const shortMonth = d.toLocaleDateString('fr-FR', { month: 'short', year: '2-digit' });
+      const rawFullMonth = d.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+      const fullMonth = rawFullMonth.charAt(0).toUpperCase() + rawFullMonth.slice(1);
+      if (!monthMap[mKey]) {
+        monthMap[mKey] = { sortKey: mKey, name: shortMonth, fullDate: fullMonth, count: 0, views: 0, likes: 0, shares: 0, comments: 0 };
+      }
+      monthMap[mKey].count += 1;
+      monthMap[mKey].views += views;
+      monthMap[mKey].likes += likes;
+      monthMap[mKey].shares += shares;
+      monthMap[mKey].comments += comments;
+
+      // --- Hebdomadaire ---
+      const wk = getWeekNumber(d);
+      const shortYr = String(d.getFullYear()).slice(2);
+      const wKey = `${d.getFullYear()}-W${String(wk).padStart(2, '0')}`;
+      const wLabel = `S${wk} '${shortYr}`;
+      if (!weekMap[wKey]) {
+        weekMap[wKey] = { sortKey: wKey, name: wLabel, fullDate: `Semaine ${wk} (${d.getFullYear()})`, count: 0, views: 0, likes: 0, shares: 0, comments: 0 };
+      }
+      weekMap[wKey].count += 1;
+      weekMap[wKey].views += views;
+      weekMap[wKey].likes += likes;
+      weekMap[wKey].shares += shares;
+      weekMap[wKey].comments += comments;
+
+      // --- Annuel ---
+      const yKey = String(d.getFullYear());
+      if (!yearMap[yKey]) {
+        yearMap[yKey] = { sortKey: yKey, name: yKey, fullDate: `Année ${yKey}`, count: 0, views: 0, likes: 0, shares: 0, comments: 0 };
+      }
+      yearMap[yKey].count += 1;
+      yearMap[yKey].views += views;
+      yearMap[yKey].likes += likes;
+      yearMap[yKey].shares += shares;
+      yearMap[yKey].comments += comments;
+
+      // --- Quotidien ---
+      const dKey = d.toISOString().slice(0, 10);
+      const dLabel = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
+      const dFull = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' });
+      if (!dayMap[dKey]) {
+        dayMap[dKey] = { sortKey: dKey, name: dLabel, fullDate: dFull, count: 0, views: 0, likes: 0, shares: 0, comments: 0 };
+      }
+      dayMap[dKey].count += 1;
+      dayMap[dKey].views += views;
+      dayMap[dKey].likes += likes;
+      dayMap[dKey].shares += shares;
+      dayMap[dKey].comments += comments;
+    });
+
+    const formatList = (map) => {
+      let cumulativeViews = 0;
+      return Object.values(map)
+        .sort((a, b) => a.sortKey.localeCompare(b.sortKey))
+        .map((item, idx) => {
+          cumulativeViews += item.views;
+          const engagement = item.views > 0
+            ? Number((((item.likes + item.shares + item.comments) / item.views) * 100).toFixed(2))
+            : 0;
+          const followersEst = totalViews > 0
+            ? Math.round((cumulativeViews / totalViews) * followers)
+            : 0;
+          const avgViews = item.count > 0 ? Math.round(item.views / item.count) : 0;
+          return {
+            ...item,
+            index: idx + 1,
+            engagement,
+            followers: followersEst,
+            avgViews,
+            videoCount: item.count
+          };
+        });
+    };
+
+    const monthlyList = formatList(monthMap);
+    const weeklyList = formatList(weekMap);
+    const yearlyList = formatList(yearMap);
+    const dailyList = formatList(dayMap);
+
+    return {
+      monthly: monthlyList,
+      weekly: weeklyList.slice(-20),
+      allWeekly: weeklyList,
+      yearly: yearlyList,
+      daily: dailyList.slice(-20)
+    };
+  }, [sortedChronologicalVideos, totalViews, followers]);
+
+  // Données de la série active affichée
+  const activeSeriesData = useMemo(() => {
+    if (viewMode === 'video') {
+      return chartData;
+    }
+    return temporalAggregations[timeGranularity] || temporalAggregations.monthly;
+  }, [viewMode, timeGranularity, chartData, temporalAggregations]);
+
+  // Diagnostic intelligent du "Pourquoi" (Tendances & Explication contextuelle)
+  const trendDiagnostic = useMemo(() => {
+    if (viewMode === 'video') {
+      const latestVid = chartData[chartData.length - 1];
+      if (!latestVid) return null;
+      const isAboveMedian = latestVid.views >= medianViews;
+      return {
+        isPositive: isAboveMedian,
+        badgeText: isAboveMedian ? 'Performance Supérieure' : 'Régularité Continue',
+        title: `Dernière vidéo (#${latestVid.index})`,
+        text: `Publiée le ${latestVid.formattedDate || 'récemment'} : ${new Intl.NumberFormat('fr-FR').format(latestVid.views)} vues et ${latestVid.engagement}% d'engagement (${isAboveMedian ? 'au-dessus du score habituel médian de ' + new Intl.NumberFormat('fr-FR').format(medianViews) + ' vues' : 'score habituel régulier'}).`
+      };
+    }
+
+    const currentList = temporalAggregations[timeGranularity] || temporalAggregations.monthly;
+    if (currentList.length < 2) return null;
+
+    const latest = currentList[currentList.length - 1];
+    const previous = currentList[currentList.length - 2];
+
+    const currVal = Number(latest[activeMetric] || 0);
+    const prevVal = Number(previous[activeMetric] || 0);
+    const diff = currVal - prevVal;
+    const pct = prevVal > 0 ? Number(((diff / prevVal) * 100).toFixed(1)) : (currVal > 0 ? 100 : 0);
+    const isUp = diff >= 0;
+    const absPct = Math.abs(pct);
+
+    const granularityLabel = {
+      monthly: 'ce mois-ci vs mois dernier',
+      weekly: 'cette semaine vs semaine précédente',
+      yearly: 'en 2026 vs 2025',
+      daily: 'sur la dernière sortie vs précédente'
+    }[timeGranularity] || 'sur le dernier cycle';
+
+    let causeExplanation = '';
+    if (activeMetric === 'views') {
+      causeExplanation = isUp
+        ? `Hausse de +${absPct}% de vues (${new Intl.NumberFormat('fr-FR').format(latest.views)} vues) : dynamisée par ${latest.count} publication(s) avec une forte traction algorithmique (moyenne de ${new Intl.NumberFormat('fr-FR').format(latest.avgViews)} vues/vidéo).`
+        : `Repli de -${absPct}% (${new Intl.NumberFormat('fr-FR').format(latest.views)} vues) : cadence de publication plus espacée (${latest.count} vidéo(s) contre ${previous.count} précédemment). L'algorithme TikTok réactive la portée dès reprise de la régularité.`;
+    } else if (activeMetric === 'engagement') {
+      causeExplanation = isUp
+        ? `Taux d'engagement en progression (+${absPct}%) à ${latest.engagement}% : votre audience a été particulièrement captive avec ${new Intl.NumberFormat('fr-FR').format(latest.likes)} likes et ${new Intl.NumberFormat('fr-FR').format(latest.shares)} partages sur ce cycle.`
+        : `Taux d'engagement à ${latest.engagement}% (-${absPct}%) : le volume de vues plus large a touché une audience froide de découverte ('Pour Toi'), ce qui dilue naturellement le ratio sans dégrader votre visibilité.`;
+    } else if (activeMetric === 'likes') {
+      causeExplanation = isUp
+        ? `Progression de +${absPct}% des mentions 'J'aime' (${new Intl.NumberFormat('fr-FR').format(latest.likes)} likes) : forte validation de vos formats récents et de vos accroches visuelles.`
+        : `Volume de ${new Intl.NumberFormat('fr-FR').format(latest.likes)} likes (-${absPct}%) : directement corrélé au rythme de sorties sur cette période (${latest.count} vidéo(s)).`;
+    } else if (activeMetric === 'shares') {
+      causeExplanation = isUp
+        ? `Pic de viralité (+${absPct}% de partages avec ${new Intl.NumberFormat('fr-FR').format(latest.shares)} partages) : vos vidéos ont été massivement recommandées et relayées en privé ou hors plateforme.`
+        : `Volume de ${new Intl.NumberFormat('fr-FR').format(latest.shares)} partages : contenus orientés rétention directe et consommation immédiate plutôt que diffusion externe.`;
+    } else if (activeMetric === 'followers') {
+      causeExplanation = `Croissance constante : environ +${new Intl.NumberFormat('fr-FR').format(Math.max(1, Math.round((latest.views / totalViews) * followers)))} abonnés acquis sur ce cycle en corrélation directe avec le volume de vues généré.`;
+    }
+
+    return {
+      isPositive: isUp,
+      badgeText: isUp ? `↗ +${absPct}%` : `↘ -${absPct}%`,
+      title: `${metricConfig[activeMetric]?.label || 'KPI'} ${granularityLabel}`,
+      text: causeExplanation
+    };
+  }, [viewMode, timeGranularity, activeMetric, temporalAggregations, chartData, medianViews, followers, totalViews, metricConfig]);
+
   // Préparer les données pour les vidéos publiées par mois avec statistiques détaillées
   const monthlyStats = useMemo(() => {
     const monthMap = {};
@@ -188,7 +381,9 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         if (!monthMap[sortKey]) {
           monthMap[sortKey] = {
             sortKey,
+            period: shortMonth,
             month: shortMonth,
+            fullPeriod: fullMonth,
             fullMonth,
             count: 0,
             views: 0
@@ -220,25 +415,90 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
       average: avg,
       record: maxMonth,
       latest: latestMonth,
+      totalPeriods: withCumulative.length,
       totalMonths: withCumulative.length,
       totalVideos: totalCount
     };
   }, [sortedChronologicalVideos]);
 
-  const monthlyData = monthlyStats.data;
+  // Préparer les données pour les vidéos publiées par semaine
+  const weeklyStats = useMemo(() => {
+    const weekMap = {};
+    
+    sortedChronologicalVideos.forEach(video => {
+      let d = null;
+      if (video.date) {
+        d = new Date(video.date);
+      } else if (video.create_time || video.timestamp) {
+        d = new Date((video.create_time || video.timestamp) * 1000);
+      }
+      
+      if (d && !isNaN(d.getTime())) {
+        const wk = getWeekNumber(d);
+        const yr = d.getFullYear();
+        const shortYr = String(yr).slice(2);
+        const sortKey = `${yr}-W${String(wk).padStart(2, '0')}`;
+        const wLabel = `S${wk} '${shortYr}`;
+        const fullWeek = `Semaine ${wk} (${yr})`;
+        
+        if (!weekMap[sortKey]) {
+          weekMap[sortKey] = {
+            sortKey,
+            period: wLabel,
+            month: wLabel,
+            fullPeriod: fullWeek,
+            fullMonth: fullWeek,
+            count: 0,
+            views: 0
+          };
+        }
+        weekMap[sortKey].count += 1;
+        weekMap[sortKey].views += Number(video.views || 0);
+      }
+    });
 
-  const MonthlyTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
+    const sorted = Object.values(weekMap).sort((a, b) => a.sortKey.localeCompare(b.sortKey));
+    
+    let cumCount = 0;
+    const withCumulative = sorted.map(item => {
+      cumCount += item.count;
+      return {
+        ...item,
+        cumulativeCount: cumCount
+      };
+    });
+
+    const totalCount = withCumulative.reduce((acc, curr) => acc + curr.count, 0);
+    const avg = withCumulative.length > 0 ? (totalCount / withCumulative.length).toFixed(1) : '0';
+    const maxWeek = withCumulative.length > 0 ? [...withCumulative].sort((a, b) => b.count - a.count)[0] : null;
+    const latestWeek = withCumulative.length > 0 ? withCumulative[withCumulative.length - 1] : null;
+
+    return {
+      data: withCumulative.slice(-24), // Les 24 dernières semaines pour une lecture aérée
+      allData: withCumulative,
+      average: avg,
+      record: maxWeek,
+      latest: latestWeek,
+      totalPeriods: withCumulative.length,
+      totalMonths: withCumulative.length,
+      totalVideos: totalCount
+    };
+  }, [sortedChronologicalVideos]);
+
+  const activeCadence = monthlyGranularity === 'weekly' ? weeklyStats : monthlyStats;
+
+  const CadenceTooltip = ({ active, payload }) => {
+    if (active && payload && payload.length && payload[0]?.payload) {
       const itemData = payload[0].payload;
       const count = itemData.count || 0;
-      const total = monthlyStats.totalVideos || 1;
+      const total = activeCadence.totalVideos || 1;
       const pct = Math.round((count / total) * 100);
 
       return (
         <div className="bg-[#111827]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/10 max-w-[260px] animate-in fade-in zoom-in duration-200">
           <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/10">
             <span className="text-xs font-bold text-emerald-400 capitalize">
-              {itemData.fullMonth || itemData.month}
+              {itemData.fullPeriod || itemData.fullMonth || itemData.period || itemData.month}
             </span>
             <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
               {count} {count > 1 ? 'vidéos' : 'vidéo'}
@@ -267,14 +527,49 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
   };
 
   const CustomTooltip = ({ active, payload }) => {
-    if (active && payload && payload.length) {
+    if (active && payload && payload.length && payload[0]?.payload) {
       const itemData = payload[0].payload;
       const currentConfig = metricConfig[activeMetric] || metricConfig.views;
-      const rawVal = payload[0].value;
+      const rawVal = payload[0]?.value ?? 0;
       const formattedVal = activeMetric === 'engagement'
         ? `${rawVal}%`
         : new Intl.NumberFormat('fr-FR').format(rawVal);
 
+      // Vue Temporelle
+      if (viewMode === 'temporal') {
+        return (
+          <div className="bg-[#111827]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/10 max-w-[280px] animate-in fade-in zoom-in duration-200">
+            <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-white/10">
+              <span className="text-xs font-bold text-white capitalize">
+                {itemData.fullDate || itemData.name}
+              </span>
+              <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                {itemData.count || itemData.videoCount || 0} {(itemData.count || itemData.videoCount || 0) > 1 ? 'vidéos' : 'vidéo'}
+              </span>
+            </div>
+            <div className="flex items-baseline justify-between gap-2 mb-2">
+              <span className="text-xs text-gray-300">{currentConfig.label} :</span>
+              <span className="font-bold text-sm" style={{ color: currentConfig.color }}>
+                {formattedVal}
+              </span>
+            </div>
+            {itemData.avgViews > 0 && (
+              <div className="flex justify-between items-center text-[11px] text-gray-400 mb-2 pb-1.5 border-b border-white/5">
+                <span>Moyenne par vidéo :</span>
+                <span className="font-semibold text-teal-300">{new Intl.NumberFormat('fr-FR').format(itemData.avgViews)} vues</span>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-1.5 pt-1 text-[10px] text-gray-400 font-mono">
+              <div>Vues: {new Intl.NumberFormat('fr-FR').format(itemData.views || 0)}</div>
+              <div>Likes: {new Intl.NumberFormat('fr-FR').format(itemData.likes || 0)}</div>
+              <div>Partages: {new Intl.NumberFormat('fr-FR').format(itemData.shares || 0)}</div>
+              <div>Engag.: {itemData.engagement || 0}%</div>
+            </div>
+          </div>
+        );
+      }
+
+      // Vue individuelle par Vidéo
       return (
         <div className="bg-[#111827]/95 backdrop-blur-xl p-4 rounded-xl shadow-2xl border border-white/10 max-w-[260px] animate-in fade-in zoom-in duration-200">
           <div className="flex items-center justify-between gap-2 mb-1.5 pb-1.5 border-b border-white/10">
@@ -325,12 +620,13 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
         </div>
       </div>
 
+
       {/* Ligne 1 : KPIs (6 colonnes sur 2 lignes) */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
         
         {/* Card 1: Engagement Moyen */}
         <div 
-          className="bg-white dark:bg-transparent bg-gradient-to-br from-[#25F4EE]/10 dark:from-[#25F4EE]/20 to-blue-500/5 dark:to-blue-500/10 border border-[#25F4EE]/30 p-6 rounded-2xl text-slate-900 dark:text-white shadow-[0_8px_30px_rgba(37,244,238,0.15)] dark:shadow-[0_0_30px_rgba(37,244,238,0.1)] hover:shadow-[0_8px_40px_rgba(37,244,238,0.25)] dark:hover:shadow-[0_0_40px_rgba(37,244,238,0.2)] transition-shadow duration-300 flex flex-col justify-between relative overflow-hidden group min-h-[190px]"
+          className="bg-white dark:bg-transparent bg-gradient-to-br from-[#25F4EE]/10 dark:from-[#25F4EE]/20 to-blue-500/5 dark:to-blue-500/10 border border-[#25F4EE]/30 p-6 rounded-2xl text-slate-900 dark:text-white shadow-[0_8px_30px_rgba(37,244,238,0.15)] dark:shadow-[0_0_30px_rgba(37,244,238,0.1)] hover:shadow-[0_8px_40px_rgba(37,244,238,0.25)] dark:hover:shadow-[0_0_40px_rgba(37,244,238,0.2)] transition-shadow duration-300 flex flex-col justify-between relative overflow-hidden group min-h-[200px]"
           onMouseLeave={() => setHoveredCard(null)}
         >
           <div className="absolute top-0 right-0 w-32 h-32 bg-[#25F4EE]/20 rounded-full blur-3xl -mr-16 -mt-16 pointer-events-none group-hover:bg-[#25F4EE]/30 transition-colors"></div>
@@ -370,9 +666,21 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
             <div className="text-4xl font-black mb-1 tracking-tight text-slate-900 dark:text-white flex items-baseline gap-1">
               {engagementRate}<span className="text-2xl text-slate-600">%</span>
             </div>
-            <div className="mt-2 text-sm text-gray-800 font-medium dark:text-gray-300">
+            <div className="mt-1 text-sm text-gray-800 font-medium dark:text-gray-300">
               Sur {recentVideos.length} vidéos analysées
             </div>
+          </div>
+
+          {/* Footer discret */}
+          <div className="relative z-10 pt-2.5 mt-2 border-t border-teal-500/20 flex items-center justify-between text-[11px]">
+            <span className="text-[10px] text-teal-400/80 font-mono flex items-center gap-1.5">
+              <Clock size={11} className="text-[#25F4EE] shrink-0" />
+              <span>Calcul instantané</span>
+            </span>
+            <span className="text-[10px] text-teal-300 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#25F4EE] animate-pulse" />
+              Actif
+            </span>
           </div>
 
           {/* Encart Pédagogique Intra-Carte au survol (Strictement confiné à la carte, 0 chevauchement) */}
@@ -410,7 +718,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
         {/* Card 2: Vues Médianes */}
         <div 
-          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[200px]"
           onMouseLeave={() => setHoveredCard(null)}
         >
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -436,8 +744,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Info className="w-4 h-4" />
             </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight relative z-10">
+          <div className="relative z-10">
+            <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
               {new Intl.NumberFormat('fr-FR').format(medianViews)}
+            </div>
+            <div className="mt-1 text-sm text-gray-800 font-medium dark:text-gray-300">
+              Score habituel par vidéo
+            </div>
+          </div>
+
+          {/* Footer discret */}
+          <div className="relative z-10 pt-2.5 mt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+              <Clock size={11} className="text-cyan-400 shrink-0" />
+              <span>Calcul instantané</span>
+            </span>
+            <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Actif
+            </span>
           </div>
 
           {/* Encart Pédagogique Intra-Carte au survol */}
@@ -469,7 +794,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
         {/* Card 3: Taux de Reach */}
         <div 
-          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[200px]"
           onMouseLeave={() => setHoveredCard(null)}
         >
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -500,8 +825,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Info className="w-4 h-4" />
             </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
+          <div className="relative z-10">
+            <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
               {reachRate}<span className="text-xl font-normal text-slate-600">%</span>
+            </div>
+            <div className="mt-1 text-sm text-gray-800 font-medium dark:text-gray-300">
+              Audience touchée / abonné
+            </div>
+          </div>
+
+          {/* Footer discret */}
+          <div className="relative z-10 pt-2.5 mt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+              <Clock size={11} className="text-cyan-400 shrink-0" />
+              <span>Calcul instantané</span>
+            </span>
+            <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Actif
+            </span>
           </div>
 
           {/* Encart Pédagogique Intra-Carte au survol */}
@@ -538,7 +880,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
         {/* Card 4: Ratio de Viralité */}
         <div 
-          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[200px]"
           onMouseLeave={() => setHoveredCard(null)}
         >
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -569,8 +911,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Info className="w-4 h-4" />
             </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
+          <div className="relative z-10">
+            <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
               {viralityRate}<span className="text-xl font-normal text-slate-600">%</span>
+            </div>
+            <div className="mt-1 text-sm text-gray-800 font-medium dark:text-gray-300">
+              Signal #1 pour "Pour Toi"
+            </div>
+          </div>
+
+          {/* Footer discret */}
+          <div className="relative z-10 pt-2.5 mt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+              <Clock size={11} className="text-cyan-400 shrink-0" />
+              <span>Calcul instantané</span>
+            </span>
+            <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Actif
+            </span>
           </div>
 
           {/* Encart Pédagogique Intra-Carte au survol */}
@@ -607,7 +966,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
         {/* Card 5: Ratio de Viralité (Portée organique) */}
         <div 
-          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[200px]"
           onMouseLeave={() => setHoveredCard(null)}
         >
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -638,8 +997,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Info className="w-4 h-4" />
             </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
+          <div className="relative z-10">
+            <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
               {organicReachMultiplier}<span className="text-xl font-normal text-slate-600">x</span>
+            </div>
+            <div className="mt-1 text-sm text-gray-800 font-medium dark:text-gray-300">
+              Vues générées / abonné
+            </div>
+          </div>
+
+          {/* Footer discret */}
+          <div className="relative z-10 pt-2.5 mt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+              <Clock size={11} className="text-cyan-400 shrink-0" />
+              <span>Calcul instantané</span>
+            </span>
+            <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Actif
+            </span>
           </div>
 
           {/* Encart Pédagogique Intra-Carte au survol */}
@@ -676,7 +1052,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
         {/* Card 6: Ratio de Conversion Abonnés */}
         <div 
-          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[190px]"
+          className="bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col justify-between hover:border-slate-300 transition-colors relative overflow-hidden group min-h-[200px]"
           onMouseLeave={() => setHoveredCard(null)}
         >
           <div className="flex justify-between items-start mb-4 relative z-10">
@@ -707,8 +1083,25 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
               <Info className="w-4 h-4" />
             </button>
           </div>
-          <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1 relative z-10">
+          <div className="relative z-10">
+            <div className="text-3xl font-bold text-slate-900 dark:text-white tracking-tight flex items-baseline gap-1">
               {conversionRate}<span className="text-xl font-normal text-slate-600">%</span>
+            </div>
+            <div className="mt-1 text-sm text-gray-800 font-medium dark:text-gray-300">
+              1 abonné / {viewsPerSub} vues
+            </div>
+          </div>
+
+          {/* Footer discret */}
+          <div className="relative z-10 pt-2.5 mt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[11px] text-slate-400">
+            <span className="text-[10px] text-slate-400 font-mono flex items-center gap-1.5">
+              <Clock size={11} className="text-cyan-400 shrink-0" />
+              <span>Calcul instantané</span>
+            </span>
+            <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              Actif
+            </span>
           </div>
 
           {/* Encart Pédagogique Intra-Carte au survol */}
@@ -746,52 +1139,140 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
       {/* Ligne 2 : Graphiques */}
       <div className="flex flex-col lg:flex-row gap-6">
-        {/* Graphique Interactif */}
+        {/* Graphique Interactif : Évolution des performances */}
         <div className="flex-1 bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
-            <div>
-              <div className="flex items-center gap-2">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide uppercase">
-                  Évolution des performances
-                </h3>
-                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
-                  De la 1ère vidéo à aujourd'hui
-                </span>
+          {/* Header avec titres & commutateur Vue Temporelle vs Vue par Vidéo */}
+          <div className="flex flex-col gap-3 mb-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide uppercase">
+                    Évolution des performances
+                  </h3>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                    {viewMode === 'temporal' ? 'Analyse Temporelle' : 'Catalogue 74 Vidéos'}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
+                  {viewMode === 'temporal'
+                    ? `Agrégation chronologique (${timeGranularity === 'monthly' ? 'Mois' : timeGranularity === 'weekly' ? 'Semaines' : timeGranularity === 'yearly' ? 'Années' : 'Sorties quotidiennes'}) de vos KPI clés`
+                    : `Suivi chronologique individuel sur vos ${recentVideos.length} vidéos (de la 1ère à aujourd'hui)`}
+                </p>
               </div>
-              <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-                Suivi chronologique sur vos {recentVideos.length} vidéos (de la toute première publiée jusqu'à la plus récente)
-              </p>
+
+              {/* Commutateur principal : Vue Temporelle vs Vue par Vidéo */}
+              <div className="flex bg-slate-100 dark:bg-slate-800/70 p-1 rounded-xl border border-slate-200 dark:border-slate-700/50 self-start sm:self-auto shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setViewMode('temporal')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'temporal'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Calendar className="w-3.5 h-3.5" />
+                  <span>Vue Temporelle</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setViewMode('video')}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                    viewMode === 'video'
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <Film className="w-3.5 h-3.5" />
+                  <span>Par Vidéo ({recentVideos.length})</span>
+                </button>
+              </div>
             </div>
 
-            <div className="flex flex-wrap items-center gap-2">
-              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
-                <button
-                  onClick={() => setActiveMetric('views')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'views' ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-[#25F4EE] shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >Vues</button>
-                <button
-                  onClick={() => setActiveMetric('likes')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'likes' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >Likes</button>
-                <button
-                  onClick={() => setActiveMetric('shares')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'shares' ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >Partages</button>
-                <button
-                  onClick={() => setActiveMetric('engagement')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'engagement' ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >Engagement</button>
-                <button
-                  onClick={() => setActiveMetric('followers')}
-                  className={`px-3 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'followers' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                >Abonnés</button>
+            {/* Barre de contrôles secondaires : Périodicité (si temporel) + Sélecteur de KPI + Bâtons/Courbe */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 dark:border-white/5">
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Granularité temporelle si vue temporelle active */}
+                {viewMode === 'temporal' && (
+                  <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/50">
+                    <button
+                      type="button"
+                      onClick={() => setTimeGranularity('monthly')}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                        timeGranularity === 'monthly'
+                          ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      Mois
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTimeGranularity('weekly')}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                        timeGranularity === 'weekly'
+                          ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      Semaines
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTimeGranularity('yearly')}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                        timeGranularity === 'yearly'
+                          ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      Années
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setTimeGranularity('daily')}
+                      className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                        timeGranularity === 'daily'
+                          ? 'bg-white dark:bg-slate-700 text-blue-600 dark:text-blue-400 shadow-sm font-bold'
+                          : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                      }`}
+                    >
+                      Par Sortie
+                    </button>
+                  </div>
+                )}
+
+                {/* Sélecteur de Métriques (Vues / Likes / Partages / Engagement / Abonnés) */}
+                <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/50">
+                  <button
+                    onClick={() => setActiveMetric('views')}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'views' ? 'bg-white dark:bg-slate-700 text-teal-600 dark:text-[#25F4EE] shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >Vues</button>
+                  <button
+                    onClick={() => setActiveMetric('likes')}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'likes' ? 'bg-white dark:bg-slate-700 text-rose-600 dark:text-rose-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >Likes</button>
+                  <button
+                    onClick={() => setActiveMetric('shares')}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'shares' ? 'bg-white dark:bg-slate-700 text-purple-600 dark:text-purple-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >Partages</button>
+                  <button
+                    onClick={() => setActiveMetric('engagement')}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'engagement' ? 'bg-white dark:bg-slate-700 text-amber-600 dark:text-amber-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >Engagement</button>
+                  <button
+                    onClick={() => setActiveMetric('followers')}
+                    className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${activeMetric === 'followers' ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
+                  >Abonnés</button>
+                </div>
               </div>
 
-              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
+              {/* Sélecteur de forme graphique (Bâtons vs Courbe) */}
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/50">
                 <button
                   onClick={() => setChartType('bar')}
                   className={`p-1.5 rounded-md transition-all ${chartType === 'bar' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
-                  title="Histogramme"
+                  title="Histogramme (Bâtons)"
                 >
                   <BarChart2 className="w-4 h-4" />
                 </button>
@@ -808,8 +1289,8 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
 
           {/* Encart Pédagogique Interactif pour l'indicateur sélectionné */}
           {metricConfig[activeMetric] && (
-            <div className="mb-4 p-4 rounded-xl border transition-all duration-300 bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-white/10">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+            <div className="mb-3 p-3.5 rounded-xl border transition-all duration-300 bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-white/10">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-1.5">
                 <div className="flex items-center gap-2">
                   <span className={`px-2.5 py-0.5 text-xs font-bold rounded-full border ${metricConfig[activeMetric].bgBadge}`}>
                     {metricConfig[activeMetric].label}
@@ -819,33 +1300,65 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                   </h4>
                 </div>
                 <span className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 flex items-center gap-1">
-                  <Calendar className="w-3.5 h-3.5 text-blue-500" /> De la 1ère vidéo publiée à aujourd'hui
+                  <Calendar className="w-3.5 h-3.5 text-blue-500" />
+                  {viewMode === 'temporal' ? 'Du début à aujourd\'hui' : 'De la 1ère vidéo à aujourd\'hui'}
                 </span>
               </div>
-              <p className="text-xs text-slate-600 dark:text-gray-300 leading-relaxed mb-2.5">
+              <p className="text-xs text-slate-600 dark:text-gray-300 leading-relaxed mb-2">
                 {metricConfig[activeMetric].explanation}
               </p>
-              <div className="flex items-start sm:items-center gap-2 text-[11px] font-medium text-slate-700 dark:text-gray-300 bg-white dark:bg-black/30 p-2.5 rounded-lg border border-slate-200 dark:border-white/5">
+              <div className="flex items-start sm:items-center gap-2 text-[11px] font-medium text-slate-700 dark:text-gray-300 bg-white dark:bg-black/30 p-2 rounded-lg border border-slate-200 dark:border-white/5">
                 <Sparkles className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5 sm:mt-0" />
                 <span>{metricConfig[activeMetric].takeaway}</span>
               </div>
             </div>
           )}
 
+          {/* Encart Diagnostic Intelligent : Analyse du "Pourquoi" */}
+          {trendDiagnostic && (
+            <div className={`mb-4 p-3 rounded-xl border transition-all ${
+              trendDiagnostic.isPositive
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                : 'bg-amber-500/10 border-amber-500/20 text-amber-300'
+            }`}>
+              <div className="flex items-center justify-between gap-2 mb-1">
+                <div className="flex items-center gap-1.5 text-xs font-bold">
+                  {trendDiagnostic.isPositive ? (
+                    <TrendingUp className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : (
+                    <TrendingDown className="w-4 h-4 text-amber-400 shrink-0" />
+                  )}
+                  <span className="text-slate-900 dark:text-white">{trendDiagnostic.title}</span>
+                </div>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border font-mono ${
+                  trendDiagnostic.isPositive
+                    ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30'
+                    : 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                }`}>
+                  {trendDiagnostic.badgeText}
+                </span>
+              </div>
+              <p className="text-xs text-slate-700 dark:text-gray-300 leading-relaxed">
+                <span className="font-semibold text-slate-900 dark:text-white">Comprendre l'évolution : </span>
+                {trendDiagnostic.text}
+              </p>
+            </div>
+          )}
+
           <div className="h-[280px] w-full mt-auto">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={280}>
               {chartType === 'bar' ? (
-                <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <BarChart data={activeSeriesData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
                   <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255, 255, 255, 0.05)'}} />
-                  <Bar dataKey={activeMetric} radius={[6, 6, 0, 0]}>
-                    {chartData.map((entry, index) => (
+                  <Bar dataKey={activeMetric} radius={[6, 6, 0, 0]} isAnimationActive={false}>
+                    {activeSeriesData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={metricConfig[activeMetric]?.color || '#25F4EE'} fillOpacity={0.85} />
                     ))}
                   </Bar>
                 </BarChart>
               ) : (
-                <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <LineChart data={activeSeriesData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
                   <Tooltip content={<CustomTooltip />} />
                   <Line 
@@ -853,6 +1366,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                     dataKey={activeMetric} 
                     stroke={metricConfig[activeMetric]?.color || '#25F4EE'} 
                     strokeWidth={3} 
+                    isAnimationActive={false}
                     dot={{r: 3, fill: '#111827', stroke: metricConfig[activeMetric]?.color || '#25F4EE', strokeWidth: 2}} 
                     activeDot={{r: 6, fill: metricConfig[activeMetric]?.color || '#25F4EE'}} 
                   />
@@ -861,30 +1375,68 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
             </ResponsiveContainer>
           </div>
           <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px] text-slate-600 dark:text-gray-400">
-            <span>Ordre chronologique : Vid 1 (1ère vidéo)</span>
-            <span>Vid {recentVideos.length} (Dernière vidéo · Aujourd'hui)</span>
+            {viewMode === 'temporal' ? (
+              <>
+                <span>Début : {activeSeriesData?.[0]?.name || '-'}</span>
+                <span className="font-semibold text-blue-500">{activeSeriesData?.length || 0} périodes analysées</span>
+                <span>Récent : {activeSeriesData?.[(activeSeriesData?.length || 1) - 1]?.name || '-'}</span>
+              </>
+            ) : (
+              <>
+                <span>Ordre chronologique : Vid 1 (1ère vidéo)</span>
+                <span className="font-semibold text-blue-500">{recentVideos.length} vidéos analysées</span>
+                <span>Vid {recentVideos.length} (Dernière vidéo · Aujourd'hui)</span>
+              </>
+            )}
           </div>
         </div>
         
-        {/* Graphique Vidéos par Mois */}
+        {/* Graphique Cadence de Publication (Mois ou Semaines) */}
         <div className="flex-1 bg-white dark:bg-black/20 p-6 rounded-2xl border border-slate-200 dark:border-white/5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] dark:shadow-none flex flex-col">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
             <div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white tracking-wide uppercase">
-                  Vidéos Publiées / Mois
+                  Cadence de Publication
                 </h3>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
-                  {monthlyStats.totalMonths} mois analysés
+                  {monthlyGranularity === 'monthly' ? `${activeCadence.totalMonths} mois` : `${activeCadence.data.length} semaines`}
                 </span>
               </div>
               <p className="text-xs text-slate-500 dark:text-gray-400 mt-1">
-                Volume de publication mensuel sur vos {monthlyStats.totalVideos} vidéos répertoriées
+                Volume de publication {monthlyGranularity === 'monthly' ? 'mensuel' : 'hebdomadaire'} sur vos {activeCadence.totalVideos} vidéos répertoriées
               </p>
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-1 border border-slate-200 dark:border-slate-700/50">
+              {/* Commutateur Mois / Semaine pour la Cadence */}
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => setMonthlyGranularity('monthly')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                    monthlyGranularity === 'monthly'
+                      ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
+                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  }`}
+                >
+                  Mois
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMonthlyGranularity('weekly')}
+                  className={`px-2.5 py-1 text-xs font-medium rounded-md transition-all ${
+                    monthlyGranularity === 'weekly'
+                      ? 'bg-white dark:bg-slate-700 text-emerald-600 dark:text-emerald-400 shadow-sm font-bold'
+                      : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'
+                  }`}
+                >
+                  Semaines
+                </button>
+              </div>
+
+              {/* Bâtons vs Courbe pour la cadence */}
+              <div className="flex bg-slate-100 dark:bg-slate-800/50 rounded-lg p-0.5 border border-slate-200 dark:border-slate-700/50">
                 <button
                   onClick={() => setMonthlyChartType('bar')}
                   className={`p-1.5 rounded-md transition-all ${monthlyChartType === 'bar' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:hover:text-slate-300'}`}
@@ -903,7 +1455,7 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
             </div>
           </div>
 
-          {/* Encart Pédagogique Inspiré de Évolution des performances */}
+          {/* Encart Pédagogique */}
           <div className="mb-4 p-4 rounded-xl border transition-all duration-300 bg-slate-50 dark:bg-slate-900/60 border-slate-200 dark:border-white/10">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
               <div className="flex items-center gap-2">
@@ -911,64 +1463,68 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                   Cadence de Publication
                 </span>
                 <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                  Régularité et volume mensuel
+                  Régularité et constance algorithmique
                 </h4>
               </div>
               <span className="text-[11px] font-semibold text-slate-500 dark:text-gray-400 flex items-center gap-1">
-                <Calendar className="w-3.5 h-3.5 text-emerald-500" /> Du 1er mois à aujourd'hui
+                <Calendar className="w-3.5 h-3.5 text-emerald-500" /> Du 1er contenu à aujourd'hui
               </span>
             </div>
             <p className="text-xs text-slate-600 dark:text-gray-300 leading-relaxed mb-2.5">
-              L'algorithme TikTok récompense la constance : poster régulièrement maintient votre présence dans les flux "Pour Toi", active votre communauté et capitalise sur vos anciennes vidéos toujours en circulation.
+              L'algorithme TikTok valorise la régularité : poster de façon cadencée maintient la présence de votre chaîne dans le feed 'Pour Toi' et permet aux spectateurs d'anticiper vos rendez-vous vidéo.
             </p>
             <div className="flex items-start sm:items-center gap-2 text-[11px] font-medium text-slate-700 dark:text-gray-300 bg-white dark:bg-black/30 p-2.5 rounded-lg border border-slate-200 dark:border-white/5">
               <Sparkles className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5 sm:mt-0" />
-              <span>Chaque barre affiche directement le nombre exact de vidéos produites durant ce mois.</span>
+              <span>Chaque indicateur affiche le nombre exact de vidéos produites sur cette période.</span>
             </div>
           </div>
 
-          {/* KPI Pills Récapitulatifs Mensuels */}
+          {/* KPI Pills Récapitulatifs */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-4">
             <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
               <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Moyenne</span>
               <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-base font-extrabold text-slate-900 dark:text-white">{monthlyStats.average}</span>
-                <span className="text-[10px] text-slate-600 dark:text-gray-300">vid/mois</span>
+                <span className="text-base font-extrabold text-slate-900 dark:text-white">{activeCadence.average}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300">
+                  {monthlyGranularity === 'monthly' ? 'vid/mois' : 'vid/sem'}
+                </span>
               </div>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
-              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Mois Record</span>
+              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Record</span>
               <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">{monthlyStats.record?.count || 0}</span>
-                <span className="text-[10px] text-slate-600 dark:text-gray-300 truncate">({monthlyStats.record?.month || '-'})</span>
+                <span className="text-base font-extrabold text-emerald-600 dark:text-emerald-400">{activeCadence.record?.count || 0}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300 truncate">({activeCadence.record?.period || activeCadence.record?.month || '-'})</span>
               </div>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
-              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Dernier Mois</span>
+              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Dernier Cycle</span>
               <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-base font-extrabold text-blue-600 dark:text-blue-400">{monthlyStats.latest?.count || 0}</span>
-                <span className="text-[10px] text-slate-600 dark:text-gray-300 truncate">({monthlyStats.latest?.month || '-'})</span>
+                <span className="text-base font-extrabold text-blue-600 dark:text-blue-400">{activeCadence.latest?.count || 0}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300 truncate">({activeCadence.latest?.period || activeCadence.latest?.month || '-'})</span>
               </div>
             </div>
 
             <div className="bg-slate-50 dark:bg-slate-800/40 p-2.5 rounded-xl border border-slate-200 dark:border-white/5">
-              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Mois Actifs</span>
+              <span className="text-[10px] font-bold text-slate-600 dark:text-gray-300 uppercase tracking-wider block">Cycles Actifs</span>
               <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-base font-extrabold text-purple-600 dark:text-purple-400">{monthlyStats.totalMonths}</span>
-                <span className="text-[10px] text-slate-600 dark:text-gray-300">mois</span>
+                <span className="text-base font-extrabold text-purple-600 dark:text-purple-400">{activeCadence.totalPeriods}</span>
+                <span className="text-[10px] text-slate-600 dark:text-gray-300">
+                  {monthlyGranularity === 'monthly' ? 'mois' : 'sem'}
+                </span>
               </div>
             </div>
           </div>
 
           <div className="h-[280px] w-full mt-auto">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={280}>
               {monthlyChartType === 'bar' ? (
-                <BarChart data={monthlyStats.data} margin={{ top: 25, right: 10, left: 10, bottom: 0 }}>
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
-                  <Tooltip content={<MonthlyTooltip />} cursor={{fill: 'rgba(16, 185, 129, 0.05)'}} />
-                  <Bar dataKey="count" name="Vidéos publiées" radius={[6, 6, 0, 0]}>
+                <BarChart data={activeCadence.data} margin={{ top: 25, right: 10, left: 10, bottom: 0 }}>
+                  <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
+                  <Tooltip content={<CadenceTooltip />} cursor={{fill: 'rgba(16, 185, 129, 0.05)'}} />
+                  <Bar dataKey="count" name="Vidéos publiées" radius={[6, 6, 0, 0]} isAnimationActive={false}>
                     <LabelList 
                       dataKey="count" 
                       position="top" 
@@ -977,8 +1533,8 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                       fontWeight="bold" 
                       dy={-6} 
                     />
-                    {monthlyStats.data.map((entry, index) => (
-                      <Cell key={`cell-month-${index}`} fill="url(#colorMonths)" />
+                    {activeCadence.data.map((entry, index) => (
+                      <Cell key={`cell-cadence-${index}`} fill="url(#colorMonths)" />
                     ))}
                   </Bar>
                   <defs>
@@ -989,14 +1545,15 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
                   </defs>
                 </BarChart>
               ) : (
-                <LineChart data={monthlyStats.data} margin={{ top: 25, right: 10, left: 10, bottom: 0 }}>
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
-                  <Tooltip content={<MonthlyTooltip />} />
+                <LineChart data={activeCadence.data} margin={{ top: 25, right: 10, left: 10, bottom: 0 }}>
+                  <XAxis dataKey="period" axisLine={false} tickLine={false} tick={{fill: '#6B7280', fontSize: 11}} dy={10} />
+                  <Tooltip content={<CadenceTooltip />} />
                   <Line 
                     type="monotone" 
                     dataKey="count" 
                     stroke="#10B981" 
                     strokeWidth={3} 
+                    isAnimationActive={false}
                     dot={{r: 4, fill: '#111827', stroke: '#10B981', strokeWidth: 2}} 
                     activeDot={{r: 6, fill: '#10B981'}}
                   >
@@ -1015,11 +1572,11 @@ export const TikTokVideoAnalytics = ({ videoAnalytics, recentVideos = [], follow
           </div>
 
           <div className="mt-2 pt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px] text-slate-600 dark:text-gray-400">
-            <span>Ordre chronologique : {monthlyStats.data[0]?.month || 'Début'}</span>
+            <span>Début : {activeCadence?.data?.[0]?.period || 'Début'}</span>
             <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-              Total : {monthlyStats.totalVideos} vidéos publiées
+              Total : {activeCadence?.totalVideos || 0} vidéos publiées
             </span>
-            <span>{monthlyStats.data[monthlyStats.data.length - 1]?.month || 'Aujourd\'hui'}</span>
+            <span>Récent : {activeCadence?.data?.[(activeCadence?.data?.length || 1) - 1]?.period || 'Aujourd\'hui'}</span>
           </div>
         </div>
       </div>

@@ -92,16 +92,96 @@ export function validateTrueLiveCondition(roomData, expectedUsername = 'karam.dr
     return false;
   }
 
+  // Si isLive est explicite avec un identifiant de salon valide (ex: Cloudflare Edge Webhook)
+  if (roomData.isLive === true && roomId && roomId !== '0' && roomId !== 'unknown') {
+    return true;
+  }
+
   // Verify room status code === 2 (Active Live Broadcast)
   const rawStatus = roomData.status ?? roomData.room_status ?? roomData.live_status;
   if (rawStatus === undefined || rawStatus === null) {
-    // Si aucun statut numérique n'est fourni, on exige au minimum isLive explicite et viewers > 0
-    return Boolean(roomData.isLive === true && Number(roomData.currentViewers || roomData.user_count || 0) > 0);
+    return Boolean(roomData.isLive === true);
   }
 
   const statusCode = Number(rawStatus);
-  // SEUL le status 2 certifie un direct en cours. Status 4 = terminé, 0 = inactif
+  // Status 2 certifie formellement un direct en cours. Status 4 = terminé, 0 = inactif
   return statusCode === 2;
+}
+
+// Synchronisation Firestore autonome via REST API (fonctionne 24/7 sans serveur local)
+let lastFirestoreSyncTimestamp = 0;
+export async function syncLiveToFirestore(liveData, targetUserId = 'karamokho') {
+  const now = Date.now();
+  if (now - lastFirestoreSyncTimestamp < 15000) return; // Débouncing 15s
+  lastFirestoreSyncTimestamp = now;
+
+  try {
+    const isLive = Boolean(liveData.isLive);
+    const roomId = String(liveData.roomId || '');
+    const currentViewers = isLive ? Math.max(0, Number(liveData.viewerCount || liveData.currentViewers || 0)) : 0;
+    const title = String(liveData.title || (isLive ? 'Live TikTok en direct' : ''));
+    const likes = isLive ? Number(liveData.likes || liveData.totalLikes || 0) : 0;
+    const shares = isLive ? Number(liveData.shares || liveData.totalShares || liveData.shareCount || 0) : 0;
+    const totalUser = isLive ? Number(liveData.totalUser || liveData.cumulative_audience || 0) : 0;
+    const newFollowers = isLive ? Number(liveData.newFollowers || liveData.followers || 0) : 0;
+
+    const fields = {
+      isLive: { booleanValue: isLive },
+      roomId: { stringValue: isLive ? roomId : '' },
+      title: { stringValue: title },
+      currentViewers: { integerValue: String(currentViewers) },
+      likes: { integerValue: String(likes) },
+      totalLikes: { integerValue: String(likes) },
+      shares: { integerValue: String(shares) },
+      totalShares: { integerValue: String(shares) },
+      shareCount: { integerValue: String(shares) },
+      totalUser: { integerValue: String(totalUser) },
+      cumulative_audience: { integerValue: String(totalUser) },
+      newFollowers: { integerValue: String(newFollowers) },
+      followers: { integerValue: String(newFollowers) },
+      lastDetected: { stringValue: new Date().toISOString() }
+    };
+
+    const updateMaskFields = [
+      'tiktokLiveAPI.isLive',
+      'tiktokLiveAPI.roomId',
+      'tiktokLiveAPI.title',
+      'tiktokLiveAPI.currentViewers',
+      'tiktokLiveAPI.likes',
+      'tiktokLiveAPI.totalLikes',
+      'tiktokLiveAPI.shares',
+      'tiktokLiveAPI.totalShares',
+      'tiktokLiveAPI.shareCount',
+      'tiktokLiveAPI.totalUser',
+      'tiktokLiveAPI.cumulative_audience',
+      'tiktokLiveAPI.newFollowers',
+      'tiktokLiveAPI.followers',
+      'tiktokLiveAPI.lastDetected',
+      'tiktokAPI.isLive',
+      'isLive'
+    ];
+
+    const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
+    const PROJECT_ID = 'lumina-analytics-kd-2026';
+    const mask = updateMaskFields.map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&');
+    const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${targetUserId}?${mask}&key=${API_KEY}`;
+
+    await fetch(url, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          tiktokLiveAPI: {
+            mapValue: { fields }
+          },
+          'tiktokAPI.isLive': { booleanValue: isLive },
+          isLive: { booleanValue: isLive }
+        }
+      })
+    }).catch(() => {});
+  } catch (e) {
+    // Échec silencieux
+  }
 }
 
 /**
@@ -174,17 +254,9 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
     let response = null;
     const endpointUrl = `https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status?username=${encodeURIComponent(username)}&_t=${now}`;
 
-    // Standard GET request without custom headers that would trigger CORS preflight OPTIONS
+    // Requête HTTP GET vers le Webhook Edge Cloudflare (temps réel, bypass CORS, 24/7)
     try {
-      /*
-      response = await fetch(endpointUrl, {
-        signal: effectiveSignal,
-      });
-      */
-      // THE CLOUDFLARE WORKER IS BLOCKED BY TIKTOK CAPTCHA.
-      // CALLING IT CAUSES IT TO WRITE isLive: false AND 0s TO FIRESTORE, DESTROYING THE LIVE DASHBOARD.
-      // WE NOW RELY STRICTLY ON THE RENDER WORKER VIA WEBSOCKET/FIRESTORE.
-      throw new Error("Vérification via Cloudflare désactivée pour protéger les données du Worker.");
+      response = await fetch(endpointUrl, { signal: effectiveSignal });
     } finally {
       clearTimeout(timeoutId);
     }
@@ -297,6 +369,8 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
       };
 
       liveStatusCache.set(username, { data: liveResult, timestamp: now });
+      // Synchronisation autonome en arrière-plan vers Firestore
+      syncLiveToFirestore(liveResult).catch(() => {});
       return liveResult;
     }
 
@@ -319,6 +393,10 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
     };
 
     liveStatusCache.set(username, { data: offlineResult, timestamp: now });
+    // Synchronisation défensive vers Firestore si l'état précédent était en direct
+    if (cached?.data?.isLive) {
+      syncLiveToFirestore(offlineResult).catch(() => {});
+    }
     return offlineResult;
 
   } catch (err) {

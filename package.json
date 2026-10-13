@@ -8,7 +8,9 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "worker": "node worker/index.js",
+    "live:daemon": "node scripts/live-daemon.mjs"
   },
   "dependencies": {
     "@google-cloud/secret-manager": "^7.1.0",

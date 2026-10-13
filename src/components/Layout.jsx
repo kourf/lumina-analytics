@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { path: '/insights', icon: Sparkles, label: 'Assistant IA' },
 ];
 
-export const Layout = () => {
+export const Layout = ({ isTikTokLive = false }) => {
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       if ('theme' in localStorage) {
@@ -66,9 +66,22 @@ export const Layout = () => {
                   }`
                 }
               >
-                <Icon size={22} className="flex-shrink-0" />
-                <span className="font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap">
+                <div className="relative flex-shrink-0 flex items-center justify-center">
+                  <Icon size={22} />
+                  {isTikTokLive && item.path === '/tiktok' && (
+                    <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FE2C55] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#FE2C55]"></span>
+                    </span>
+                  )}
+                </div>
+                <span className="font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap flex items-center gap-2">
                   {item.label}
+                  {isTikTokLive && item.path === '/tiktok' && (
+                    <span className="text-[10px] font-black uppercase tracking-wider bg-[#FE2C55] text-white px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">
+                      LIVE
+                    </span>
+                  )}
                 </span>
               </NavLink>
             );
@@ -137,9 +150,20 @@ export const Layout = () => {
                 }
                 title={item.label}
               >
-                <Icon size={20} className="mb-0.5" />
-                <span className="text-[9px] font-semibold tracking-wide truncate w-full text-center">
+                <div className="relative flex items-center justify-center mb-0.5">
+                  <Icon size={20} />
+                  {isTikTokLive && item.path === '/tiktok' && (
+                    <span className="absolute -top-1 -right-1 flex h-2 w-2">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FE2C55] opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FE2C55]"></span>
+                    </span>
+                  )}
+                </div>
+                <span className="text-[9px] font-semibold tracking-wide truncate w-full text-center flex items-center justify-center gap-0.5">
                   {shortLabel}
+                  {isTikTokLive && item.path === '/tiktok' && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#FE2C55] animate-pulse shrink-0 inline-block" />
+                  )}
                 </span>
               </NavLink>
             );

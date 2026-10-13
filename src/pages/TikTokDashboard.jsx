@@ -5,54 +5,75 @@ import { TikTokLiveHub } from '../components/tiktok/TikTokLiveHub';
 import { TikTokVideoAnalytics } from '../components/tiktok/TikTokVideoAnalytics';
 import { TikTokCompetitorAnalysis } from '../components/tiktok/TikTokCompetitorAnalysis';
 import { TikTokRecentVideos } from '../components/tiktok/TikTokRecentVideos';
+import { TikTokSourcesLegendModal } from '../components/tiktok/TikTokSourcesLegendModal';
 import { useTikTokUnifiedData } from '../hooks/useTikTokUnifiedData';
+import { useTikTokLiveStatus } from '../hooks/useTikTokLiveStatus';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
-import { Users, Radio, ShieldAlert } from 'lucide-react';
+import { Users, Radio, ShieldAlert, HelpCircle } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 export const TikTokDashboard = ({ data, auth, liveData }) => {
   const [loading, setLoading] = useState(false);
+  const [showLegendModal, setShowLegendModal] = useState(false);
 
-  // Détection d'un état "zombie" (ex: session abandonnée depuis plus de 24h)
-  const rawStartedAt = liveData?.started_at || liveData?.startedAt;
-  const startedAtMs = rawStartedAt ? new Date(rawStartedAt).getTime() : 0;
-  const isZombieSession = Boolean(
-    liveData?.isLive && startedAtMs > 0 && (Date.now() - startedAtMs) > 24 * 3600 * 1000
-  );
+  // Vérification temps réel autonome via Edge Gateway TikTok (interrogation toutes les 30s)
+  const liveChecker = useTikTokLiveStatus('karam.drame', {
+    autoCheck: true,
+    pollInterval: 30000,
+    initialData: liveData
+  });
 
-  // Détermination de l'état Live réel et vérifié
-  // Priorité absolue : On se fie STRICTEMENT à la base de données mise à jour par le Worker Node.js
-  const effectiveIsLive = Boolean(liveData?.isLive && !isZombieSession);
+  // Détection d'un état Live réel via la source faisant autorité : l'Edge Gateway TikTok
+  const isCheckerDone = Boolean(liveChecker.lastChecked);
+  const isConfirmedLive = Boolean(liveChecker.isLive || liveChecker.status === 'LIVE');
+  const isConfirmedOffline = Boolean(liveChecker.status === 'OFFLINE' || (isCheckerDone && !liveChecker.isLive));
 
-  // Nettoyage automatique en arrière-plan si une session zombie est détectée
+  // Détermination de l'état Live réel et vérifié :
+  // Si le checker Edge confirme OFFLINE -> l'état est obligatoirement OFFLINE (aucun état zombie permis).
+  // Si le checker Edge confirme LIVE -> l'état est LIVE.
+  // En phase transitoire initiale uniquement, si Firestore est déjà marqué isLive, on temporise.
+  const effectiveIsLive = isConfirmedLive ? true : (isConfirmedOffline ? false : Boolean(liveData?.isLive));
+
+  // Auto-réparation Firestore : si le Edge Gateway confirme que le live est terminé mais que Firestore était resté sur isLive: true
   useEffect(() => {
-    if (isZombieSession) {
+    if (isConfirmedOffline && liveData?.isLive) {
       import('firebase/firestore').then(({ doc, updateDoc }) => {
-        // Import db dynamic
         import('../config/firebase').then(({ db }) => {
           updateDoc(doc(db, 'users', 'karamokho'), {
             'tiktokLiveAPI.isLive': false,
+            'tiktokLiveAPI.status': 'OFFLINE',
             'tiktokLiveAPI.currentViewers': 0,
-            'tiktokLiveAPI.started_at': null,
-            'tiktokLiveAPI.startedAt': null,
+            'tiktokLiveAPI.viewerCount': 0,
             'tiktokLiveAPI.roomId': '',
-            'tiktokLiveAPI.durationStr': '00:00:00'
+            'tiktokAPI.isLive': false,
+            'isLive': false
           }).catch(() => {});
         });
       }).catch(() => {});
     }
-  }, [isZombieSession]);
+  }, [isConfirmedOffline, liveData?.isLive]);
 
-  // Résolution stricte des métriques en direct (source de vérité : Firestore en temps réel & WebSocket)
-  const resolvedCurrentViewers = effectiveIsLive ? Number(liveData?.currentViewers || 0) : 0;
+  // Résolution stricte des métriques en direct (source de vérité : Edge Gateway & Firestore)
+  const resolvedCurrentViewers = effectiveIsLive 
+    ? (liveChecker.viewerCount > 0 ? liveChecker.viewerCount : Number(liveData?.currentViewers || liveData?.viewerCount || 0))
+    : 0;
 
-  const resolvedPeakViewers = effectiveIsLive ? Math.max(Number(liveData?.peakViewers || 0), Number(liveData?.currentViewers || 0)) : 0;
+  const resolvedPeakViewers = effectiveIsLive 
+    ? Math.max(Number(liveData?.peakViewers || 0), Number(liveChecker.viewerCount || 0), resolvedCurrentViewers)
+    : 0;
 
-  const resolvedStartedAt = effectiveIsLive ? rawStartedAt : null;
+  // Préservation absolue du timestamp réel de début du direct
+  const resolvedStartedAt = effectiveIsLive 
+    ? (liveData?.started_at || liveData?.startedAt || liveChecker.startedAt || null) 
+    : null;
 
-  const resolvedRoomId = effectiveIsLive ? (liveData?.roomId || '') : '';
+  const resolvedRoomId = effectiveIsLive 
+    ? (liveChecker.roomId || liveData?.roomId || '') 
+    : '';
 
-  const resolvedTotalUser = effectiveIsLive ? Number(liveData?.totalUser || liveData?.total_user || 0) : 0;
+  const resolvedTotalUser = effectiveIsLive 
+    ? Number(liveData?.cumulative_audience || liveData?.totalUser || liveData?.total_user || 0) 
+    : 0;
 
   // Source unique de vérité unifiée avec live status vérifié dynamiquement
   const unifiedData = useTikTokUnifiedData(data, {
@@ -62,11 +83,12 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     currentViewers: resolvedCurrentViewers,
     peakViewers: resolvedPeakViewers,
     totalUser: resolvedTotalUser,
+    cumulative_audience: resolvedTotalUser,
     started_at: resolvedStartedAt,
     startedAt: resolvedStartedAt,
-    lastDetected: liveData?.lastDetected,
+    lastDetected: liveData?.lastDetected || liveChecker.lastChecked,
     liveStatus: effectiveIsLive ? 'LIVE' : 'OFFLINE',
-    isRefreshing: loading
+    isRefreshing: loading || liveChecker.isRefreshing
   });
 
   // Forcer le Dark Mode absolu pour le Dashboard TikTok Cyber Neon
@@ -78,9 +100,8 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   const handleManualRefresh = async () => {
     try {
       setLoading(true);
+      await liveChecker.refresh();
       window.dispatchEvent(new CustomEvent('tiktok:refresh'));
-
-      await verifiedLive.refresh();
     } catch (e) {
       console.error("Erreur de synchronisation TikTok :", e);
     } finally {
@@ -100,6 +121,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
           user={unifiedData} 
           isLive={effectiveIsLive} 
           onRefresh={handleManualRefresh} 
+          isRefreshing={loading || liveChecker.isRefreshing}
         />
       </div>
 
@@ -122,14 +144,26 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
                 currentViewers: resolvedCurrentViewers,
                 peakViewers: resolvedPeakViewers,
                 totalUser: resolvedTotalUser,
+                cumulative_audience: resolvedTotalUser,
+                likes: Number(liveData?.likes ?? liveData?.totalLikes ?? 0),
+                totalLikes: Number(liveData?.totalLikes ?? liveData?.likes ?? 0),
+                shares: Number(liveData?.shares ?? liveData?.totalShares ?? liveData?.shareCount ?? 0),
+                totalShares: Number(liveData?.totalShares ?? liveData?.shares ?? liveData?.shareCount ?? 0),
+                comments: Number(liveData?.comments ?? liveData?.totalComments ?? 0),
+                totalComments: Number(liveData?.totalComments ?? liveData?.comments ?? 0),
+                newFollowers: Number(liveData?.newFollowers ?? liveData?.followers ?? 0),
+                followers: Number(liveData?.followers ?? liveData?.newFollowers ?? 0),
+                profileFollowers: Number(unifiedData?.followers || data?.followers || 6392),
+                totalSubscribers: Number(unifiedData?.followers || data?.followers || 6392),
+                diamonds: Number(liveData?.diamonds ?? liveData?.totalDiamonds ?? 0),
+                totalDiamonds: Number(liveData?.totalDiamonds ?? liveData?.diamonds ?? 0),
                 started_at: resolvedStartedAt,
                 startedAt: resolvedStartedAt,
-                startedAt: resolvedStartedAt,
-                lastChecked: liveData?.lastDetected,
+                lastChecked: liveData?.lastDetected || liveChecker.lastChecked,
                 status: 'LIVE'
               }}
               onRefresh={handleManualRefresh}
-              isRefreshing={loading}
+              isRefreshing={loading || liveChecker.isRefreshing}
             />
           </ErrorBoundary>
         </section>
@@ -142,7 +176,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
           <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-[#25F4EE]/5 via-blue-500/5 to-purple-500/5 blur-3xl -mr-32 -mt-32 rounded-full pointer-events-none group-hover:opacity-100 opacity-60 transition-opacity duration-700"></div>
 
           <div className="relative z-10">
-            {/* Unifed Header */}
+            {/* Unified Header */}
             <div className="flex flex-col md:flex-row md:items-start justify-between gap-4 mb-8">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-[#111827] to-slate-900 border border-slate-700 dark:border-white/10 flex items-center justify-center shadow-lg">
@@ -160,6 +194,17 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
                   </p>
                 </div>
               </div>
+
+              {/* Bouton Légende des Données & Cadences */}
+              <button
+                type="button"
+                onClick={() => setShowLegendModal(true)}
+                className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-900/90 hover:bg-slate-800 text-slate-300 hover:text-white border border-slate-700/80 hover:border-cyan-500/40 transition-all text-xs font-semibold shadow-sm shrink-0 self-start md:self-center group"
+                title="Consulter l'origine de chaque donnée et sa cadence d'actualisation"
+              >
+                <HelpCircle className="w-4 h-4 text-[#25F4EE] group-hover:scale-110 transition-transform" />
+                <span>Origine des Données & Cadences</span>
+              </button>
             </div>
 
             <TikTokKpiCards tiktokData={unifiedData} />
@@ -199,12 +244,11 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
                 currentViewers: 0,
                 peakViewers: resolvedPeakViewers,
                 started_at: null,
-                started_at: null,
-                lastChecked: liveData?.lastDetected,
+                lastChecked: liveData?.lastDetected || liveChecker.lastChecked,
                 status: 'OFFLINE'
               }}
               onRefresh={handleManualRefresh}
-              isRefreshing={loading}
+              isRefreshing={loading || liveChecker.isRefreshing}
             />
           </ErrorBoundary>
         </section>
@@ -214,6 +258,12 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
       <section className="animate-fade-in-up w-full" style={{ animationDelay: '0.4s' }}>
         <TikTokRecentVideos recentVideos={unifiedData.recentVideos} />
       </section>
+
+      {/* Modal Pédagogique des Sources & Cadences */}
+      <TikTokSourcesLegendModal
+        isOpen={showLegendModal}
+        onClose={() => setShowLegendModal(false)}
+      />
 
     </div>
   );

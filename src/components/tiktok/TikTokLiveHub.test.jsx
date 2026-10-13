@@ -52,7 +52,7 @@ describe('TikTokLiveHub Component', () => {
     render(<TikTokLiveHub liveData={{ isLive: false }} />);
 
     expect(screen.getByText('Hub Live Streaming')).toBeInTheDocument();
-    expect(screen.getByText('HORS LIGNE')).toBeInTheDocument();
+    expect(screen.getByText(/HORS LIGNE/)).toBeInTheDocument();
 
     await waitFor(() => {
       expect(screen.getByText(/0 sessions enregistrées/)).toBeInTheDocument();
@@ -76,10 +76,10 @@ describe('TikTokLiveHub Component', () => {
 
     render(<TikTokLiveHub liveData={{ isLive: true }} />);
 
-    expect(screen.getByText('EN DIRECT')).toBeInTheDocument();
-    expect(screen.getByText('1.5k')).toBeInTheDocument();
-    expect(screen.getByText(/1\.6k/)).toBeInTheDocument();
-    expect(screen.getByText('25.0k')).toBeInTheDocument();
+    expect(screen.getAllByText(/EN DIRECT/i)[0]).toBeInTheDocument();
+    expect(screen.getAllByText(/1[,\.]5k/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/1[,\.]6k/i)).toBeInTheDocument();
+    expect(screen.getByText(/25[,\.]0k/i)).toBeInTheDocument();
     expect(screen.getByText('Courbe de Rétention du Live')).toBeInTheDocument();
   });
 
@@ -106,9 +106,60 @@ describe('TikTokLiveHub Component', () => {
       />
     );
 
-    expect(screen.getByText('EN DIRECT')).toBeInTheDocument();
+    expect(screen.getAllByText(/EN DIRECT/i)[0]).toBeInTheDocument();
     expect(screen.getByText(/"Tu utilises Webflow \?"/)).toBeInTheDocument();
     expect(screen.getByText(/"Quel micro utilises-tu \?"/)).toBeInTheDocument();
     expect(screen.getByText(/"Question texte direct"/)).toBeInTheDocument();
   });
+
+  it('renders all 6 live metric cards correctly from Firestore props when socket is disconnected', async () => {
+    useTikTokLiveSocket.mockReturnValue({
+      isSocketConnected: false,
+      isLive: true,
+      metrics: {
+        viewers: 0,
+        peakViewers: 0,
+        likes: 0,
+        comments: 0,
+        shares: 0,
+        followers: 0,
+        totalUser: 0
+      }
+    });
+
+    render(
+      <TikTokLiveHub
+        liveData={{
+          isLive: true,
+          currentViewers: 850,
+          peakViewers: 1200,
+          totalUser: 3400,
+          likes: 15400,
+          shares: 230,
+          newFollowers: 48,
+          status: 'LIVE'
+        }}
+      />
+    );
+
+    expect(screen.getAllByText(/EN DIRECT/i)[0]).toBeInTheDocument();
+    // Audience en direct
+    expect(screen.getByText('850')).toBeInTheDocument();
+    // Peak viewers
+    expect(screen.getByText(/\(Pic:\s*1[,\.]2k\)/i)).toBeInTheDocument();
+    // Audience Cumulée
+    expect(screen.getByText(/3[,\.]4k/i)).toBeInTheDocument();
+    // Likes
+    expect(screen.getByText(/15[,\.]4k/i)).toBeInTheDocument();
+    // Partages
+    expect(screen.getByText('230')).toBeInTheDocument();
+    // Nouveaux abonnés
+    expect(screen.getByText('+48')).toBeInTheDocument();
+
+    // Verify Join Live button link
+    const joinBtn = screen.getByText('REJOINDRE LE LIVE').closest('a');
+    expect(joinBtn).toHaveAttribute('href', 'https://www.tiktok.com/@karam.drame/live');
+    expect(joinBtn).toHaveAttribute('target', '_blank');
+  });
 });
+

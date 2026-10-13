@@ -558,9 +558,9 @@ exports.forceSyncTikTok = functions.https.onRequest(async (req, res) => {
  * Synchronisation Périodique Automatique du Catalogue TikTok (Toutes les 2 heures)
  * 100% Autonome, sans action manuelle requise, 0,00 € de coût.
  */
-exports.syncTikTokCatalogScheduled = onSchedule({ schedule: "every 2 hours", timeoutSeconds: 300, memory: "256MiB" }, async (event) => {
+exports.syncTikTokCatalogScheduled = onSchedule({ schedule: "every 30 minutes", timeoutSeconds: 300, memory: "256MiB" }, async (event) => {
   try {
-    console.log("[Scheduler] 🔄 Synchronisation automatique du catalogue TikTok lancée...");
+    console.log("[Scheduler] 🔄 Synchronisation automatique du catalogue TikTok lancée (cadence 30 min)...");
     const db = getFirestore();
     const userRef = db.collection('users').doc('karamokho');
     const docSnap = await userRef.get();
@@ -658,9 +658,14 @@ exports.syncTikTokCatalogScheduled = onSchedule({ schedule: "every 2 hours", tim
         totalVideosAnalyzed: allVideos.length
       };
 
+      const prevTiktokAPI = docSnap.data().tiktokAPI || {};
       await userRef.set({
         tiktokAPI: {
+          ...prevTiktokAPI,
+          followers: prevTiktokAPI.followers || 6392,
+          likes: prevTiktokAPI.likes || 17100,
           recentVideos: allVideos,
+          totalVideos: allVideos.length,
           views: totalViews,
           shares: totalShares,
           totalLikes: totalLikes,

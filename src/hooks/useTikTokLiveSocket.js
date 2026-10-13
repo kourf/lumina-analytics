@@ -90,8 +90,41 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
       if (fallbackData.roomId || fallbackData.session_id) {
         setSessionId(fallbackData.session_id || fallbackData.roomId);
       }
+      setMetrics(prev => ({
+        ...prev,
+        viewers: fallbackData.currentViewers !== undefined ? Number(fallbackData.currentViewers) : (fallbackData.viewerCount !== undefined ? Number(fallbackData.viewerCount) : prev.viewers),
+        peakViewers: fallbackData.peakViewers !== undefined ? Math.max(Number(fallbackData.peakViewers), prev.peakViewers) : prev.peakViewers,
+        totalUser: fallbackData.totalUser !== undefined ? Number(fallbackData.totalUser) : (fallbackData.cumulative_audience !== undefined ? Number(fallbackData.cumulative_audience) : prev.totalUser),
+        likes: (fallbackData.likes !== undefined || fallbackData.totalLikes !== undefined) ? Number(fallbackData.likes ?? fallbackData.totalLikes) : prev.likes,
+        comments: (fallbackData.comments !== undefined || fallbackData.totalComments !== undefined) ? Number(fallbackData.comments ?? fallbackData.totalComments) : prev.comments,
+        shares: (fallbackData.shares !== undefined || fallbackData.totalShares !== undefined) ? Number(fallbackData.shares ?? fallbackData.totalShares) : prev.shares,
+        followers: (fallbackData.newFollowers !== undefined || fallbackData.followers !== undefined) ? Number(fallbackData.newFollowers ?? fallbackData.followers) : prev.followers,
+        diamonds: (fallbackData.totalDiamonds !== undefined || fallbackData.diamonds !== undefined) ? Number(fallbackData.totalDiamonds ?? fallbackData.diamonds) : prev.diamonds,
+        topQuestions: Array.isArray(fallbackData.topQuestions) && fallbackData.topQuestions.length > 0 ? fallbackData.topQuestions : prev.topQuestions,
+        topContributors: Array.isArray(fallbackData.topContributors) && fallbackData.topContributors.length > 0 ? fallbackData.topContributors : (Array.isArray(fallbackData.topCommenters) && fallbackData.topCommenters.length > 0 ? fallbackData.topCommenters : prev.topContributors)
+      }));
+      if (Array.isArray(fallbackData.timeline) && fallbackData.timeline.length > 0) {
+        setLiveTimeline(fallbackData.timeline);
+      }
+      if (Array.isArray(fallbackData.recentComments) && fallbackData.recentComments.length > 0) {
+        setChatMessages(prev => prev.length === 0 ? fallbackData.recentComments : prev);
+      }
     }
-  }, [fallbackData?.isLive, fallbackData?.started_at, fallbackData?.startedAt, fallbackData?.roomId]);
+  }, [
+    fallbackData?.isLive,
+    fallbackData?.started_at,
+    fallbackData?.startedAt,
+    fallbackData?.roomId,
+    fallbackData?.currentViewers,
+    fallbackData?.viewerCount,
+    fallbackData?.peakViewers,
+    fallbackData?.likes,
+    fallbackData?.totalLikes,
+    fallbackData?.shares,
+    fallbackData?.newFollowers,
+    fallbackData?.followers,
+    fallbackData?.totalUser
+  ]);
 
   // =========================================================================
   // 1. MÉCANISME DE SECOURS TEMPS RÉEL VIA FIRESTORE onSnapshot
@@ -135,12 +168,12 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
             ...prev,
             viewers: firestoreIsLive ? Number(liveApi.currentViewers || liveApi.viewerCount || 0) : 0,
             peakViewers: firestoreIsLive ? Math.max(Number(liveApi.peakViewers || 0), Number(liveApi.currentViewers || 0), prev.peakViewers) : 0,
-            likes: Number(liveApi.likes ?? liveApi.totalLikes ?? prev.likes),
-            comments: Number(liveApi.comments ?? liveApi.totalComments ?? prev.comments),
-            shares: Number(liveApi.shares ?? liveApi.totalShares ?? prev.shares),
-            followers: Number(liveApi.newFollowers ?? liveApi.followers ?? prev.followers),
+            likes: Number(liveApi.likes ?? liveApi.totalLikes ?? (firestoreIsLive ? prev.likes : 0)),
+            comments: Number(liveApi.comments ?? liveApi.totalComments ?? (firestoreIsLive ? prev.comments : 0)),
+            shares: Number(liveApi.shares ?? liveApi.totalShares ?? liveApi.shareCount ?? (firestoreIsLive ? prev.shares : 0)),
+            followers: Number(liveApi.newFollowers ?? liveApi.followers ?? (firestoreIsLive ? prev.followers : 0)),
             diamonds: Number(liveApi.totalDiamonds ?? liveApi.diamonds ?? prev.diamonds),
-            totalUser: Number(liveApi.totalUser ?? liveApi.total_user ?? liveApi.enter_count ?? prev.totalUser),
+            totalUser: Number(liveApi.totalUser ?? liveApi.total_user ?? liveApi.cumulative_audience ?? liveApi.enter_count ?? (firestoreIsLive ? prev.totalUser : 0)),
             topContributor: liveApi.topContributor || prev.topContributor,
             topDonator: liveApi.topDonator || prev.topDonator,
             topQuestions: (Array.isArray(liveApi.topQuestions) && liveApi.topQuestions.length > 0)

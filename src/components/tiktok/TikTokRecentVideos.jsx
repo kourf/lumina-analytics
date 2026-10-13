@@ -79,7 +79,7 @@ export const TikTokRecentVideos = ({ recentVideos = [] }) => {
                   </span>
                 </div>
                 <p className="text-xs text-slate-600 dark:text-gray-400 mt-1">
-                  Synchronisation continue et autonome 24/7 (toutes les 1 à 2h) • 100% à jour
+                  Synchronisation continue et autonome 24/7 (toutes les 30 min) • 100% à jour
                 </p>
               </div>
             </div>

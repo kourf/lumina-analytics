@@ -18,11 +18,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install Firebase dependencies
-        run: npm install firebase
+      - name: Install Dependencies
+        run: npm install firebase dotenv
 
-      - name: Execute Live TikTok Sync to Firestore
+      - name: Execute Full TikTok Sync (Catalog, Metrics & Live) to Firestore
         env:
-          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY }}
-          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET }}
-        run: node scripts/detect_live_profile.mjs
+          TIKTOK_CLIENT_KEY: ${{ secrets.TIKTOK_CLIENT_KEY || 'sbawn81yw1l5ityq7b' }}
+          TIKTOK_CLIENT_SECRET: ${{ secrets.TIKTOK_CLIENT_SECRET || 'MiErBVWIjZAfzhLX6QMCCIu9qlxvLaR1' }}
+        run: node scripts/sync-tiktok.mjs
