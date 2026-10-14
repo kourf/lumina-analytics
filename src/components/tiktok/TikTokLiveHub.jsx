@@ -20,8 +20,10 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     } catch {}
     return null;
   };
-  const storedLiveRef = React.useRef(getStoredLiveState());
-  const initialStored = storedLiveRef.current;
+  const rawStored = getStoredLiveState();
+  const activeRoomId = propLiveData?.roomId || '';
+  const isStoredValidForRoom = Boolean(activeRoomId && rawStored?.roomId && String(activeRoomId) === String(rawStored.roomId));
+  const initialStored = isStoredValidForRoom ? rawStored : null;
 
   const socket = useTikTokLiveSocket(undefined, propLiveData);
   const isRecentStoredLive = Boolean(initialStored?.isLive && (Date.now() - (initialStored.timestamp || 0) < 6 * 3600 * 1000));
@@ -34,33 +36,26 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const [activeAiTab, setActiveAiTab] = useState('questions'); // 'questions' | 'topViewers' | 'chat'
 
   const getInitialStartMs = () => {
-    const candidates = [
-      propLiveData?.started_at,
-      propLiveData?.startedAt,
-      initialStored?.startedAt,
-      initialStored?.started_at
-    ].filter(Boolean);
-
-    let earliestMs = null;
-    for (const raw of candidates) {
-      let ms = 0;
-      if (typeof raw === 'number') {
-        ms = raw > 1e11 ? raw : raw * 1000;
-      } else {
-        const num = Number(raw);
-        ms = (!isNaN(num) && num > 1e9 && num < 1e11) ? num * 1000 : new Date(raw).getTime();
-      }
-      if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 72 * 3600 * 1000) {
-        if (!earliestMs || ms < earliestMs) {
-          earliestMs = ms;
-        }
-      }
+    // 1. Priorité absolue au started_at certifié de la session active courante (< 18h)
+    const pStart = propLiveData?.started_at || propLiveData?.startedAt;
+    if (pStart) {
+      const ms = typeof pStart === 'number' ? (pStart > 1e11 ? pStart : pStart * 1000) : new Date(pStart).getTime();
+      if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) return ms;
     }
-    return earliestMs;
+    const sockStart = socket.startedAt;
+    if (sockStart) {
+      const ms = typeof sockStart === 'number' ? (sockStart > 1e11 ? sockStart : sockStart * 1000) : new Date(sockStart).getTime();
+      if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) return ms;
+    }
+    if (initialStored?.startedAt) {
+      const ms = new Date(initialStored.startedAt).getTime();
+      if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) return ms;
+    }
+    return null;
   };
 
   const lockedStartMsRef = React.useRef(getInitialStartMs());
-  const currentRoomIdRef = React.useRef(propLiveData?.roomId || initialStored?.roomId || '');
+  const currentRoomIdRef = React.useRef(activeRoomId || initialStored?.roomId || '');
 
   const formatDurationSec = (totalSec) => {
     const s = Math.max(0, Math.floor(totalSec));
@@ -84,7 +79,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
         return formatDurationSec((endMs - start) / 1000);
       }
     }
-    return '03:25:31';
+    return propLiveData?.durationStr || propLiveData?.duration || '00:00:00';
   };
 
   const [liveDurationTicker, setLiveDurationTicker] = useState(() => {
@@ -102,7 +97,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     let interval = null;
     const currentRoom = propLiveData?.roomId || socket.sessionId || initialStored?.roomId || '';
     if (currentRoom) {
-      if (currentRoomIdRef.current && currentRoomIdRef.current !== currentRoom) {
+      if (currentRoomIdRef.current && String(currentRoomIdRef.current) !== String(currentRoom)) {
         // Changement réel et vérifié de session live
         lockedStartMsRef.current = null;
       }
@@ -110,31 +105,35 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     }
 
     if (isLive) {
-      const candidates = [
-        socket.startedAt,
-        propLiveData?.started_at,
-        propLiveData?.startedAt,
-        initialStored?.startedAt,
-        initialStored?.started_at
-      ].filter(Boolean);
-
-      for (const raw of candidates) {
-        let candidateStartMs = 0;
-        if (typeof raw === 'number') {
-          candidateStartMs = raw > 1e11 ? raw : raw * 1000;
-        } else if (typeof raw?.toMillis === 'function') {
-          candidateStartMs = raw.toMillis();
-        } else if (typeof raw?.seconds === 'number') {
-          candidateStartMs = raw.seconds * 1000;
-        } else {
-          const num = Number(raw);
-          candidateStartMs = (!isNaN(num) && num > 1e9 && num < 1e11) ? num * 1000 : new Date(raw).getTime();
+      // Priorité absolue au started_at certifié de la session courante
+      const propStart = propLiveData?.started_at || propLiveData?.startedAt;
+      if (propStart) {
+        const ms = typeof propStart === 'number' ? (propStart > 1e11 ? propStart : propStart * 1000) : new Date(propStart).getTime();
+        if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) {
+          lockedStartMsRef.current = ms;
         }
+      }
 
-        const isSensible = !isNaN(candidateStartMs) && candidateStartMs > 0 && (Date.now() - candidateStartMs) < 72 * 3600 * 1000 && (Date.now() - candidateStartMs) >= -300000;
-        if (isSensible) {
-          if (!lockedStartMsRef.current || candidateStartMs < lockedStartMsRef.current) {
+      if (!lockedStartMsRef.current) {
+        const candidates = [
+          socket.startedAt,
+          initialStored?.startedAt,
+          initialStored?.started_at
+        ].filter(Boolean);
+
+        for (const raw of candidates) {
+          let candidateStartMs = 0;
+          if (typeof raw === 'number') {
+            candidateStartMs = raw > 1e11 ? raw : raw * 1000;
+          } else {
+            const num = Number(raw);
+            candidateStartMs = (!isNaN(num) && num > 1e9 && num < 1e11) ? num * 1000 : new Date(raw).getTime();
+          }
+
+          const isSensible = !isNaN(candidateStartMs) && candidateStartMs > 0 && (Date.now() - candidateStartMs) < 18 * 3600 * 1000;
+          if (isSensible) {
             lockedStartMsRef.current = candidateStartMs;
+            break;
           }
         }
       }
@@ -242,7 +241,20 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     followers: Number(propLiveData?.followers || socket.metrics?.followers || initialStored?.followers || 0)
   });
 
-  // Résolution robuste des métriques : WebSocket direct si connecté, sinon Fallback Firestore/props
+  // Détection d'un basculement de salon Live : Réinitialisation stricte du cache local des métriques
+  const activeRoomIdForMetrics = propLiveData?.roomId || socket.sessionId || '';
+  if (activeRoomIdForMetrics && currentRoomIdRef.current && String(activeRoomIdForMetrics) !== String(currentRoomIdRef.current)) {
+    lastKnownMetricsRef.current = {
+      viewers: 0,
+      peakViewers: 0,
+      totalUser: 0,
+      likes: 0,
+      comments: 0,
+      shares: 0,
+      followers: 0
+    };
+  }
+
   // Résolution robuste des métriques : WebSocket direct si connecté, sinon Fallback Firestore/props
   const rawCurrentViewers = isLive
     ? (socket.isSocketConnected && Number(socket.metrics?.viewers || 0) > 0
@@ -262,7 +274,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     Number(propLiveData?.peakViewers || 0),
     currentViewers,
     lastKnownMetricsRef.current.peakViewers,
-    35
+    0
   );
   if (rawPeakViewers > 0) {
     lastKnownMetricsRef.current.peakViewers = rawPeakViewers;
@@ -286,8 +298,8 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   if (rawTotalUser > 0) {
     lastKnownMetricsRef.current.totalUser = Math.max(lastKnownMetricsRef.current.totalUser, rawTotalUser);
   }
-  // Filet de sécurité certifié : minimum 1076 (valeur officielle TikTok stats.total_user)
-  const totalUser = Math.max(rawTotalUser, lastKnownMetricsRef.current.totalUser, peakViewers, currentViewers, 1076);
+  // Filet de sécurité certifié : valeur réelle de la room sans faux plancher
+  const totalUser = Math.max(rawTotalUser, lastKnownMetricsRef.current.totalUser, peakViewers, currentViewers, 0);
 
   const rawLikes = Number(
     (socket.isSocketConnected && Number(socket.metrics?.likes || 0) > 0 ? Number(socket.metrics.likes) : 0) ||

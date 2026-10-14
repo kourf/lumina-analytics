@@ -256,21 +256,31 @@ function processIncomingMessage(commentText, nickname, uniqueId) {
 }
 
 async function connectToLive() {
-  await initExistingData();
-
   try {
     console.log(`[Lumina Daemon] Vérification du flux TikTok Live pour @${TIKTOK_USERNAME}...`);
     connection = new TikTokLiveConnection(TIKTOK_USERNAME, { processInitialData: true });
 
     const state = await connection.connect();
     isConnected = true;
-    stateData.roomId = state.roomId || (state.roomInfo?.data?.id_str || state.roomInfo?.id_str || 'live_stream');
+    const detectedRoomId = state.roomId || (state.roomInfo?.data?.id_str || state.roomInfo?.id_str || 'live_stream');
+
+    // Réinitialisation stricte en cas de nouvelle session live
+    if (stateData.roomId && String(stateData.roomId) !== String(detectedRoomId)) {
+      console.log(`[Lumina Daemon] 🔄 Nouveau salon détecté (${detectedRoomId} vs ancien ${stateData.roomId}). Réinitialisation de l'état.`);
+      stateData = getInitialState();
+    }
+
+    stateData.roomId = detectedRoomId;
     stateData.isLive = true;
-    if (!stateData.started_at) {
+
+    const createTime = state.roomInfo?.data?.create_time || state.roomInfo?.create_time;
+    if (createTime && typeof createTime === 'number' && createTime > 1e9) {
+      stateData.started_at = new Date(createTime * 1000).toISOString();
+    } else if (!stateData.started_at) {
       stateData.started_at = new Date().toISOString();
     }
 
-    console.log(`[Lumina Daemon] 🔴 LIVE EN DIRECT DÉTECTÉ ! Room ID: ${stateData.roomId}`);
+    console.log(`[Lumina Daemon] 🔴 LIVE EN DIRECT DÉTECTÉ ! Room ID: ${stateData.roomId}, Début: ${stateData.started_at}`);
 
     if (state.roomInfo?.data?.user_count) {
       stateData.currentViewers = state.roomInfo.data.user_count;

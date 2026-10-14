@@ -13,6 +13,8 @@ async function updateFirestoreLive(liveData) {
     const totalUser = isLive ? Number(liveData.totalUser || liveData.cumulative_audience || 0) : 0;
     const newFollowers = isLive ? Number(liveData.followers || liveData.newFollowers || 0) : 0;
 
+    const startedAt = isLive && (liveData.startedAt || liveData.started_at) ? String(liveData.startedAt || liveData.started_at) : null;
+
     const liveApiFields = {
       isLive: { booleanValue: isLive },
       roomId: { stringValue: isLive ? roomId : '' },
@@ -29,6 +31,11 @@ async function updateFirestoreLive(liveData) {
       followers: { integerValue: String(newFollowers) },
       lastDetected: { stringValue: new Date().toISOString() }
     };
+
+    if (startedAt) {
+      liveApiFields.startedAt = { stringValue: startedAt };
+      liveApiFields.started_at = { stringValue: startedAt };
+    }
 
     const fieldPaths = [
       'tiktokLiveAPI.isLive',
@@ -48,6 +55,10 @@ async function updateFirestoreLive(liveData) {
       'tiktokAPI.isLive',
       'isLive'
     ];
+
+    if (startedAt) {
+      fieldPaths.push('tiktokLiveAPI.startedAt', 'tiktokLiveAPI.started_at');
+    }
 
     const updateMask = fieldPaths.map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
     const url = `${FIRESTORE_URL}?${updateMask}&key=${API_KEY}`;
@@ -178,7 +189,7 @@ export default {
               const isLive = room.status === 2;
               const stats = room.stats || {};
               const currentViewers = isLive ? Number(room.user_count || 0) : 0;
-              const totalUser = Number(stats.total_user || 0);
+              const totalUser = Number(stats.total_user || stats.enter_count || 0);
               const followers = Number(stats.follow_count || 0);
               const realLikes = Number(stats.like_count || stats.digg_count || room.like_count || 0);
               const realComments = Number(stats.comment_count || 0);

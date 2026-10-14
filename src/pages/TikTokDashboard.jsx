@@ -36,11 +36,19 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     } catch {}
     return null;
   };
-  const storedLiveInitial = getStoredLiveState();
+  const rawStoredLive = getStoredLiveState();
+  const currentActiveRoom = liveChecker.roomId || liveData?.roomId || '';
+  const isStoredMatchingRoom = Boolean(currentActiveRoom && rawStoredLive?.roomId && String(currentActiveRoom) === String(rawStoredLive.roomId));
+  const storedLiveInitial = isStoredMatchingRoom ? rawStoredLive : null;
 
   const getEarliestStartedAt = () => {
     const d1 = liveData?.started_at || liveData?.startedAt;
     const d2 = storedLiveInitial?.startedAt || storedLiveInitial?.started_at;
+    // Si d1 provient d'une session active aujourd'hui (< 18h), lui donner la priorité absolue
+    if (d1) {
+      const t1 = new Date(d1).getTime();
+      if (!isNaN(t1) && (Date.now() - t1) < 18 * 3600 * 1000) return d1;
+    }
     if (d1 && d2) {
       const t1 = new Date(d1).getTime();
       const t2 = new Date(d2).getTime();
@@ -57,8 +65,25 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     shares: Number(liveData?.shares || liveData?.totalShares || storedLiveInitial?.shares || 0),
     comments: Number(liveData?.comments || storedLiveInitial?.comments || 0),
     startedAt: getEarliestStartedAt(),
-    roomId: liveData?.roomId || storedLiveInitial?.roomId || ''
+    roomId: currentActiveRoom || storedLiveInitial?.roomId || ''
   });
+
+  // Détection d'un basculement de salon Live : Réinitialisation stricte et immédiate des métriques
+  if (currentActiveRoom && lastPositiveMetrics.current.roomId && String(currentActiveRoom) !== String(lastPositiveMetrics.current.roomId)) {
+    lastPositiveMetrics.current = {
+      viewers: 0,
+      peakViewers: 0,
+      totalUser: 0,
+      likes: 0,
+      shares: 0,
+      comments: 0,
+      startedAt: liveData?.started_at || liveData?.startedAt || liveChecker.startedAt || null,
+      roomId: currentActiveRoom
+    };
+    try {
+      localStorage.removeItem('lumina_live_state');
+    } catch {}
+  }
 
   // Compteur d'échecs consécutifs pour éviter les faux négatifs OFFLINE
   const offlineFailureCountRef = React.useRef(0);
@@ -116,28 +141,23 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     ? Math.max(rawPeakViewers, lastPositiveMetrics.current.peakViewers) 
     : 0;
 
-  // Préservation absolue du timestamp réel le plus ancien du direct (TikTok create_time / Firestore)
+  // Préservation absolue du timestamp réel authentique du direct (TikTok create_time / Firestore)
   const incomingStartedAt = liveData?.started_at || liveData?.startedAt || liveChecker.startedAt || null;
   if (incomingStartedAt) {
-    if (!lastPositiveMetrics.current.startedAt) {
+    const incTime = new Date(incomingStartedAt).getTime();
+    if (!isNaN(incTime) && (Date.now() - incTime) < 18 * 3600 * 1000) {
       lastPositiveMetrics.current.startedAt = incomingStartedAt;
-    } else {
-      const incTime = new Date(incomingStartedAt).getTime();
-      const curTime = new Date(lastPositiveMetrics.current.startedAt).getTime();
-      if (!isNaN(incTime) && incTime > 0 && incTime < curTime) {
-        lastPositiveMetrics.current.startedAt = incomingStartedAt;
-      }
     }
-    if (liveChecker.roomId || liveData?.roomId) {
-      lastPositiveMetrics.current.roomId = liveChecker.roomId || liveData?.roomId || '';
+    if (currentActiveRoom) {
+      lastPositiveMetrics.current.roomId = currentActiveRoom;
     }
   }
 
   const resolvedStartedAt = lastPositiveMetrics.current.startedAt || incomingStartedAt || null;
 
-  const resolvedRoomId = liveChecker.roomId || liveData?.roomId || lastPositiveMetrics.current.roomId || '';
+  const resolvedRoomId = currentActiveRoom || lastPositiveMetrics.current.roomId || '';
 
-  // Audience cumulée (total_user / enter_count) avec filet de sécurité
+  // Audience cumulée (total_user / enter_count) avec filet de sécurité par salon
   const rawTotalUser = Number(
     liveData?.cumulative_audience || 
     liveData?.totalUser || 
@@ -413,9 +433,9 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
                 newFollowers: Number(liveData?.newFollowers ?? liveData?.followers ?? 0),
                 started_at: resolvedStartedAt,
                 startedAt: resolvedStartedAt,
-                ended_at: liveData?.ended_at || '2026-10-13T21:28:06.000Z',
-                duration: liveData?.duration || '03:25:31',
-                durationStr: liveData?.durationStr || '03:25:31',
+                ended_at: liveData?.ended_at || null,
+                duration: liveData?.duration || liveData?.durationStr || '00:00:00',
+                durationStr: liveData?.durationStr || liveData?.duration || '00:00:00',
                 lastChecked: liveData?.lastDetected || liveChecker.lastChecked,
                 status: 'OFFLINE'
               }}

@@ -43,31 +43,31 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
   };
   const storedLive = getStoredLiveState();
 
+  const incomingRoomId = fallbackData?.session_id || fallbackData?.sessionId || fallbackData?.roomId || null;
+  const isStoredSameRoom = Boolean(incomingRoomId && storedLive?.roomId && String(incomingRoomId) === String(storedLive.roomId));
+  const validStored = isStoredSameRoom ? storedLive : null;
+
   // États de connectivité et de source active
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [dataSource, setDataSource] = useState('initializing'); // 'websocket' | 'firestore' | 'fallback'
 
   // Données Live fondamentales
   const [isLive, setIsLive] = useState(Boolean(fallbackData?.isLive));
-  const [sessionId, setSessionId] = useState(fallbackData?.session_id || fallbackData?.sessionId || fallbackData?.roomId || storedLive?.roomId || null);
+  const [sessionId, setSessionId] = useState(incomingRoomId || storedLive?.roomId || null);
+  const activeRoomIdRef = useRef(incomingRoomId || storedLive?.roomId || null);
+
   const [startedAt, setStartedAt] = useState(() => {
-    const raw = fallbackData?.startedAt || fallbackData?.started_at || storedLive?.startedAt;
-    if (storedLive?.startedAt && raw) {
-      return new Date(storedLive.startedAt).getTime() <= new Date(raw).getTime()
-        ? storedLive.startedAt
-        : raw;
-    }
-    return raw || null;
+    return fallbackData?.startedAt || fallbackData?.started_at || validStored?.startedAt || null;
   });
 
-  // Métriques en temps réel unifiées (protégées par la mémoire persistante)
+  // Métriques en temps réel unifiées (protégées par la mémoire persistante partitionnée par roomId)
   const [metrics, setMetrics] = useState({
-    viewers: Number(fallbackData?.currentViewers || fallbackData?.viewerCount || storedLive?.viewers || 0),
-    peakViewers: Number(fallbackData?.peakViewers || storedLive?.peakViewers || 0),
-    totalUser: Number(fallbackData?.totalUser || fallbackData?.cumulative_audience || storedLive?.totalUser || 0),
-    likes: Number(fallbackData?.likes ?? fallbackData?.totalLikes ?? storedLive?.likes ?? 0),
-    comments: Number(fallbackData?.comments ?? fallbackData?.totalComments ?? storedLive?.comments ?? 0),
-    shares: Number(fallbackData?.shares ?? fallbackData?.totalShares ?? storedLive?.shares ?? 0),
+    viewers: Number(fallbackData?.currentViewers || fallbackData?.viewerCount || validStored?.viewers || 0),
+    peakViewers: Number(fallbackData?.peakViewers || validStored?.peakViewers || 0),
+    totalUser: Number(fallbackData?.totalUser || fallbackData?.cumulative_audience || validStored?.totalUser || 0),
+    likes: Number(fallbackData?.likes ?? fallbackData?.totalLikes ?? validStored?.likes ?? 0),
+    comments: Number(fallbackData?.comments ?? fallbackData?.totalComments ?? validStored?.comments ?? 0),
+    shares: Number(fallbackData?.shares ?? fallbackData?.totalShares ?? validStored?.shares ?? 0),
     followers: Number(fallbackData?.followers ?? fallbackData?.newFollowers ?? 0),
     diamonds: Number(fallbackData?.diamonds ?? fallbackData?.totalDiamonds ?? 0),
     uptimeFormatted: '00:00:00',
@@ -178,26 +178,35 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
           setIsLive(firestoreIsLive);
 
           const liveRoomId = liveApi.roomId || liveApi.session_id || null;
-          if (liveRoomId) setSessionId(liveRoomId);
+          const isNewRoom = Boolean(liveRoomId && activeRoomIdRef.current && String(activeRoomIdRef.current) !== String(liveRoomId));
+          if (liveRoomId) {
+            activeRoomIdRef.current = liveRoomId;
+            setSessionId(liveRoomId);
+          }
 
           const startTimestamp = liveApi.started_at || liveApi.startedAt || null;
           if (startTimestamp) {
-            setStartedAt(prev => {
-              if (prev && startTimestamp) {
-                return new Date(prev).getTime() <= new Date(startTimestamp).getTime() ? prev : startTimestamp;
-              }
-              return startTimestamp || prev;
-            });
+            setStartedAt(startTimestamp);
           }
 
-          // Extraction et mise à jour directe des métriques de secours (avec conservation anti-rebond et persistance)
+          // Extraction et mise à jour directe des métriques de secours (avec conservation anti-rebond et partition par salon)
           setMetrics(prev => {
-            const nextTotalUser = Math.max(Number(liveApi.totalUser ?? liveApi.total_user ?? liveApi.cumulative_audience ?? liveApi.enter_count ?? 0), prev.totalUser, Number(storedLive?.totalUser || 0));
-            const nextLikes = Math.max(Number(liveApi.likes ?? liveApi.totalLikes ?? 0), prev.likes, Number(storedLive?.likes || 0));
-            const nextShares = Math.max(Number(liveApi.shares ?? liveApi.totalShares ?? liveApi.shareCount ?? 0), prev.shares, Number(storedLive?.shares || 0));
-            const nextComments = Math.max(Number(liveApi.comments ?? liveApi.totalComments ?? 0), prev.comments, Number(storedLive?.comments || 0));
-            const nextViewers = firestoreIsLive ? (Number(liveApi.currentViewers || liveApi.viewerCount || 0) || prev.viewers || Number(storedLive?.viewers || 0)) : 0;
-            const nextPeak = firestoreIsLive ? Math.max(Number(liveApi.peakViewers || 0), nextViewers, prev.peakViewers, Number(storedLive?.peakViewers || 0)) : 0;
+            const isMatchingStored = Boolean(storedLive?.roomId && liveRoomId && String(storedLive.roomId) === String(liveRoomId));
+            const activeStored = isMatchingStored ? storedLive : null;
+
+            // En cas de nouveau salon live, réinitialiser la base de calcul
+            const baseTotalUser = isNewRoom ? 0 : prev.totalUser;
+            const baseLikes = isNewRoom ? 0 : prev.likes;
+            const baseShares = isNewRoom ? 0 : prev.shares;
+            const baseComments = isNewRoom ? 0 : prev.comments;
+            const basePeak = isNewRoom ? 0 : prev.peakViewers;
+
+            const nextTotalUser = Math.max(Number(liveApi.totalUser ?? liveApi.total_user ?? liveApi.cumulative_audience ?? liveApi.enter_count ?? 0), baseTotalUser, Number(activeStored?.totalUser || 0));
+            const nextLikes = Math.max(Number(liveApi.likes ?? liveApi.totalLikes ?? 0), baseLikes, Number(activeStored?.likes || 0));
+            const nextShares = Math.max(Number(liveApi.shares ?? liveApi.totalShares ?? liveApi.shareCount ?? 0), baseShares, Number(activeStored?.shares || 0));
+            const nextComments = Math.max(Number(liveApi.comments ?? liveApi.totalComments ?? 0), baseComments, Number(activeStored?.comments || 0));
+            const nextViewers = firestoreIsLive ? (Number(liveApi.currentViewers || liveApi.viewerCount || 0) || (isNewRoom ? 0 : prev.viewers) || Number(activeStored?.viewers || 0)) : 0;
+            const nextPeak = firestoreIsLive ? Math.max(Number(liveApi.peakViewers || 0), nextViewers, basePeak, Number(activeStored?.peakViewers || 0)) : 0;
 
             if (firestoreIsLive && (nextTotalUser > 0 || nextLikes > 0)) {
               try {
@@ -208,8 +217,8 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
                   comments: nextComments,
                   viewers: nextViewers,
                   peakViewers: nextPeak,
-                  startedAt: startTimestamp || storedLive?.startedAt || startedAt,
-                  roomId: liveRoomId || storedLive?.roomId
+                  startedAt: startTimestamp || activeStored?.startedAt || startedAt,
+                  roomId: liveRoomId
                 }));
               } catch {}
             }
