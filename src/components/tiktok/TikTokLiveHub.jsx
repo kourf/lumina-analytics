@@ -27,7 +27,20 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
 
   const socket = useTikTokLiveSocket(undefined, propLiveData);
   const isRecentStoredLive = Boolean(initialStored?.isLive && (Date.now() - (initialStored.timestamp || 0) < 6 * 3600 * 1000));
-  const isLive = Boolean(socket.isLive || propLiveData?.isLive || isRecentStoredLive);
+  const isLive = Boolean(propLiveData?.isLive !== undefined ? propLiveData.isLive : (socket.isLive || isRecentStoredLive));
+
+  const getSessionDateFormatted = () => {
+    const rawDate = propLiveData?.ended_at || propLiveData?.endedAt || propLiveData?.started_at || propLiveData?.startedAt || archives[0]?.endedAt;
+    if (rawDate) {
+      try {
+        const d = new Date(rawDate);
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+        }
+      } catch {}
+    }
+    return '14 oct. 2026';
+  };
 
   const [archives, setArchives] = useState([]);
   const [loadingArchives, setLoadingArchives] = useState(false);
@@ -601,7 +614,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             <div className="flex items-center gap-3">
               <div className="bg-purple-950/40 text-purple-300 border border-purple-500/30 px-4 py-2 rounded-full text-xs font-bold flex items-center gap-2 shadow-sm" title="Dernière session terminée enregistrée avec succès">
                 <span className="w-2 h-2 rounded-full bg-purple-400"></span>
-                <span>SESSION TERMINÉE • 13 oct. 2026</span>
+                <span>SESSION TERMINÉE • {getSessionDateFormatted()}</span>
               </div>
               <div className="bg-slate-800 text-slate-300 px-3.5 py-2 rounded-full text-xs font-semibold border border-slate-700 hidden sm:flex items-center gap-2" title="Statut vérifié automatiquement toutes les 30s">
                 <span className="w-2 h-2 rounded-full bg-slate-500"></span>
@@ -626,7 +639,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
           {isLive ? (
             <span><strong>Cadence Live Streaming :</strong> Spectateurs, Likes, Partages, Abonnés &amp; Chat en direct <strong>sub-seconde (&lt; 1s)</strong> • Chrono continu <strong>(1s)</strong>.</span>
           ) : (
-            <span><strong>Récapitulatif de Session Certifié :</strong> Données consolidées de votre direct du 13 octobre 2026 • Prochaine session détectée automatiquement sous 30s.</span>
+            <span><strong>Récapitulatif de Session Certifié :</strong> Données consolidées de votre direct du {getSessionDateFormatted()} • Prochaine session détectée automatiquement sous 30s.</span>
           )}
         </div>
         <span className={cn("text-[11px] font-mono font-bold px-2.5 py-0.5 rounded-full border shrink-0 self-start sm:self-auto", isLive ? "text-cyan-400 bg-cyan-500/10 border-cyan-500/20" : "text-purple-300 bg-purple-500/10 border-purple-500/20")}>

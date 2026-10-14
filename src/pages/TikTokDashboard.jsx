@@ -85,35 +85,19 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     } catch {}
   }
 
-  // Compteur d'échecs consécutifs pour éviter les faux négatifs OFFLINE
-  const offlineFailureCountRef = React.useRef(0);
-
-  // Détection d'un état Live réel avec hystérésis (Debounce)
-  const isDirectLiveDetected = Boolean(liveChecker.isLive || liveChecker.status === 'LIVE');
+  // Détection d'un état Live réel avec validation duale Edge + Firestore
+  const isDirectLiveDetected = Boolean(liveChecker.isLive && liveChecker.status === 'LIVE');
   const isFirestoreLive = Boolean(liveData?.isLive);
 
-  if (isDirectLiveDetected || isFirestoreLive) {
-    offlineFailureCountRef.current = 0;
-  } else if (liveChecker.status === 'OFFLINE') {
-    offlineFailureCountRef.current += 1;
-  }
-
-  // Ne déclarer OFFLINE que si Edge confirme formellement OFFLINE au moins 3 fois consécutives (>= 90s) ET que Firestore est inactif
+  // Déclaration OFFLINE immédiate si le checker Edge confirme OFFLINE ou si Firestore confirme isLive === false
   const isConfirmedOffline = Boolean(
     !isDirectLiveDetected && 
-    !isFirestoreLive && 
-    liveChecker.status === 'OFFLINE' && 
-    offlineFailureCountRef.current >= 3
-  );
-
-  const isRecentStoredLive = Boolean(
-    storedLiveInitial?.isLive && 
-    (Date.now() - (storedLiveInitial.timestamp || 0) < 6 * 3600 * 1000)
+    (liveChecker.status === 'OFFLINE' || liveData?.isLive === false)
   );
 
   const effectiveIsLive = isDirectLiveDetected 
     ? true 
-    : (isConfirmedOffline ? false : (isFirestoreLive || (!isConfirmedOffline && isRecentStoredLive)));
+    : (isConfirmedOffline ? false : isFirestoreLive);
 
   // Résolution stricte et dynamique des spectateurs en direct (priorité absolue au flux Firestore temps réel certifié)
   const firestoreViewers = Number(liveData?.currentViewers ?? liveData?.viewerCount ?? 0);
@@ -136,9 +120,11 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   if (effectiveIsLive && rawPeakViewers > 0) {
     lastPositiveMetrics.current.peakViewers = Math.max(lastPositiveMetrics.current.peakViewers, rawPeakViewers);
   }
-  const resolvedPeakViewers = effectiveIsLive 
-    ? Math.max(rawPeakViewers, lastPositiveMetrics.current.peakViewers) 
-    : 0;
+  const resolvedPeakViewers = Math.max(
+    rawPeakViewers, 
+    lastPositiveMetrics.current.peakViewers, 
+    Number(liveData?.peakViewers || 0)
+  );
 
   // Préservation absolue du timestamp réel authentique du direct (TikTok create_time / Firestore)
   const incomingStartedAt = liveData?.started_at || liveData?.startedAt || liveChecker.startedAt || null;
@@ -244,6 +230,10 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
           timestamp: Date.now()
         };
         localStorage.setItem('lumina_live_state', JSON.stringify(liveSnapshot));
+      } catch (e) {}
+    } else {
+      try {
+        localStorage.removeItem('lumina_live_state');
       } catch (e) {}
     }
   }, [effectiveIsLive, resolvedRoomId, resolvedCurrentViewers, resolvedPeakViewers, resolvedTotalUser, resolvedLikes, resolvedShares, resolvedComments, resolvedStartedAt]);

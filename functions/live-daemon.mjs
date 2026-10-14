@@ -456,6 +456,33 @@ async function saveArchiveToFirestore() {
       body: JSON.stringify(archivePayload)
     });
     console.log(`[Lumina Daemon] 📁 Archive TikTok Live sauvegardée : ${docId}`);
+
+    // Basculer formellement users/karamokho à HORS LIGNE (isLive: false)
+    const userUrl = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/karamokho?updateMask.fieldPaths=isLive&updateMask.fieldPaths=tiktokAPI.isLive&updateMask.fieldPaths=tiktokLiveAPI.isLive&updateMask.fieldPaths=tiktokLiveAPI.status&updateMask.fieldPaths=tiktokLiveAPI.currentViewers&updateMask.fieldPaths=tiktokLiveAPI.viewerCount&updateMask.fieldPaths=tiktokLiveAPI.endedAt&updateMask.fieldPaths=tiktokLiveAPI.ended_at&updateMask.fieldPaths=tiktokLiveAPI.durationStr&key=${API_KEY}`;
+    await fetch(userUrl, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        fields: {
+          isLive: { booleanValue: false },
+          'tiktokAPI.isLive': { booleanValue: false },
+          tiktokLiveAPI: {
+            mapValue: {
+              fields: {
+                isLive: { booleanValue: false },
+                status: { stringValue: 'OFFLINE' },
+                currentViewers: { integerValue: '0' },
+                viewerCount: { integerValue: '0' },
+                endedAt: { stringValue: now.toISOString() },
+                ended_at: { stringValue: now.toISOString() },
+                durationStr: { stringValue: durationStr }
+              }
+            }
+          }
+        }
+      })
+    });
+    console.log('[Lumina Daemon] ✅ users/karamokho mis à jour en HORS LIGNE (isLive: false).');
   } catch (err) {
     console.warn('[Lumina Daemon] Exception archivage:', err.message);
   }

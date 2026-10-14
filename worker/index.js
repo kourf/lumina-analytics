@@ -900,11 +900,13 @@ const stopLiveTracker = async () => {
             ...existingArchives.filter(a => a.id !== completedSessionRecord.id && a.sessionId !== completedSessionRecord.id)
         ].slice(0, 50); // Conservation des 50 dernières sessions
 
-        // C. RÉINITIALISATION DU DASHBOARD À ZÉRO pour le prochain direct
         await userDocRef.set({
+            isLive: false,
+            tiktokAPI: { isLive: false },
             historyArchives: updatedArchives,
             tiktokLiveAPI: {
                 isLive: false,
+                status: 'OFFLINE',
                 session_id: null,
                 roomId: null,
                 startedAt: null,

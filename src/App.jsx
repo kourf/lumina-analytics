@@ -54,10 +54,14 @@ function App() {
     initialData: appData?.tiktokLiveAPI
   });
 
+  // Détection TikTok Live globale :
+  // Si le checker Edge confirme formellement OFFLINE (status === 'OFFLINE'), c'est OFFLINE.
+  // Si le checker Edge confirme LIVE (status === 'LIVE' && isLive === true), c'est LIVE.
+  // Sinon, s'aligner sur Firestore.
   const isGlobalTikTokLive = Boolean(
-    appData?.tiktokLiveAPI?.isLive || 
-    globalLiveChecker.isLive || 
-    globalLiveChecker.status === 'LIVE'
+    globalLiveChecker.status === 'OFFLINE'
+      ? false
+      : ((globalLiveChecker.status === 'LIVE' && globalLiveChecker.isLive) || Boolean(appData?.tiktokLiveAPI?.isLive))
   );
 
   useEffect(() => {
@@ -107,7 +111,7 @@ function App() {
 
             const liveRaw = firebaseData.tiktokLiveAPI || {};
             const tiktokLiveClean = {
-              isLive: Boolean(liveRaw.isLive === true || firebaseData.isLive === true || firebaseData.tiktokAPI?.isLive === true),
+              isLive: Boolean((liveRaw.isLive === true || firebaseData.isLive === true) && firebaseData.isLive !== false),
               currentViewers: Number(liveRaw.currentViewers || 0),
               peakViewers: Number(liveRaw.peakViewers || 0),
               totalUser: Number(liveRaw.totalUser || liveRaw.total_user || liveRaw.enter_count || 0),
