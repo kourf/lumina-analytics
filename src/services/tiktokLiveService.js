@@ -111,55 +111,75 @@ export function validateTrueLiveCondition(roomData, expectedUsername = 'karam.dr
 // Synchronisation Firestore autonome via REST API (fonctionne 24/7 sans serveur local)
 let lastFirestoreSyncTimestamp = 0;
 export async function syncLiveToFirestore(liveData, targetUserId = 'karamokho') {
+  const isLive = Boolean(liveData.isLive);
+  if (!isLive) return; // Ne jamais écraser Firestore depuis le client en mode hors-ligne
+
   const now = Date.now();
   if (now - lastFirestoreSyncTimestamp < 15000) return; // Débouncing 15s
   lastFirestoreSyncTimestamp = now;
 
   try {
-    const isLive = Boolean(liveData.isLive);
-    const roomId = String(liveData.roomId || '');
-    const currentViewers = isLive ? Math.max(0, Number(liveData.viewerCount || liveData.currentViewers || 0)) : 0;
-    const title = String(liveData.title || (isLive ? 'Live TikTok en direct' : ''));
-    const likes = isLive ? Number(liveData.likes || liveData.totalLikes || 0) : 0;
-    const shares = isLive ? Number(liveData.shares || liveData.totalShares || liveData.shareCount || 0) : 0;
-    const totalUser = isLive ? Number(liveData.totalUser || liveData.cumulative_audience || 0) : 0;
-    const newFollowers = isLive ? Number(liveData.newFollowers || liveData.followers || 0) : 0;
-
     const fields = {
-      isLive: { booleanValue: isLive },
-      roomId: { stringValue: isLive ? roomId : '' },
-      title: { stringValue: title },
-      currentViewers: { integerValue: String(currentViewers) },
-      likes: { integerValue: String(likes) },
-      totalLikes: { integerValue: String(likes) },
-      shares: { integerValue: String(shares) },
-      totalShares: { integerValue: String(shares) },
-      shareCount: { integerValue: String(shares) },
-      totalUser: { integerValue: String(totalUser) },
-      cumulative_audience: { integerValue: String(totalUser) },
-      newFollowers: { integerValue: String(newFollowers) },
-      followers: { integerValue: String(newFollowers) },
-      lastDetected: { stringValue: new Date().toISOString() }
+      isLive: { booleanValue: true }
     };
+    const updateMaskFields = ['tiktokLiveAPI.isLive', 'tiktokAPI.isLive', 'isLive'];
 
-    const updateMaskFields = [
-      'tiktokLiveAPI.isLive',
-      'tiktokLiveAPI.roomId',
-      'tiktokLiveAPI.title',
-      'tiktokLiveAPI.currentViewers',
-      'tiktokLiveAPI.likes',
-      'tiktokLiveAPI.totalLikes',
-      'tiktokLiveAPI.shares',
-      'tiktokLiveAPI.totalShares',
-      'tiktokLiveAPI.shareCount',
-      'tiktokLiveAPI.totalUser',
-      'tiktokLiveAPI.cumulative_audience',
-      'tiktokLiveAPI.newFollowers',
-      'tiktokLiveAPI.followers',
-      'tiktokLiveAPI.lastDetected',
-      'tiktokAPI.isLive',
-      'isLive'
-    ];
+    if (liveData.roomId) {
+      fields.roomId = { stringValue: String(liveData.roomId) };
+      updateMaskFields.push('tiktokLiveAPI.roomId');
+    }
+
+    const currentViewers = Number(liveData.viewerCount || liveData.currentViewers || 0);
+    if (currentViewers > 0) {
+      fields.currentViewers = { integerValue: String(currentViewers) };
+      updateMaskFields.push('tiktokLiveAPI.currentViewers');
+    }
+
+    const totalUser = Number(liveData.totalUser || liveData.cumulative_audience || 0);
+    if (totalUser > 0) {
+      const tuStr = String(totalUser);
+      fields.totalUser = { integerValue: tuStr };
+      fields.total_user = { integerValue: tuStr };
+      fields.cumulative_audience = { integerValue: tuStr };
+      fields.enter_count = { integerValue: tuStr };
+      updateMaskFields.push(
+        'tiktokLiveAPI.totalUser',
+        'tiktokLiveAPI.total_user',
+        'tiktokLiveAPI.cumulative_audience',
+        'tiktokLiveAPI.enter_count'
+      );
+    }
+
+    // Heure de début certifiée (ex: create_time)
+    if (liveData.startedAt || liveData.started_at) {
+      const stableStart = liveData.started_at || liveData.startedAt;
+      const startMs = new Date(stableStart).getTime();
+      // On ne sauvegarde que si c'est un timestamp passé authentique (pas généré il y a moins de 10s)
+      if (!isNaN(startMs) && (Date.now() - startMs) > 10000) {
+        fields.started_at = { stringValue: stableStart };
+        fields.startedAt = { stringValue: stableStart };
+        updateMaskFields.push('tiktokLiveAPI.started_at', 'tiktokLiveAPI.startedAt');
+      }
+    }
+
+    // PROTECTION STRICTE : Ne JAMAIS écraser les likes ou partages s'ils sont à 0 !
+    // Seul le connecteur WebSocket a autorité pour accumuler les likes et partages.
+    if (Number(liveData.likes || 0) > 0) {
+      const lkStr = String(liveData.likes);
+      fields.likes = { integerValue: lkStr };
+      fields.totalLikes = { integerValue: lkStr };
+      updateMaskFields.push('tiktokLiveAPI.likes', 'tiktokLiveAPI.totalLikes');
+    }
+
+    if (Number(liveData.shares || 0) > 0) {
+      const shStr = String(liveData.shares);
+      fields.shares = { integerValue: shStr };
+      fields.totalShares = { integerValue: shStr };
+      updateMaskFields.push('tiktokLiveAPI.shares', 'tiktokLiveAPI.totalShares', 'tiktokLiveAPI.shareCount');
+    }
+
+    fields.lastDetected = { stringValue: new Date().toISOString() };
+    updateMaskFields.push('tiktokLiveAPI.lastDetected');
 
     const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
     const PROJECT_ID = 'lumina-analytics-kd-2026';
@@ -174,8 +194,8 @@ export async function syncLiveToFirestore(liveData, targetUserId = 'karamokho') 
           tiktokLiveAPI: {
             mapValue: { fields }
           },
-          'tiktokAPI.isLive': { booleanValue: isLive },
-          isLive: { booleanValue: isLive }
+          'tiktokAPI.isLive': { booleanValue: true },
+          isLive: { booleanValue: true }
         }
       })
     }).catch(() => {});
@@ -338,7 +358,7 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
     const isLiveConfirmed = validateTrueLiveCondition(roomInfo, username);
 
     if (isLiveConfirmed) {
-      const viewerCount = Math.max(0, Number(
+      let viewerCount = Math.max(0, Number(
         roomInfo.user_count || 
         roomInfo.viewer_count || 
         roomInfo.viewerCount || 
@@ -347,9 +367,77 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
         0
       ));
 
-      const startedAt = roomInfo.create_time 
-        ? new Date(roomInfo.create_time * 1000).toISOString()
-        : (roomInfo.started_at || roomInfo.startedAt || new Date().toISOString());
+      const candidateRoomId = String(roomInfo.roomId || roomInfo.room_id || roomInfo.id_str || roomInfo.id || payload.roomId || '');
+
+      let startedAt = null;
+      if (roomInfo.create_time && typeof roomInfo.create_time === 'number' && roomInfo.create_time > 1e9) {
+        startedAt = new Date(roomInfo.create_time * 1000).toISOString();
+      } else if (cached?.data?.isLive && cached?.data?.startedAt && cached?.data?.roomId === candidateRoomId) {
+        startedAt = cached.data.startedAt;
+      } else if (roomInfo.started_at || roomInfo.startedAt || payload.started_at || payload.startedAt) {
+        startedAt = roomInfo.started_at || roomInfo.startedAt || payload.started_at || payload.startedAt;
+      } else {
+        startedAt = new Date().toISOString();
+      }
+
+      let totalUser = Math.max(0, Number(
+        roomInfo.stats?.total_user || 
+        roomInfo.stats?.enter_count || 
+        roomInfo.total_user || 
+        roomInfo.enter_count || 
+        payload.totalUser || 
+        payload.cumulative_audience || 
+        viewerCount
+      ));
+
+      let streamTitle = roomInfo.title || payload.title || 'Live TikTok en direct';
+
+      // Enrichissement direct et précis via l'API officielle Webcast (aid=8311)
+      if (candidateRoomId && candidateRoomId !== '0') {
+        try {
+          const detailRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=8311&room_id=${candidateRoomId}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+          });
+          if (detailRes.ok) {
+            const detailJson = await detailRes.json();
+            const dData = detailJson?.data;
+            if (dData) {
+              if (dData.create_time && typeof dData.create_time === 'number' && dData.create_time > 1e9) {
+                startedAt = new Date(dData.create_time * 1000).toISOString();
+              }
+              const dTotal = dData.stats?.total_user || dData.stats?.enter_count;
+              if (typeof dTotal === 'number' && dTotal > 0) {
+                totalUser = Math.max(totalUser, dTotal);
+              }
+              if (dData.user_count && typeof dData.user_count === 'number' && dData.user_count > 0) {
+                viewerCount = dData.user_count;
+              }
+              if (dData.title) {
+                streamTitle = dData.title;
+              }
+            }
+          }
+        } catch (e) {
+          // Erreur réseau d'enrichissement silencieuse
+        }
+      }
+
+      const likes = Math.max(0, Number(
+        roomInfo.stats?.like_count || 
+        roomInfo.stats?.digg_count || 
+        roomInfo.like_count || 
+        payload.likes || 
+        payload.totalLikes || 
+        0
+      ));
+
+      const shares = Math.max(0, Number(
+        roomInfo.stats?.share_count || 
+        roomInfo.share_count || 
+        payload.shares || 
+        payload.totalShares || 
+        0
+      ));
 
       const liveResult = {
         status: LIVE_STATUS.LIVE,
@@ -357,10 +445,15 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
         username,
         displayName: roomInfo.owner?.nickname || payload.displayName || username,
         avatarUrl: roomInfo.owner?.avatar_thumb?.url_list?.[0] || payload.avatarUrl || null,
-        roomId: String(roomInfo.roomId || roomInfo.room_id || roomInfo.id_str || roomInfo.id),
+        roomId: candidateRoomId,
         viewerCount,
-        title: roomInfo.title || payload.title || 'Live TikTok en direct',
+        totalUser,
+        cumulative_audience: totalUser,
+        likes,
+        shares,
+        title: streamTitle,
         startedAt,
+        started_at: startedAt,
         lastActiveAt: startedAt,
         lastChecked: new Date().toISOString(),
         liveUrl: `https://www.tiktok.com/@${username}/live`,
@@ -369,8 +462,6 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
       };
 
       liveStatusCache.set(username, { data: liveResult, timestamp: now });
-      // Synchronisation autonome en arrière-plan vers Firestore
-      syncLiveToFirestore(liveResult).catch(() => {});
       return liveResult;
     }
 
@@ -393,10 +484,6 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
     };
 
     liveStatusCache.set(username, { data: offlineResult, timestamp: now });
-    // Synchronisation défensive vers Firestore si l'état précédent était en direct
-    if (cached?.data?.isLive) {
-      syncLiveToFirestore(offlineResult).catch(() => {});
-    }
     return offlineResult;
 
   } catch (err) {

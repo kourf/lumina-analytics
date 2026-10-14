@@ -31,23 +31,43 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
   const isLocalOnHttps = isHttps && (!configuredUrl || configuredUrl.includes('localhost') || configuredUrl.includes('127.0.0.1'));
   const wsUrl = isLocalOnHttps ? null : (configuredUrl || 'http://localhost:8080');
 
+  const getStoredLiveState = () => {
+    try {
+      const s = typeof window !== 'undefined' ? localStorage.getItem('lumina_live_state') : null;
+      if (s) {
+        const p = JSON.parse(s);
+        if (p && typeof p === 'object') return p;
+      }
+    } catch {}
+    return null;
+  };
+  const storedLive = getStoredLiveState();
+
   // États de connectivité et de source active
   const [isSocketConnected, setIsSocketConnected] = useState(false);
   const [dataSource, setDataSource] = useState('initializing'); // 'websocket' | 'firestore' | 'fallback'
 
   // Données Live fondamentales
   const [isLive, setIsLive] = useState(Boolean(fallbackData?.isLive));
-  const [sessionId, setSessionId] = useState(fallbackData?.session_id || fallbackData?.sessionId || fallbackData?.roomId || null);
-  const [startedAt, setStartedAt] = useState(fallbackData?.startedAt || fallbackData?.started_at || null);
+  const [sessionId, setSessionId] = useState(fallbackData?.session_id || fallbackData?.sessionId || fallbackData?.roomId || storedLive?.roomId || null);
+  const [startedAt, setStartedAt] = useState(() => {
+    const raw = fallbackData?.startedAt || fallbackData?.started_at || storedLive?.startedAt;
+    if (storedLive?.startedAt && raw) {
+      return new Date(storedLive.startedAt).getTime() <= new Date(raw).getTime()
+        ? storedLive.startedAt
+        : raw;
+    }
+    return raw || null;
+  });
 
-  // Métriques en temps réel unifiées
+  // Métriques en temps réel unifiées (protégées par la mémoire persistante)
   const [metrics, setMetrics] = useState({
-    viewers: Number(fallbackData?.currentViewers || fallbackData?.viewerCount || 0),
-    peakViewers: Number(fallbackData?.peakViewers || 0),
-    totalUser: Number(fallbackData?.totalUser || 0),
-    likes: Number(fallbackData?.likes ?? fallbackData?.totalLikes ?? 0),
-    comments: Number(fallbackData?.comments ?? fallbackData?.totalComments ?? 0),
-    shares: Number(fallbackData?.shares ?? fallbackData?.totalShares ?? 0),
+    viewers: Number(fallbackData?.currentViewers || fallbackData?.viewerCount || storedLive?.viewers || 0),
+    peakViewers: Number(fallbackData?.peakViewers || storedLive?.peakViewers || 0),
+    totalUser: Number(fallbackData?.totalUser || fallbackData?.cumulative_audience || storedLive?.totalUser || 0),
+    likes: Number(fallbackData?.likes ?? fallbackData?.totalLikes ?? storedLive?.likes ?? 0),
+    comments: Number(fallbackData?.comments ?? fallbackData?.totalComments ?? storedLive?.comments ?? 0),
+    shares: Number(fallbackData?.shares ?? fallbackData?.totalShares ?? storedLive?.shares ?? 0),
     followers: Number(fallbackData?.followers ?? fallbackData?.newFollowers ?? 0),
     diamonds: Number(fallbackData?.diamonds ?? fallbackData?.totalDiamonds ?? 0),
     uptimeFormatted: '00:00:00',
@@ -161,28 +181,59 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
           if (liveRoomId) setSessionId(liveRoomId);
 
           const startTimestamp = liveApi.started_at || liveApi.startedAt || null;
-          if (startTimestamp) setStartedAt(startTimestamp);
+          if (startTimestamp) {
+            setStartedAt(prev => {
+              if (prev && startTimestamp) {
+                return new Date(prev).getTime() <= new Date(startTimestamp).getTime() ? prev : startTimestamp;
+              }
+              return startTimestamp || prev;
+            });
+          }
 
-          // Extraction et mise à jour directe des métriques de secours
-          setMetrics(prev => ({
-            ...prev,
-            viewers: firestoreIsLive ? Number(liveApi.currentViewers || liveApi.viewerCount || 0) : 0,
-            peakViewers: firestoreIsLive ? Math.max(Number(liveApi.peakViewers || 0), Number(liveApi.currentViewers || 0), prev.peakViewers) : 0,
-            likes: Number(liveApi.likes ?? liveApi.totalLikes ?? (firestoreIsLive ? prev.likes : 0)),
-            comments: Number(liveApi.comments ?? liveApi.totalComments ?? (firestoreIsLive ? prev.comments : 0)),
-            shares: Number(liveApi.shares ?? liveApi.totalShares ?? liveApi.shareCount ?? (firestoreIsLive ? prev.shares : 0)),
-            followers: Number(liveApi.newFollowers ?? liveApi.followers ?? (firestoreIsLive ? prev.followers : 0)),
-            diamonds: Number(liveApi.totalDiamonds ?? liveApi.diamonds ?? prev.diamonds),
-            totalUser: Number(liveApi.totalUser ?? liveApi.total_user ?? liveApi.cumulative_audience ?? liveApi.enter_count ?? (firestoreIsLive ? prev.totalUser : 0)),
-            topContributor: liveApi.topContributor || prev.topContributor,
-            topDonator: liveApi.topDonator || prev.topDonator,
-            topQuestions: (Array.isArray(liveApi.topQuestions) && liveApi.topQuestions.length > 0)
-              ? liveApi.topQuestions
-              : prev.topQuestions,
-            topContributors: (Array.isArray(liveApi.topContributors) && liveApi.topContributors.length > 0)
-              ? liveApi.topContributors
-              : (Array.isArray(liveApi.topCommenters) && liveApi.topCommenters.length > 0 ? liveApi.topCommenters : prev.topContributors)
-          }));
+          // Extraction et mise à jour directe des métriques de secours (avec conservation anti-rebond et persistance)
+          setMetrics(prev => {
+            const nextTotalUser = Math.max(Number(liveApi.totalUser ?? liveApi.total_user ?? liveApi.cumulative_audience ?? liveApi.enter_count ?? 0), prev.totalUser, Number(storedLive?.totalUser || 0));
+            const nextLikes = Math.max(Number(liveApi.likes ?? liveApi.totalLikes ?? 0), prev.likes, Number(storedLive?.likes || 0));
+            const nextShares = Math.max(Number(liveApi.shares ?? liveApi.totalShares ?? liveApi.shareCount ?? 0), prev.shares, Number(storedLive?.shares || 0));
+            const nextComments = Math.max(Number(liveApi.comments ?? liveApi.totalComments ?? 0), prev.comments, Number(storedLive?.comments || 0));
+            const nextViewers = firestoreIsLive ? (Number(liveApi.currentViewers || liveApi.viewerCount || 0) || prev.viewers || Number(storedLive?.viewers || 0)) : 0;
+            const nextPeak = firestoreIsLive ? Math.max(Number(liveApi.peakViewers || 0), nextViewers, prev.peakViewers, Number(storedLive?.peakViewers || 0)) : 0;
+
+            if (firestoreIsLive && (nextTotalUser > 0 || nextLikes > 0)) {
+              try {
+                localStorage.setItem('lumina_live_state', JSON.stringify({
+                  totalUser: nextTotalUser,
+                  likes: nextLikes,
+                  shares: nextShares,
+                  comments: nextComments,
+                  viewers: nextViewers,
+                  peakViewers: nextPeak,
+                  startedAt: startTimestamp || storedLive?.startedAt || startedAt,
+                  roomId: liveRoomId || storedLive?.roomId
+                }));
+              } catch {}
+            }
+
+            return {
+              ...prev,
+              viewers: nextViewers,
+              peakViewers: nextPeak,
+              likes: nextLikes,
+              comments: nextComments,
+              shares: nextShares,
+              followers: Math.max(Number(liveApi.newFollowers ?? liveApi.followers ?? 0), prev.followers),
+              diamonds: Math.max(Number(liveApi.totalDiamonds ?? liveApi.diamonds ?? 0), prev.diamonds),
+              totalUser: nextTotalUser,
+              topContributor: liveApi.topContributor || prev.topContributor,
+              topDonator: liveApi.topDonator || prev.topDonator,
+              topQuestions: (Array.isArray(liveApi.topQuestions) && liveApi.topQuestions.length > 0)
+                ? liveApi.topQuestions
+                : prev.topQuestions,
+              topContributors: (Array.isArray(liveApi.topContributors) && liveApi.topContributors.length > 0)
+                ? liveApi.topContributors
+                : (Array.isArray(liveApi.topCommenters) && liveApi.topCommenters.length > 0 ? liveApi.topCommenters : prev.topContributors)
+            };
+          });
 
           // Synchronisation de la courbe de rétention depuis Firestore
           if (Array.isArray(liveApi.timeline) && liveApi.timeline.length > 0) {
@@ -258,11 +309,18 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
       setIsLive(Boolean(data?.isLive));
       if (data?.isLive) {
         setSessionId(data?.sessionId || data?.roomId || null);
-        setStartedAt(data?.startedAt || null);
+        if (data?.startedAt) {
+          setStartedAt(prev => {
+            if (!prev) return data.startedAt;
+            const pTime = new Date(prev).getTime();
+            const nTime = new Date(data.startedAt).getTime();
+            return (!isNaN(pTime) && pTime <= nTime) ? prev : data.startedAt;
+          });
+        }
         if (Array.isArray(data?.timeline) && data.timeline.length > 0) {
           setLiveTimeline(data.timeline);
         }
-      } else {
+      } else if (data?.ended) {
         setMetrics(prev => ({
           ...prev,
           viewers: 0
@@ -275,13 +333,13 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
       setMetrics(prev => ({
         ...prev,
         viewers: data.viewersCount !== undefined ? data.viewersCount : prev.viewers,
-        peakViewers: Math.max(prev.peakViewers, data.peakViewers || 0),
-        totalUser: data.totalUser !== undefined ? data.totalUser : prev.totalUser,
-        likes: data.totalLikes !== undefined ? data.totalLikes : prev.likes,
-        comments: data.totalComments !== undefined ? data.totalComments : prev.comments,
-        shares: data.totalShares !== undefined ? data.totalShares : prev.shares,
-        followers: data.newFollowers !== undefined ? data.newFollowers : prev.followers,
-        diamonds: data.totalDiamonds !== undefined ? data.totalDiamonds : prev.diamonds,
+        peakViewers: Math.max(prev.peakViewers, data.peakViewers || 0, data.viewersCount || 0),
+        totalUser: Math.max(prev.totalUser, Number(data.totalUser || data.cumulative_audience || 0)),
+        likes: Math.max(prev.likes, Number(data.totalLikes || data.likes || 0)),
+        comments: Math.max(prev.comments, Number(data.totalComments || data.comments || 0)),
+        shares: Math.max(prev.shares, Number(data.totalShares || data.shares || 0)),
+        followers: Math.max(prev.followers, Number(data.newFollowers || data.followers || 0)),
+        diamonds: Math.max(prev.diamonds, Number(data.totalDiamonds || data.diamonds || 0)),
         uptimeFormatted: data.uptimeFormatted || prev.uptimeFormatted,
         topContributor: data.topContributor || prev.topContributor,
         topDonator: data.topDonator || prev.topDonator,

@@ -1,4 +1,13 @@
 import fs from 'fs';
+import dotenv from 'dotenv';
+import path from 'path';
+
+// Chargement des variables d'environnement (priorité functions/.env puis .env)
+try {
+  dotenv.config({ path: path.resolve(process.cwd(), 'functions/.env') });
+  dotenv.config();
+} catch (e) {}
+
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, getDoc, updateDoc } from 'firebase/firestore';
 
@@ -127,8 +136,8 @@ async function syncAllVideos() {
     if (authData && authData.refreshToken) {
       console.log('Jeton d\'authentification trouve. Tentative de rafraichissement du token via l\'API officielle...');
 
-      const clientKey = process.env.TIKTOK_CLIENT_KEY || 'awvtvw7x4d0t2f69';
-      const clientSecret = process.env.TIKTOK_CLIENT_SECRET;
+      const clientKey = process.env.TIKTOK_CLIENT_KEY || 'sbawn81yw1l5ityq7b';
+      const clientSecret = process.env.TIKTOK_CLIENT_SECRET || 'MiErBVWIjZAfzhLX6QMCCIu9qlxvLaR1';
 
       if (clientKey && clientSecret) {
         // Refresh token
@@ -394,6 +403,7 @@ async function syncAllVideos() {
     'tiktokLiveAPI.started_at': liveStartedAt,
     'tiktokLiveAPI.lastDetected': new Date().toISOString(),
     'tiktokAPI.isLive': isTikTokLive,
+    'isLive': isTikTokLive,
     'youtubeLiveAPI.isLive': isYouTubeLive
   };
 
