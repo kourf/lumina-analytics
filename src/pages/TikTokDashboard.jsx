@@ -117,9 +117,8 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
 
   // Résolution stricte et dynamique des spectateurs en direct (priorité absolue au flux Firestore temps réel certifié)
   const firestoreViewers = Number(liveData?.currentViewers ?? liveData?.viewerCount ?? 0);
-  const rawCurrentViewers = firestoreViewers > 0 
-    ? firestoreViewers 
-    : (liveChecker.viewerCount > 0 ? liveChecker.viewerCount : 0);
+  const checkerViewers = Number(liveChecker?.viewerCount ?? 0);
+  const rawCurrentViewers = Math.max(firestoreViewers, checkerViewers);
 
   if (effectiveIsLive && rawCurrentViewers > 0) {
     lastPositiveMetrics.current.viewers = rawCurrentViewers;

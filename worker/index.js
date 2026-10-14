@@ -223,6 +223,8 @@ const syncMetricsToFirestore = async () => {
                 currentViewers: viewersCount,
                 peakViewers: peakViewers,
                 totalUser: totalUserCount,
+                total_user: totalUserCount,
+                cumulative_audience: totalUserCount,
                 likes: totalLikes,
                 totalLikes: totalLikes,
                 shares: totalShares,
@@ -328,7 +330,22 @@ const startLiveTracker = async () => {
         isDetecting = false;
         reconnectAttempts = 0;
         currentRoomId = state.roomId.toString();
-        const createTimeSec = state.roomInfo?.data?.create_time;
+        let createTimeSec = state.roomInfo?.data?.create_time;
+
+        // Fetch detailed room info from official Webcast API (aid=8311)
+        let roomApiData = null;
+        try {
+            const rRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=8311&room_id=${currentRoomId}`, {
+                headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+            });
+            if (rRes.ok) {
+                const rJson = await rRes.json();
+                if (rJson?.data) roomApiData = rJson.data;
+                if (roomApiData?.create_time) createTimeSec = roomApiData.create_time;
+            }
+        } catch (e) {
+            console.warn('[TikTok] Webcast aid=8311 fetch notice:', e.message);
+        }
         
         // Retrieve previous start time & metrics from Firestore to prevent reset on reconnect
         let previousStartedAt = null;
@@ -337,7 +354,9 @@ const startLiveTracker = async () => {
             const userDoc = await db.collection('users').doc(TARGET_FIRESTORE_USER).get();
             const liveApi = userDoc.data()?.tiktokLiveAPI;
             if (liveApi && String(liveApi.roomId) === currentRoomId) {
-                if (liveApi.startedAt) previousStartedAt = new Date(liveApi.startedAt);
+                if (liveApi.startedAt || liveApi.started_at) {
+                    previousStartedAt = new Date(liveApi.startedAt || liveApi.started_at);
+                }
                 prevStats = liveApi;
             }
         } catch (err) {}
@@ -358,14 +377,14 @@ const startLiveTracker = async () => {
         console.log(`- Début: ${liveStartTime.toISOString()}`);
 
         // Initialisation avec les statistiques réelles fournies par TikTok ou restauration Firestore
-        const initialStats = state.roomInfo?.data?.stats || {};
-        viewersCount = Number(state.roomInfo?.data?.user_count || prevStats.currentViewers || 0);
+        const initialStats = roomApiData?.stats || state.roomInfo?.data?.stats || {};
+        viewersCount = Number(roomApiData?.user_count || state.roomInfo?.data?.user_count || prevStats.currentViewers || 0);
         peakViewers = Math.max(viewersCount, Number(prevStats.peakViewers || 0));
         viewerSamples = viewersCount > 0 ? [viewersCount] : [];
         totalLikes = Math.max(Number(initialStats.like_count || 0), Number(prevStats.likes || prevStats.totalLikes || 0));
         totalComments = Math.max(Number(initialStats.comment_count || 0), Number(prevStats.comments || prevStats.totalComments || 0));
         totalShares = Math.max(Number(initialStats.share_count || 0), Number(prevStats.shares || prevStats.totalShares || 0));
-        totalUserCount = Math.max(Number(initialStats.total_user || 0), Number(prevStats.totalUser || prevStats.total_user || 0));
+        totalUserCount = Math.max(Number(initialStats.total_user || initialStats.enter_count || 0), Number(prevStats.totalUser || prevStats.total_user || prevStats.cumulative_audience || 0));
 
         // Follower snapshot
         const hostProfileRes = await fetch(`https://www.tiktok.com/@${TIKTOK_USERNAME}`, {
@@ -411,6 +430,9 @@ const startLiveTracker = async () => {
             createdAt: FieldValue.serverTimestamp(),
             peakViewers: peakViewers,
             avgViewers: viewersCount,
+            totalUser: totalUserCount,
+            total_user: totalUserCount,
+            cumulative_audience: totalUserCount,
             totalLikes: totalLikes,
             totalComments: totalComments,
             totalShares: totalShares,
@@ -432,9 +454,16 @@ const startLiveTracker = async () => {
                 started_at: liveStartTime.toISOString(),
                 currentViewers: viewersCount,
                 peakViewers: peakViewers,
+                totalUser: totalUserCount,
+                total_user: totalUserCount,
+                cumulative_audience: totalUserCount,
+                enter_count: totalUserCount,
                 likes: totalLikes,
+                totalLikes: totalLikes,
                 shares: totalShares,
+                totalShares: totalShares,
                 followers: newFollowers,
+                newFollowers: newFollowers,
                 diamonds: totalDiamonds,
                 topContributor: topContributor,
                 topDonator: topDonator,
@@ -505,27 +534,32 @@ const startLiveTracker = async () => {
             } catch (err) {}
         }, 600000);
 
-        // Intervalle de vérification des statistiques officielles (toutes les 10 secondes)
+        // Intervalle de vérification des statistiques officielles (toutes les 10 secondes via aid=8311)
         if (statsPollingInterval) clearInterval(statsPollingInterval);
         statsPollingInterval = setInterval(async () => {
             if (!isLiveStreamActive || !currentRoomId) return;
             try {
-                const roomRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=${currentRoomId}`, {
+                const roomRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=8311&room_id=${currentRoomId}`, {
                     headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
                 });
                 if (roomRes.ok) {
                     const json = await roomRes.json();
-                    if (json?.data?.stats) {
-                        const stats = json.data.stats;
-                        if (stats.total_user && typeof stats.total_user === 'number') {
-                            totalUserCount = Math.max(totalUserCount, stats.total_user);
+                    if (json?.data) {
+                        const stats = json.data.stats || {};
+                        const userTotal = stats.total_user || stats.enter_count;
+                        if (typeof userTotal === 'number' && userTotal > 0) {
+                            totalUserCount = Math.max(totalUserCount, userTotal);
+                        }
+                        if (typeof json.data.user_count === 'number' && json.data.user_count > 0) {
+                            viewersCount = Math.max(viewersCount, json.data.user_count);
+                            viewerSamples.push(viewersCount);
+                            if (viewersCount > peakViewers) peakViewers = viewersCount;
                         }
                         if (stats.like_count && typeof stats.like_count === 'number' && stats.like_count > 0) {
-                            totalLikes = Math.max(totalLikes, stats.like_count); // Le compteur officiel peut être en retard, on garde max
+                            totalLikes = Math.max(totalLikes, stats.like_count);
                         }
                         if (stats.share_count && typeof stats.share_count === 'number' && stats.share_count > 0) {
-                            // On fait confiance au compteur officiel TikTok pour les partages pour éviter de surgonfler avec les doublons
-                            totalShares = stats.share_count;
+                            totalShares = Math.max(totalShares, stats.share_count);
                         }
                         if (stats.comment_count && typeof stats.comment_count === 'number' && stats.comment_count > 0) {
                             totalComments = Math.max(totalComments, stats.comment_count);
@@ -540,8 +574,18 @@ const startLiveTracker = async () => {
 
         // Concurrent Viewers
         currentConnection.on('roomUser', (data) => {
-            if (typeof data?.viewerCount === 'number') {
-                viewersCount = data.viewerCount;
+            const parsedTotal = parseInt(data?.total) || 0;
+            const parsedAnon = parseInt(data?.anonymous) || 0;
+            const ranksCount = Array.isArray(data?.ranks) ? data.ranks.length : 0;
+            const liveViewers = Math.max(
+                Number(data?.viewerCount || 0),
+                Number(data?.userCount || 0),
+                parsedTotal + parsedAnon,
+                ranksCount + parsedAnon,
+                parsedTotal
+            );
+            if (liveViewers > 0) {
+                viewersCount = liveViewers;
                 viewerSamples.push(viewersCount);
                 if (viewersCount > peakViewers) {
                     peakViewers = viewersCount;
@@ -564,7 +608,7 @@ const startLiveTracker = async () => {
         };
 
         const handleShareEvent = (data) => {
-            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_share_${Date.now()}` : null);
+            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_share` : null);
             if (msgId && markSocialHandled(msgId)) return;
             const count = Math.max(1, Number(data?.shareCount) || 1);
             totalShares += count;
@@ -573,21 +617,20 @@ const startLiveTracker = async () => {
         };
 
         const handleFollowEvent = (data) => {
-            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_follow_${Date.now()}` : null);
+            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_follow` : null);
             if (msgId && markSocialHandled(msgId)) return;
             newFollowers++; // Increment runtime tracker
             console.log(`[TikTok Event] ➕ Nouvel abonné détecté (total live: ${newFollowers})`);
             broadcastMetrics();
         };
 
-        // Likes de session (cumulatif officiel TikTok)
+        // Likes de session (cumulatif officiel TikTok via data.total ou data.totalLikeCount)
         currentConnection.on('like', (data) => {
-            const officialTotal = data?.totalLikeCount;
-            if (typeof officialTotal === 'number' && officialTotal > 0) {
-                totalLikes = Math.max(totalLikes, officialTotal);
+            const rawTotal = data?.total !== undefined ? Number(data.total) : (data?.totalLikeCount !== undefined ? Number(data.totalLikeCount) : null);
+            if (rawTotal !== null && !isNaN(rawTotal) && rawTotal > 0) {
+                totalLikes = Math.max(totalLikes, rawTotal);
             } else {
-                // Seulement si TikTok ne nous donne pas le vrai total officiel, on ajoute manuellement
-                const rawCount = typeof data?.likeCount === 'number' ? data.likeCount : 1;
+                const rawCount = typeof data?.count === 'number' ? data.count : (typeof data?.likeCount === 'number' ? data.likeCount : 1);
                 totalLikes += rawCount;
             }
             broadcastMetrics();
@@ -839,9 +882,10 @@ const stopLiveTracker = async () => {
     console.log(`💾 [Archivage] Sauvegarde de la session ${completedSessionRecord.id} dans Firestore...`);
 
     try {
-        // A. Sauvegarde dans le document unique d'archive
+        // A. Sauvegarde dans les collections d'archives (tiktok_archives & tiktokLiveSessions)
         if (currentSessionId) {
             await db.collection('tiktokLiveSessions').doc(currentSessionId).set(completedSessionRecord, { merge: true });
+            await db.collection('tiktok_archives').doc(currentSessionId).set(completedSessionRecord, { merge: true });
         }
 
         // B. Ajout dans l'historique permanent de l'utilisateur (tableau dénormalisé pour l'UI)

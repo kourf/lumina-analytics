@@ -359,11 +359,16 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
 
     if (isLiveConfirmed) {
       let viewerCount = Math.max(0, Number(
+        roomInfo.currentViewers ||
+        roomInfo.current_viewers ||
         roomInfo.user_count || 
         roomInfo.viewer_count || 
         roomInfo.viewerCount || 
         roomInfo.viewers || 
         payload.currentViewers || 
+        payload.data?.currentViewers ||
+        payload.data?.user_count ||
+        payload.data?.viewerCount ||
         0
       ));
 
@@ -386,17 +391,42 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
         roomInfo.total_user || 
         roomInfo.enter_count || 
         payload.totalUser || 
+        payload.data?.totalUser ||
         payload.cumulative_audience || 
         viewerCount
       ));
 
       let streamTitle = roomInfo.title || payload.title || 'Live TikTok en direct';
 
-      // Enrichissement direct et précis via l'API officielle Webcast (aid=8311)
+      // Enrichissement via Firestore REST API (toujours accessible depuis le navigateur sans problème de CORS)
+      try {
+        const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
+        const PROJECT_ID = 'lumina-analytics-kd-2026';
+        const fsRes = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/karamokho?key=${API_KEY}`, { signal: effectiveSignal });
+        if (fsRes.ok) {
+          const fsJson = await fsRes.json();
+          const liveFields = fsJson?.fields?.tiktokLiveAPI?.mapValue?.fields;
+          if (liveFields) {
+            const fsViewers = Number(liveFields.currentViewers?.integerValue || 0);
+            if (fsViewers > 0) {
+              viewerCount = Math.max(viewerCount, fsViewers);
+            }
+            const fsTotal = Number(liveFields.totalUser?.integerValue || liveFields.total_user?.integerValue || liveFields.cumulative_audience?.integerValue || liveFields.enter_count?.integerValue || 0);
+            if (fsTotal > 0) {
+              totalUser = Math.max(totalUser, fsTotal);
+            }
+          }
+        }
+      } catch (e) {
+        // Erreur réseau Firestore silencieuse
+      }
+
+      // Enrichissement optionnel via l'API Webcast si proxy ou environnement node
       if (candidateRoomId && candidateRoomId !== '0') {
         try {
           const detailRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=8311&room_id=${candidateRoomId}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+            signal: effectiveSignal
           });
           if (detailRes.ok) {
             const detailJson = await detailRes.json();
@@ -410,7 +440,7 @@ export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
                 totalUser = Math.max(totalUser, dTotal);
               }
               if (dData.user_count && typeof dData.user_count === 'number' && dData.user_count > 0) {
-                viewerCount = dData.user_count;
+                viewerCount = Math.max(viewerCount, dData.user_count);
               }
               if (dData.title) {
                 streamTitle = dData.title;

@@ -293,13 +293,58 @@ async function connectToLive() {
     scheduleFirestoreSync();
 
     connection.on('roomUser', (data) => {
-      const v = data.viewerCount || parseInt(data.total) || parseInt(data.userCount);
-      if (typeof v === 'number' && !isNaN(v) && v >= 0) {
-        stateData.currentViewers = v;
-        if (v > stateData.peakViewers) stateData.peakViewers = v;
+      const parsedTotal = parseInt(data.total) || 0;
+      const parsedAnon = parseInt(data.anonymous) || 0;
+      const ranksCount = Array.isArray(data.ranks) ? data.ranks.length : 0;
+      const liveViewers = Math.max(
+        Number(data.viewerCount || 0),
+        Number(data.userCount || 0),
+        parsedTotal + parsedAnon,
+        ranksCount + parsedAnon,
+        parsedTotal
+      );
+      if (liveViewers > 0) {
+        stateData.currentViewers = liveViewers;
+        if (liveViewers > stateData.peakViewers) stateData.peakViewers = liveViewers;
         scheduleFirestoreSync();
       }
     });
+
+    // Polling régulier de secours sur l'API officielle TikTok Webcast (toutes les 10 secondes)
+    const statsPollInterval = setInterval(async () => {
+      if (!isConnected || !stateData.roomId) {
+        clearInterval(statsPollInterval);
+        return;
+      }
+      try {
+        const res = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=${stateData.roomId}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+        });
+        if (res.ok) {
+          const json = await res.json();
+          const d = json?.data;
+          if (d) {
+            if (typeof d.user_count === 'number' && d.user_count > 0) {
+              stateData.currentViewers = Math.max(stateData.currentViewers, d.user_count);
+              if (stateData.currentViewers > stateData.peakViewers) {
+                stateData.peakViewers = stateData.currentViewers;
+              }
+            }
+            if (d.stats?.enter_count || d.stats?.total_user) {
+              const tu = Number(d.stats.total_user || d.stats.enter_count || 0);
+              if (tu > 0) stateData.totalUser = Math.max(stateData.totalUser, tu);
+            }
+            if (d.stats?.like_count) {
+              stateData.likes = Math.max(stateData.likes, Number(d.stats.like_count));
+            }
+            if (d.stats?.share_count) {
+              stateData.shares = Math.max(stateData.shares, Number(d.stats.share_count));
+            }
+            scheduleFirestoreSync();
+          }
+        }
+      } catch (err) {}
+    }, 10000);
 
     connection.on('like', (data) => {
       const rawTotal = typeof data.total === 'number' ? data.total : parseInt(data.total);

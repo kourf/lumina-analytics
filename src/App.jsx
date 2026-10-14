@@ -204,7 +204,10 @@ function App() {
                   ...(appData.tiktokLiveAPI || {}),
                   isLive: isGlobalTikTokLive,
                   roomId: globalLiveChecker.roomId || appData?.tiktokLiveAPI?.roomId || '',
-                  currentViewers: globalLiveChecker.viewerCount || appData?.tiktokLiveAPI?.currentViewers || 0
+                  currentViewers: Math.max(
+                    Number(appData?.tiktokLiveAPI?.currentViewers || 0),
+                    Number(globalLiveChecker.viewerCount || 0)
+                  )
                 }}
               />
             } />
