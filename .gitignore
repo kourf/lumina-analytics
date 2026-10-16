@@ -39,3 +39,4 @@ functions/out.txt
 *.njsproj
 *.sln
 *.sw?
+public/*.png

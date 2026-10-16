@@ -48,24 +48,36 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const [isArchivesModalOpen, setIsArchivesModalOpen] = useState(false);
   const [activeAiTab, setActiveAiTab] = useState('questions'); // 'questions' | 'topViewers' | 'chat'
 
-  const getInitialStartMs = () => {
-    // 1. Priorité absolue au started_at certifié de la session active courante (< 18h)
-    const pStart = propLiveData?.started_at || propLiveData?.startedAt;
-    if (pStart) {
-      const ms = typeof pStart === 'number' ? (pStart > 1e11 ? pStart : pStart * 1000) : new Date(pStart).getTime();
-      if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) return ms;
+  const resolveBestStartMs = () => {
+    const candidates = [
+      propLiveData?.started_at,
+      propLiveData?.startedAt,
+      socket.startedAt,
+      initialStored?.started_at,
+      initialStored?.startedAt
+    ].filter(Boolean);
+
+    let bestMs = Infinity;
+    const now = Date.now();
+
+    for (const raw of candidates) {
+      let ms = 0;
+      if (typeof raw === 'number') {
+        ms = raw > 1e11 ? raw : raw * 1000;
+      } else {
+        const num = Number(raw);
+        ms = (!isNaN(num) && num > 1e9 && num < 1e11) ? num * 1000 : new Date(raw).getTime();
+      }
+      if (!isNaN(ms) && ms > 0 && ms <= now + 60000 && (now - ms) < 18 * 3600 * 1000) {
+        if (ms < bestMs) {
+          bestMs = ms;
+        }
+      }
     }
-    const sockStart = socket.startedAt;
-    if (sockStart) {
-      const ms = typeof sockStart === 'number' ? (sockStart > 1e11 ? sockStart : sockStart * 1000) : new Date(sockStart).getTime();
-      if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) return ms;
-    }
-    if (initialStored?.startedAt) {
-      const ms = new Date(initialStored.startedAt).getTime();
-      if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) return ms;
-    }
-    return null;
+    return bestMs !== Infinity ? bestMs : null;
   };
+
+  const getInitialStartMs = () => resolveBestStartMs();
 
   const lockedStartMsRef = React.useRef(getInitialStartMs());
   const currentRoomIdRef = React.useRef(activeRoomId || initialStored?.roomId || '');
@@ -118,36 +130,10 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     }
 
     if (isLive) {
-      // Priorité absolue au started_at certifié de la session courante
-      const propStart = propLiveData?.started_at || propLiveData?.startedAt;
-      if (propStart) {
-        const ms = typeof propStart === 'number' ? (propStart > 1e11 ? propStart : propStart * 1000) : new Date(propStart).getTime();
-        if (!isNaN(ms) && ms > 0 && (Date.now() - ms) < 18 * 3600 * 1000) {
-          lockedStartMsRef.current = ms;
-        }
-      }
-
-      if (!lockedStartMsRef.current) {
-        const candidates = [
-          socket.startedAt,
-          initialStored?.startedAt,
-          initialStored?.started_at
-        ].filter(Boolean);
-
-        for (const raw of candidates) {
-          let candidateStartMs = 0;
-          if (typeof raw === 'number') {
-            candidateStartMs = raw > 1e11 ? raw : raw * 1000;
-          } else {
-            const num = Number(raw);
-            candidateStartMs = (!isNaN(num) && num > 1e9 && num < 1e11) ? num * 1000 : new Date(raw).getTime();
-          }
-
-          const isSensible = !isNaN(candidateStartMs) && candidateStartMs > 0 && (Date.now() - candidateStartMs) < 18 * 3600 * 1000;
-          if (isSensible) {
-            lockedStartMsRef.current = candidateStartMs;
-            break;
-          }
+      const candidateBestMs = resolveBestStartMs();
+      if (candidateBestMs) {
+        if (!lockedStartMsRef.current || candidateBestMs < lockedStartMsRef.current) {
+          lockedStartMsRef.current = candidateBestMs;
         }
       }
 
@@ -268,19 +254,21 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     };
   }
 
-  // Résolution robuste des métriques : WebSocket direct si connecté, sinon Fallback Firestore/props
+  // Résolution robuste et dynamique des métriques : WebSocket direct si connecté, sinon Fallback Firestore/props en temps réel
   const rawCurrentViewers = isLive
-    ? (socket.isSocketConnected && Number(socket.metrics?.viewers || 0) > 0
+    ? (socket.isSocketConnected && socket.metrics?.viewers !== undefined
         ? Number(socket.metrics.viewers)
-        : Number(propLiveData?.currentViewers || propLiveData?.viewerCount || socket.metrics?.viewers || 0))
+        : (propLiveData?.currentViewers !== undefined
+            ? Number(propLiveData.currentViewers)
+            : (propLiveData?.viewerCount !== undefined 
+                ? Number(propLiveData.viewerCount) 
+                : Number(socket.metrics?.viewers || 0))))
     : 0;
 
-  if (isLive && rawCurrentViewers > 0) {
+  if (isLive) {
     lastKnownMetricsRef.current.viewers = rawCurrentViewers;
   }
-  const currentViewers = isLive
-    ? (rawCurrentViewers > 0 ? rawCurrentViewers : lastKnownMetricsRef.current.viewers)
-    : 0;
+  const currentViewers = isLive ? rawCurrentViewers : 0;
 
   const rawPeakViewers = Math.max(
     Number(socket.metrics?.peakViewers || 0),

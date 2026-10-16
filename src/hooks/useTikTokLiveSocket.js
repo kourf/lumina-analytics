@@ -205,7 +205,8 @@ export function useTikTokLiveSocket(serverUrl, fallbackData = {}, targetUserId =
             const nextLikes = Math.max(Number(liveApi.likes ?? liveApi.totalLikes ?? 0), baseLikes, Number(activeStored?.likes || 0));
             const nextShares = Math.max(Number(liveApi.shares ?? liveApi.totalShares ?? liveApi.shareCount ?? 0), baseShares, Number(activeStored?.shares || 0));
             const nextComments = Math.max(Number(liveApi.comments ?? liveApi.totalComments ?? 0), baseComments, Number(activeStored?.comments || 0));
-            const nextViewers = firestoreIsLive ? (Number(liveApi.currentViewers || liveApi.viewerCount || 0) || (isNewRoom ? 0 : prev.viewers) || Number(activeStored?.viewers || 0)) : 0;
+            const fsDirectViewers = liveApi.currentViewers !== undefined ? Number(liveApi.currentViewers) : (liveApi.viewerCount !== undefined ? Number(liveApi.viewerCount) : null);
+            const nextViewers = firestoreIsLive ? (fsDirectViewers !== null ? fsDirectViewers : (isNewRoom ? 0 : prev.viewers)) : 0;
             const nextPeak = firestoreIsLive ? Math.max(Number(liveApi.peakViewers || 0), nextViewers, basePeak, Number(activeStored?.peakViewers || 0)) : 0;
 
             if (firestoreIsLive && (nextTotalUser > 0 || nextLikes > 0)) {

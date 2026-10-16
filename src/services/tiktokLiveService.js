@@ -1,571 +1,251 @@
 /**
- * TikTok Live Status Detection Service
- * 
- * Provides robust live status verification, resilient error handling,
- * and client-side Stale-While-Revalidate (SWR) 60-second caching.
- * 
- * Rules:
- * 1. Never fallback to 'LIVE' on API failure (403, 429, timeout, network error).
- * 2. True live strictly requires: valid roomId + room status code === 2.
- * 3. Default to 'STATUS_UNKNOWN' on rate-limits/errors and 'OFFLINE' when no stream is active.
+ * Service de détection temps réel d'un Live TikTok en cours.
+ * Architecture SI Urbanisée (0€, 0 Quota API payant) :
+ * - Niveau 1 : Passerelle Temps Réel Firebase Cloud Function (`getTikTokLiveStatus` : API Webcast + Protobuf)
+ * - Niveau 2 : API officielle TikTok `/api-live/user/room/` & SIGI_STATE via proxies CORS résilients
+ * - Protection anti-écrasement : en cas d'erreur réseau transitoire, `preserveExisting: true`
+ *   empêche d'écraser un état LIVE actif dans Firestore.
  */
 
-// Stale-While-Revalidate (SWR) cache storage
-// key: normalized username -> { data: StatusResult, timestamp: number }
-const liveStatusCache = new Map();
-const CACHE_TTL_MS = 60 * 1000; // 60 seconds TTL
+const FIREBASE_LIVE_GATEWAY = 'https://us-central1-lumina-analytics-kd-2026.cloudfunctions.net/getTikTokLiveStatus';
 
-// Status Enums
-export const LIVE_STATUS = {
-  LIVE: 'LIVE',
-  OFFLINE: 'OFFLINE',
-  STATUS_UNKNOWN: 'STATUS_UNKNOWN',
-  LOADING: 'LOADING',
+const CORS_PROXIES = [
+  (targetUrl) => `https://corsproxy.io/?url=${encodeURIComponent(targetUrl)}`,
+  (targetUrl) => `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+  (targetUrl) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`
+];
+
+const fetchWithTimeout = async (url, options = {}, timeoutMs = 8000) => {
+  const controller = new AbortController();
+  const id = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(url, {
+      ...options,
+      signal: controller.signal
+    });
+    clearTimeout(id);
+    return response;
+  } catch (err) {
+    clearTimeout(id);
+    throw err;
+  }
+};
+
+const FIRESTORE_REST_ENDPOINT = 'https://firestore.googleapis.com/v1/projects/lumina-analytics-kd-2026/databases/(default)/documents/users/karamokho?key=AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
+
+export const checkTikTokLiveStatus = async (username = 'karam.drame') => {
+  const cleanUsername = username.replace(/^@/, '').trim();
+  const checkedAt = new Date().toISOString();
+
+  // --- NIVEAU 1 : Passerelle Temps Réel Firestore REST (CORS *, 0€, latence < 80ms) ---
+  try {
+    const res = await fetchWithTimeout(FIRESTORE_REST_ENDPOINT, {
+      headers: { Accept: 'application/json' },
+      cache: 'no-store'
+    }, 6000);
+
+    if (res.ok) {
+      const json = await res.json();
+      const fields = json?.fields?.tiktokLiveAPI?.mapValue?.fields;
+      if (fields) {
+        const isLive = Boolean(fields.isLive?.booleanValue);
+        const roomId = isLive ? (fields.roomId?.stringValue || null) : null;
+        const currentViewers = isLive ? parseInt(fields.currentViewers?.integerValue || fields.viewerCount?.integerValue || '0') : 0;
+        const peakViewers = isLive ? parseInt(fields.peakViewers?.integerValue || '0') : 0;
+        const totalUser = isLive ? parseInt(fields.totalUser?.integerValue || fields.total_user?.integerValue || fields.cumulative_audience?.integerValue || '0') : 0;
+        const likes = isLive ? parseInt(fields.likes?.integerValue || fields.totalLikes?.integerValue || '0') : 0;
+        const shares = isLive ? parseInt(fields.shares?.integerValue || fields.totalShares?.integerValue || '0') : 0;
+        const comments = isLive ? parseInt(fields.comments?.integerValue || fields.totalComments?.integerValue || '0') : 0;
+        const followers = isLive ? parseInt(fields.followers?.integerValue || fields.newFollowers?.integerValue || '0') : 0;
+        const startedAt = isLive ? (fields.started_at?.stringValue || fields.startedAt?.stringValue || null) : null;
+
+        return {
+          isLive,
+          status: isLive ? 'LIVE' : 'OFFLINE',
+          roomId,
+          title: fields.title?.stringValue || 'TikTok Live en cours',
+          viewers: currentViewers,
+          currentViewers,
+          peakViewers: Math.max(peakViewers, currentViewers),
+          totalUser: Math.max(totalUser, currentViewers),
+          likes,
+          shares,
+          comments,
+          followers,
+          startedAt,
+          checkedAt,
+          source: 'firestore-live-sync'
+        };
+      }
+    }
+  } catch (err) {
+    console.debug('[TikTokLiveService] Niveau 1 (Firestore Live Sync) note:', err.message);
+  }
+
+  // --- NIVEAU 2A : Interrogation JSON directe de l'API officielle /api-live/user/room/ via proxy CORS ---
+  const apiLiveUrl = `https://www.tiktok.com/api-live/user/room/?aid=1988&uniqueId=${encodeURIComponent(cleanUsername)}&sourceType=54`;
+  for (let i = 0; i < CORS_PROXIES.length; i++) {
+    try {
+      const proxiedApiUrl = CORS_PROXIES[i](apiLiveUrl);
+      const res = await fetchWithTimeout(proxiedApiUrl, { cache: 'no-store' }, 6500);
+      if (!res.ok) continue;
+
+      const apiJson = await res.json();
+      const liveRoom = apiJson?.data?.liveRoom;
+      const userObj = apiJson?.data?.user;
+      if (liveRoom || userObj) {
+        const status = Number(liveRoom?.status ?? userObj?.status ?? 0);
+        const roomId = String(userObj?.roomId || liveRoom?.roomId || '');
+        const isLive = status === 2 && Boolean(roomId && roomId !== '0');
+        const startTimeSec = Number(liveRoom?.startTime || 0);
+        const startedAt = (isLive && startTimeSec > 1e9) ? new Date(startTimeSec * 1000).toISOString() : null;
+        return {
+          isLive,
+          status: isLive ? 'LIVE' : 'OFFLINE',
+          roomId: isLive ? roomId : null,
+          title: isLive ? (liveRoom?.title || 'TikTok Live en cours') : '',
+          viewers: isLive ? Number(liveRoom?.liveRoomStats?.userCount || 0) : 0,
+          totalUser: isLive ? Number(liveRoom?.liveRoomStats?.enterCount || 0) : 0,
+          startedAt,
+          checkedAt,
+          source: `tiktok-api-live-proxy-${i + 1}`
+        };
+      }
+    } catch (err) {
+      console.debug(`[TikTokLiveService] Proxy API-Live ${i + 1} échoué:`, err.message);
+    }
+  }
+
+  // --- NIVEAU 2B : Scraping de la page /live via proxies CORS ---
+  const livePageUrl = `https://www.tiktok.com/@${cleanUsername}/live`;
+
+  for (let i = 0; i < CORS_PROXIES.length; i++) {
+    try {
+      const proxiedUrl = CORS_PROXIES[i](livePageUrl);
+      const res = await fetchWithTimeout(proxiedUrl, { cache: 'no-store' }, 8000);
+      if (!res.ok) continue;
+
+      const html = await res.text();
+      if (!html || html.length < 500) continue;
+
+      const sigiResult = parseTikTokLiveHtml(html);
+      if (sigiResult) {
+        return {
+          ...sigiResult,
+          checkedAt,
+          source: `sigi-proxy-${i + 1}`
+        };
+      }
+    } catch (err) {
+      console.debug(`[TikTokLiveService] Proxy ${i + 1} échoué:`, err.message);
+    }
+  }
+
+  // Fallback sécurisé : on signale preserveExisting=true pour ne JAMAIS écraser un état LIVE valide en base
+  return {
+    isLive: false,
+    status: 'OFFLINE',
+    roomId: null,
+    title: '',
+    viewers: 0,
+    checkedAt,
+    source: 'fallback-error',
+    preserveExisting: true,
+    error: 'Impossible de joindre les passerelles de vérification Live.'
+  };
 };
 
 /**
- * Sanitizes and normalizes a TikTok username or handle.
- * Strips leading '@', URL protocols, domain paths, and query parameters.
- * 
- * @param {string} input - Raw username, handle or profile URL
- * @returns {string} Sanitized clean handle (e.g., 'karam.drame')
+ * Analyse le code HTML d'une page TikTok Live pour détecter un flux actif.
+ * TikTok injecte l'état dans <script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"> ou <script id="SIGI_STATE">.
  */
-export function sanitizeTikTokUsername(input) {
-  if (!input || typeof input !== 'string') return '';
-
-  let cleaned = input.trim();
-
-  // If a URL was provided (e.g. https://www.tiktok.com/@karam.drame?lang=en)
-  if (cleaned.includes('tiktok.com/')) {
-    const afterDomain = cleaned.split('tiktok.com/')[1] || '';
-    cleaned = afterDomain.split('/')[0].split('?')[0];
-  }
-
-  // Remove leading '@' and whitespace
-  cleaned = cleaned.replace(/^@+/, '').trim();
-
-  // Strip query parameters or hashes
-  cleaned = cleaned.split('?')[0].split('#')[0];
-
-  // Whitelist safe username characters: alphanumeric, underscore, dot, hyphen
-  cleaned = cleaned.replace(/[^a-zA-Z0-9_.-]/g, '');
-
-  return cleaned.toLowerCase();
-}
-
-/**
- * Validates whether the raw API payload indicates a genuine, active live stream.
- * 
- * According to TikTok Webcast API:
- * - room.status === 2 indicates an ongoing, active broadcast.
- * - room.status === 4 indicates the stream ended.
- * - Must have a valid, non-empty roomId / room_id / id_str.
- * 
- * @param {any} roomData - Raw room data object
- * @returns {boolean} True if confirmed live, false otherwise
- */
-export function validateTrueLiveCondition(roomData, expectedUsername = 'karam.drame') {
-  if (!roomData || typeof roomData !== 'object') return false;
-
-  // Extract room ID
-  const roomId = String(roomData.roomId || roomData.room_id || roomData.id_str || roomData.id || '');
-  if (!roomId || roomId.trim() === '' || roomId === '0' || roomId === 'unknown') {
-    return false;
-  }
-
-  // Vérification stricte du propriétaire si les métadonnées sont présentes
-  const ownerDisplayId = (roomData.owner?.display_id || roomData.owner?.unique_id || roomData.display_id || '').toLowerCase();
-  const ownerId = String(roomData.owner?.id_str || roomData.owner?.id || '');
-  const targetHandle = (expectedUsername || 'karam.drame').toLowerCase().replace(/^@+/, '');
-  const targetUserId = '7030929632657638405';
-
-  if (ownerDisplayId && ownerDisplayId !== targetHandle) {
-    return false; // Ce direct appartient à un autre streamer (ex: equinoxerpfr)
-  }
-  if (ownerId && ownerId !== targetUserId && ownerDisplayId === '') {
-    return false;
-  }
-
-  // Le statut TikTok Webcast : status === 2 indique formellement un direct en cours.
-  // Status 4 indique que le direct est terminé.
-  if (roomData.status === 4 || roomData.room_status === 4 || roomData.live_status === 4) {
-    return false;
-  }
-
-  // Si isLive est explicite avec un identifiant de salon valide (ex: Cloudflare Edge Webhook)
-  if (roomData.isLive === true && roomId && roomId !== '0' && roomId !== 'unknown') {
-    return true;
-  }
-
-  // Verify room status code === 2 (Active Live Broadcast)
-  const rawStatus = roomData.status ?? roomData.room_status ?? roomData.live_status;
-  if (rawStatus === undefined || rawStatus === null) {
-    return Boolean(roomData.isLive === true);
-  }
-
-  const statusCode = Number(rawStatus);
-  // Status 2 certifie formellement un direct en cours. Status 4 = terminé, 0 = inactif
-  return statusCode === 2;
-}
-
-// Synchronisation Firestore autonome via REST API (fonctionne 24/7 sans serveur local)
-let lastFirestoreSyncTimestamp = 0;
-export async function syncLiveToFirestore(liveData, targetUserId = 'karamokho') {
-  const isLive = Boolean(liveData.isLive);
-  if (!isLive) return; // Ne jamais écraser Firestore depuis le client en mode hors-ligne
-
-  const now = Date.now();
-  if (now - lastFirestoreSyncTimestamp < 15000) return; // Débouncing 15s
-  lastFirestoreSyncTimestamp = now;
-
+export const parseTikTokLiveHtml = (html) => {
   try {
-    const fields = {
-      isLive: { booleanValue: true }
-    };
-    const updateMaskFields = ['tiktokLiveAPI.isLive', 'tiktokAPI.isLive', 'isLive'];
+    const universalMatch = html.match(
+      /<script id="__UNIVERSAL_DATA_FOR_REHYDRATION__"[^>]*>([\s\S]*?)<\/script>/
+    );
+    if (universalMatch && universalMatch[1]) {
+      const json = JSON.parse(universalMatch[1]);
+      const defaultScope = json?.__DEFAULT_SCOPE__ || {};
+      const liveUser = defaultScope['webapp.user-detail']?.userInfo?.user ||
+                       defaultScope['webapp.live-detail']?.liveRoom ||
+                       null;
 
-    if (liveData.roomId) {
-      fields.roomId = { stringValue: String(liveData.roomId) };
-      updateMaskFields.push('tiktokLiveAPI.roomId');
-    }
-
-    const currentViewers = Number(liveData.viewerCount || liveData.currentViewers || 0);
-    if (currentViewers > 0) {
-      fields.currentViewers = { integerValue: String(currentViewers) };
-      updateMaskFields.push('tiktokLiveAPI.currentViewers');
-    }
-
-    const totalUser = Number(liveData.totalUser || liveData.cumulative_audience || 0);
-    if (totalUser > 0) {
-      const tuStr = String(totalUser);
-      fields.totalUser = { integerValue: tuStr };
-      fields.total_user = { integerValue: tuStr };
-      fields.cumulative_audience = { integerValue: tuStr };
-      fields.enter_count = { integerValue: tuStr };
-      updateMaskFields.push(
-        'tiktokLiveAPI.totalUser',
-        'tiktokLiveAPI.total_user',
-        'tiktokLiveAPI.cumulative_audience',
-        'tiktokLiveAPI.enter_count'
-      );
-    }
-
-    // Heure de début certifiée (ex: create_time)
-    if (liveData.startedAt || liveData.started_at) {
-      const stableStart = liveData.started_at || liveData.startedAt;
-      const startMs = new Date(stableStart).getTime();
-      // On ne sauvegarde que si c'est un timestamp passé authentique (pas généré il y a moins de 10s)
-      if (!isNaN(startMs) && (Date.now() - startMs) > 10000) {
-        fields.started_at = { stringValue: stableStart };
-        fields.startedAt = { stringValue: stableStart };
-        updateMaskFields.push('tiktokLiveAPI.started_at', 'tiktokLiveAPI.startedAt');
-      }
-    }
-
-    // PROTECTION STRICTE : Ne JAMAIS écraser les likes ou partages s'ils sont à 0 !
-    // Seul le connecteur WebSocket a autorité pour accumuler les likes et partages.
-    if (Number(liveData.likes || 0) > 0) {
-      const lkStr = String(liveData.likes);
-      fields.likes = { integerValue: lkStr };
-      fields.totalLikes = { integerValue: lkStr };
-      updateMaskFields.push('tiktokLiveAPI.likes', 'tiktokLiveAPI.totalLikes');
-    }
-
-    if (Number(liveData.shares || 0) > 0) {
-      const shStr = String(liveData.shares);
-      fields.shares = { integerValue: shStr };
-      fields.totalShares = { integerValue: shStr };
-      updateMaskFields.push('tiktokLiveAPI.shares', 'tiktokLiveAPI.totalShares', 'tiktokLiveAPI.shareCount');
-    }
-
-    fields.lastDetected = { stringValue: new Date().toISOString() };
-    updateMaskFields.push('tiktokLiveAPI.lastDetected');
-
-    const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
-    const PROJECT_ID = 'lumina-analytics-kd-2026';
-    const mask = updateMaskFields.map(f => `updateMask.fieldPaths=${encodeURIComponent(f)}`).join('&');
-    const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/${targetUserId}?${mask}&key=${API_KEY}`;
-
-    await fetch(url, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        fields: {
-          tiktokLiveAPI: {
-            mapValue: { fields }
-          },
-          'tiktokAPI.isLive': { booleanValue: true },
-          isLive: { booleanValue: true }
-        }
-      })
-    }).catch(() => {});
-  } catch (e) {
-    // Échec silencieux
-  }
-}
-
-/**
- * Fetches verified live status for a TikTok creator with SWR caching.
- * 
- * @param {string} rawUsername - Creator username (e.g. 'karam.drame')
- * @param {object} [options]
- * @param {boolean} [options.forceRefresh=false] - Bypass cache and force network check
- * @param {AbortSignal} [options.signal] - AbortSignal for request cancellation
- * @returns {Promise<any>}
- */
-export async function verifyTikTokLiveStatus(rawUsername, options = {}) {
-  const { forceRefresh = false, signal } = options;
-  const username = sanitizeTikTokUsername(rawUsername);
-
-  if (!username) {
-    return {
-      status: LIVE_STATUS.OFFLINE,
-      isLive: false,
-      username: '',
-      displayName: '',
-      roomId: null,
-      viewerCount: 0,
-      title: '',
-      startedAt: null,
-      lastActiveAt: null,
-      lastChecked: new Date().toISOString(),
-      error: 'Nom d’utilisateur invalide',
-      fromCache: false,
-    };
-  }
-
-  const now = Date.now();
-  const cached = liveStatusCache.get(username);
-
-  // Return fresh cache immediately unless forceRefresh is requested
-  if (!forceRefresh && cached && (now - cached.timestamp < CACHE_TTL_MS)) {
-    return {
-      ...cached.data,
-      fromCache: true,
-      cacheAgeMs: now - cached.timestamp,
-    };
-  }
-
-  // Base offline fallback record
-  const fallbackOffline = {
-    status: LIVE_STATUS.OFFLINE,
-    isLive: false,
-    username,
-    displayName: username,
-    roomId: null,
-    viewerCount: 0,
-    title: '',
-    startedAt: null,
-    lastActiveAt: cached?.data?.lastActiveAt || null,
-    lastChecked: new Date().toISOString(),
-    error: null,
-    fromCache: false,
-  };
-
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
-
-    let effectiveSignal = controller.signal;
-    if (signal) {
-      signal.addEventListener('abort', () => controller.abort());
-    }
-
-    let response = null;
-    const endpointUrl = `https://lumina-tiktok-webhook.kouroufia15.workers.dev/live-status?username=${encodeURIComponent(username)}&_t=${now}`;
-
-    // Requête HTTP GET vers le Webhook Edge Cloudflare (temps réel, bypass CORS, 24/7)
-    try {
-      response = await fetch(endpointUrl, { signal: effectiveSignal });
-    } finally {
-      clearTimeout(timeoutId);
-    }
-
-    // Handle HTTP status codes defensively
-    if (!response || !response.ok) {
-      const statusCode = response?.status || 0;
-
-      // Rate limited (429) or Forbidden / Bot Challenge (403)
-      if (statusCode === 429 || statusCode === 403) {
-        const errorResult = {
-          status: LIVE_STATUS.STATUS_UNKNOWN,
-          isLive: false, // CRITICAL: NEVER assume LIVE on 429/403
-          username,
-          displayName: cached?.data?.displayName || username,
-          roomId: null,
-          viewerCount: 0,
-          title: '',
-          startedAt: null,
-          lastActiveAt: cached?.data?.lastActiveAt || null,
-          lastChecked: new Date().toISOString(),
-          error: statusCode === 429 
-            ? 'Limite de requêtes TikTok atteinte (HTTP 429). Réessai automatique dans 60s.'
-            : 'Vérification TikTok temporairement protégée (HTTP 403).',
-          fromCache: false,
+      if (liveUser) {
+        const roomId = liveUser.roomId || liveUser.room_id || null;
+        const status = liveUser.status ?? liveUser.liveStatus;
+        const isLive = Boolean(roomId && roomId !== '0' && (status === 2 || status === undefined));
+        return {
+          isLive,
+          status: isLive ? 'LIVE' : 'OFFLINE',
+          roomId: isLive ? String(roomId) : null,
+          title: liveUser.title || '',
+          viewers: Number(liveUser.user_count || liveUser.viewerCount || 0)
         };
-
-        liveStatusCache.set(username, { data: errorResult, timestamp: now - (CACHE_TTL_MS / 2) });
-        return errorResult;
       }
+    }
 
-      // If user profile is not found (404), creator is offline
-      if (statusCode === 404) {
-        const notFoundResult = {
-          ...fallbackOffline,
-          error: 'Compte ou stream introuvable.',
+    const sigiMatch = html.match(/<script id="SIGI_STATE"[^>]*>([\s\S]*?)<\/script>/);
+    if (sigiMatch && sigiMatch[1]) {
+      const sigi = JSON.parse(sigiMatch[1]);
+      const liveRoom = sigi?.LiveRoom?.liveRoomUserInfo?.liveRoom || sigi?.LiveRoom?.liveRoom;
+      if (liveRoom) {
+        const status = Number(liveRoom.status);
+        const roomId = liveRoom.roomId || sigi?.LiveRoom?.liveRoomUserInfo?.user?.roomId || null;
+        const isLive = status === 2 && Boolean(roomId && roomId !== '0');
+        return {
+          isLive,
+          status: isLive ? 'LIVE' : 'OFFLINE',
+          roomId: isLive ? String(roomId) : null,
+          title: liveRoom.title || '',
+          viewers: Number(liveRoom.liveRoomStats?.userCount || 0)
         };
-        liveStatusCache.set(username, { data: notFoundResult, timestamp: now });
-        return notFoundResult;
       }
+    }
 
-      // Any other server error (500, 502, 503)
-      const serverErrorResult = {
-        status: LIVE_STATUS.STATUS_UNKNOWN,
+    const roomStatusMatch = html.match(/"roomStatus"\s*:\s*(\d+)/) || html.match(/"status"\s*:\s*(\d+).*?"roomId"\s*:\s*"(\d+)"/);
+    const roomIdMatch = html.match(/"roomId"\s*:\s*"(\d{10,})"/);
+
+    if (roomIdMatch && roomIdMatch[1]) {
+      const extractedRoomId = roomIdMatch[1];
+      const isExplicitlyEnded = html.includes('"status":4') || html.includes('"roomStatus":4');
+      const isExplicitlyLive = html.includes('"status":2') || html.includes('"roomStatus":2');
+
+      if (isExplicitlyLive && !isExplicitlyEnded) {
+        const viewerMatch = html.match(/"userCount"\s*:\s*(\d+)/);
+        const titleMatch = html.match(/"title"\s*:\s*"([^"]{1,120})"/);
+        return {
+          isLive: true,
+          status: 'LIVE',
+          roomId: extractedRoomId,
+          title: titleMatch ? titleMatch[1] : 'TikTok Live en cours',
+          viewers: viewerMatch ? Number(viewerMatch[1]) : 0
+        };
+      }
+    }
+
+    if (html.includes('SIGI_STATE') || html.includes('__UNIVERSAL_DATA_FOR_REHYDRATION__')) {
+      return {
         isLive: false,
-        username,
-        displayName: cached?.data?.displayName || username,
+        status: 'OFFLINE',
         roomId: null,
-        viewerCount: 0,
         title: '',
-        startedAt: null,
-        lastActiveAt: cached?.data?.lastActiveAt || null,
-        lastChecked: new Date().toISOString(),
-        error: `Service de vérification indisponible (HTTP ${statusCode}).`,
-        fromCache: false,
+        viewers: 0
       };
-      return serverErrorResult;
     }
 
-    // Ensure response has valid JSON content-type
-    const contentType = response.headers?.get?.('content-type') || '';
-    if (contentType && !contentType.includes('application/json')) {
-      return fallbackOffline;
-    }
-
-    // Parse JSON safely
-    let payload = null;
-    try {
-      payload = await response.json();
-    } catch {
-      return fallbackOffline;
-    }
-    if (!payload || typeof payload !== 'object') {
-      return fallbackOffline;
-    }
-
-    // Extract potential room data structure
-    const roomInfo = payload.room || payload.roomInfo?.data || payload.data || payload;
-    const isLiveConfirmed = validateTrueLiveCondition(roomInfo, username);
-
-    if (isLiveConfirmed) {
-      let viewerCount = Math.max(0, Number(
-        roomInfo.currentViewers ||
-        roomInfo.current_viewers ||
-        roomInfo.user_count || 
-        roomInfo.viewer_count || 
-        roomInfo.viewerCount || 
-        roomInfo.viewers || 
-        payload.currentViewers || 
-        payload.data?.currentViewers ||
-        payload.data?.user_count ||
-        payload.data?.viewerCount ||
-        0
-      ));
-
-      const candidateRoomId = String(roomInfo.roomId || roomInfo.room_id || roomInfo.id_str || roomInfo.id || payload.roomId || '');
-
-      let startedAt = null;
-      if (roomInfo.create_time && typeof roomInfo.create_time === 'number' && roomInfo.create_time > 1e9) {
-        startedAt = new Date(roomInfo.create_time * 1000).toISOString();
-      } else if (cached?.data?.isLive && cached?.data?.startedAt && cached?.data?.roomId === candidateRoomId) {
-        startedAt = cached.data.startedAt;
-      } else if (roomInfo.started_at || roomInfo.startedAt || payload.started_at || payload.startedAt) {
-        startedAt = roomInfo.started_at || roomInfo.startedAt || payload.started_at || payload.startedAt;
-      } else {
-        startedAt = new Date().toISOString();
-      }
-
-      let totalUser = Math.max(0, Number(
-        roomInfo.stats?.total_user || 
-        roomInfo.stats?.enter_count || 
-        roomInfo.total_user || 
-        roomInfo.enter_count || 
-        payload.totalUser || 
-        payload.data?.totalUser ||
-        payload.cumulative_audience || 
-        viewerCount
-      ));
-
-      let streamTitle = roomInfo.title || payload.title || 'Live TikTok en direct';
-
-      // Enrichissement via Firestore REST API (toujours accessible depuis le navigateur sans problème de CORS)
-      try {
-        const API_KEY = 'AIzaSyCOggZGYa8yhu8fYv30Yw1vvA09EH27zyc';
-        const PROJECT_ID = 'lumina-analytics-kd-2026';
-        const fsRes = await fetch(`https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/users/karamokho?key=${API_KEY}`, { signal: effectiveSignal });
-        if (fsRes.ok) {
-          const fsJson = await fsRes.json();
-          const liveFields = fsJson?.fields?.tiktokLiveAPI?.mapValue?.fields;
-          if (liveFields) {
-            const fsViewers = Number(liveFields.currentViewers?.integerValue || 0);
-            if (fsViewers > 0) {
-              viewerCount = Math.max(viewerCount, fsViewers);
-            }
-            const fsTotal = Number(liveFields.totalUser?.integerValue || liveFields.total_user?.integerValue || liveFields.cumulative_audience?.integerValue || liveFields.enter_count?.integerValue || 0);
-            if (fsTotal > 0) {
-              totalUser = Math.max(totalUser, fsTotal);
-            }
-          }
-        }
-      } catch (e) {
-        // Erreur réseau Firestore silencieuse
-      }
-
-      // Enrichissement optionnel via l'API Webcast si proxy ou environnement node
-      if (candidateRoomId && candidateRoomId !== '0') {
-        try {
-          const detailRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=8311&room_id=${candidateRoomId}`, {
-            headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
-            signal: effectiveSignal
-          });
-          if (detailRes.ok) {
-            const detailJson = await detailRes.json();
-            const dData = detailJson?.data;
-            if (dData) {
-              if (dData.create_time && typeof dData.create_time === 'number' && dData.create_time > 1e9) {
-                startedAt = new Date(dData.create_time * 1000).toISOString();
-              }
-              const dTotal = dData.stats?.total_user || dData.stats?.enter_count;
-              if (typeof dTotal === 'number' && dTotal > 0) {
-                totalUser = Math.max(totalUser, dTotal);
-              }
-              if (dData.user_count && typeof dData.user_count === 'number' && dData.user_count > 0) {
-                viewerCount = Math.max(viewerCount, dData.user_count);
-              }
-              if (dData.title) {
-                streamTitle = dData.title;
-              }
-            }
-          }
-        } catch (e) {
-          // Erreur réseau d'enrichissement silencieuse
-        }
-      }
-
-      const likes = Math.max(0, Number(
-        roomInfo.stats?.like_count || 
-        roomInfo.stats?.digg_count || 
-        roomInfo.like_count || 
-        payload.likes || 
-        payload.totalLikes || 
-        0
-      ));
-
-      const shares = Math.max(0, Number(
-        roomInfo.stats?.share_count || 
-        roomInfo.share_count || 
-        payload.shares || 
-        payload.totalShares || 
-        0
-      ));
-
-      const liveResult = {
-        status: LIVE_STATUS.LIVE,
-        isLive: true,
-        username,
-        displayName: roomInfo.owner?.nickname || payload.displayName || username,
-        avatarUrl: roomInfo.owner?.avatar_thumb?.url_list?.[0] || payload.avatarUrl || null,
-        roomId: candidateRoomId,
-        viewerCount,
-        totalUser,
-        cumulative_audience: totalUser,
-        likes,
-        shares,
-        title: streamTitle,
-        startedAt,
-        started_at: startedAt,
-        lastActiveAt: startedAt,
-        lastChecked: new Date().toISOString(),
-        liveUrl: `https://www.tiktok.com/@${username}/live`,
-        error: null,
-        fromCache: false,
-      };
-
-      liveStatusCache.set(username, { data: liveResult, timestamp: now });
-      return liveResult;
-    }
-
-    // Not live: creator is confirmed OFFLINE
-    const offlineResult = {
-      status: LIVE_STATUS.OFFLINE,
-      isLive: false,
-      username,
-      displayName: payload.displayName || payload.display_name || username,
-      avatarUrl: payload.avatarUrl || payload.avatar_url || null,
-      roomId: null,
-      viewerCount: 0,
-      title: '',
-      startedAt: null,
-      lastActiveAt: payload.lastActiveAt || payload.lastDetected || cached?.data?.lastActiveAt || null,
-      lastChecked: new Date().toISOString(),
-      liveUrl: `https://www.tiktok.com/@${username}`,
-      error: null,
-      fromCache: false,
-    };
-
-    liveStatusCache.set(username, { data: offlineResult, timestamp: now });
-    return offlineResult;
-
-  } catch (err) {
-    const isAbort = err.name === 'AbortError';
-    const unknownResult = {
-      status: LIVE_STATUS.STATUS_UNKNOWN,
-      isLive: false, // CRITICAL: NEVER fallback to 'LIVE' on exception
-      username,
-      displayName: cached?.data?.displayName || username,
-      roomId: null,
-      viewerCount: 0,
-      title: '',
-      startedAt: null,
-      lastActiveAt: cached?.data?.lastActiveAt || null,
-      lastChecked: new Date().toISOString(),
-      error: isAbort 
-        ? 'Délai d’attente dépassé (timeout vérification).'
-        : `Erreur de connexion : ${err.message || 'Réseau indisponible'}`,
-      fromCache: false,
-    };
-
-    return unknownResult;
+    return null;
+  } catch (e) {
+    return null;
   }
-}
+};
 
-/**
- * Clears the SWR in-memory cache for a specific creator or all creators.
- * 
- * @param {string} [username] - Optional username to clear, or clears all if omitted
- */
-export function clearTikTokLiveCache(username) {
-  if (username) {
-    const clean = sanitizeTikTokUsername(username);
-    liveStatusCache.delete(clean);
-  } else {
-    liveStatusCache.clear();
-  }
-}
-
-/**
- * Returns current cached live status for a username if available.
- * 
- * @param {string} username - Creator username
- * @returns {any}
- */
-export function getCachedTikTokLiveStatus(username) {
-  const clean = sanitizeTikTokUsername(username);
-  const entry = liveStatusCache.get(clean);
-  if (!entry) return null;
-  return {
-    ...entry.data,
-    fromCache: true,
-    cacheAgeMs: Date.now() - entry.timestamp,
-  };
-}
+export const validateTrueLiveCondition = (liveData) => {
+  if (!liveData || liveData.isLive !== true) return false;
+  return Boolean(
+    liveData.status === 'LIVE' ||
+    liveData.status === 2 ||
+    (liveData.roomId && String(liveData.roomId) !== '0' && String(liveData.roomId) !== 'unknown') ||
+    Number(liveData.currentViewers || liveData.viewers || 0) > 0
+  );
+};

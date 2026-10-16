@@ -350,9 +350,11 @@ const startLiveTracker = async () => {
         // Retrieve previous start time & metrics from Firestore to prevent reset on reconnect
         let previousStartedAt = null;
         let prevStats = {};
+        let rootUserData = {};
         try {
             const userDoc = await db.collection('users').doc(TARGET_FIRESTORE_USER).get();
-            const liveApi = userDoc.data()?.tiktokLiveAPI;
+            rootUserData = userDoc.data() || {};
+            const liveApi = rootUserData.tiktokLiveAPI;
             if (liveApi && String(liveApi.roomId) === currentRoomId) {
                 if (liveApi.startedAt || liveApi.started_at) {
                     previousStartedAt = new Date(liveApi.startedAt || liveApi.started_at);
@@ -375,6 +377,73 @@ const startLiveTracker = async () => {
         console.log(`- Room ID: ${currentRoomId}`);
         console.log(`- Session ID: ${currentSessionId}`);
         console.log(`- Début: ${liveStartTime.toISOString()}`);
+
+        // Alerte Discord Unifiée (@here + logos TikTok/YouTube/Twitch + 3 boutons) uniquement si autoBroadcastEnabled === true
+        const isAutoBroadcastActive = rootUserData.autoBroadcastEnabled === true || rootUserData?.tiktokLiveAPI?.autoBroadcastEnabled === true;
+        const alreadyAlertedThisRoom = String(rootUserData.lastDiscordAlertRoomId || '') === String(currentRoomId);
+        if (isAutoBroadcastActive && !alreadyAlertedThisRoom) {
+            try {
+                await db.collection('users').doc(TARGET_FIRESTORE_USER).set({
+                    lastDiscordAlertRoomId: String(currentRoomId),
+                    lastDiscordAlertAt: new Date().toISOString()
+                }, { merge: true });
+
+                const webhookUrl = rootUserData.discordWebhookUrl || 'https://discord.com/api/webhooks/1540098204714930319/w71fW-1Am_A4LVtIFg-2-b8s9J5Vryi32q_0LwTB76kX_j-yRQMhFMVRYt8wpiPqwPa9';
+                const streamTitle = roomApiData?.title || state.roomInfo?.data?.title || 'Live Multi-Stream avec la communauté !';
+                const tiktokUrl = 'https://www.tiktok.com/@karam.drame/live';
+                const youtubeUrl = rootUserData?.youtubeLiveAPI?.videoId
+                    ? `https://www.youtube.com/watch?v=${rootUserData.youtubeLiveAPI.videoId}`
+                    : 'https://www.youtube.com/@karamdrm/live';
+                const twitchUrl = 'https://www.twitch.tv/karam_drm';
+
+                const discordPayload = {
+                    username: 'Karam • Alerte Live Multi-Stream',
+                    avatar_url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/ab914d68-d93b-4289-948d-aec685dcfafa-profile_image-300x300.png',
+                    content: '🔴 **@here — KARAM EST EN LIVE SUR TIKTOK • YOUTUBE • TWITCH !** 🚀',
+                    allowed_mentions: { parse: ['everyone'] },
+                    embeds: [{
+                        author: {
+                            name: 'Karam • Diffusion Multi-Réseaux (TikTok • YouTube • Twitch)'
+                        },
+                        title: `🎥 EN DIRECT : ${streamTitle}`,
+                        color: 16657493,
+                        fields: [
+                            { name: '🎵 TikTok', value: '`@karam.drame`\n🟢 En direct', inline: true },
+                            { name: '▶️ YouTube', value: '`@karamdrm`\n🟢 En direct', inline: true },
+                            { name: '🟣 Twitch', value: '`karam_drm`\n🟢 En direct', inline: true }
+                        ],
+                        thumbnail: {
+                            url: 'https://static-cdn.jtvnw.net/jtv_user_pictures/ab914d68-d93b-4289-948d-aec685dcfafa-profile_image-300x300.png'
+                        }
+                    }],
+                    components: [{
+                        type: 1,
+                        components: [
+                            { type: 2, style: 5, label: '🔴 CLIQUER ICI : REJOINDRE LE LIVE TIKTOK ↗', url: tiktokUrl, emoji: { name: '🎵' } },
+                            { type: 2, style: 5, label: '🔴 CLIQUER ICI : REJOINDRE LE LIVE YOUTUBE ↗', url: youtubeUrl, emoji: { name: '▶️' } },
+                            { type: 2, style: 5, label: '🟣 CLIQUER ICI : REJOINDRE LE LIVE TWITCH ↗', url: twitchUrl, emoji: { name: '🟣' } }
+                        ]
+                    }]
+                };
+
+                const sep = webhookUrl.includes('?') ? '&' : '?';
+                const r1 = await fetch(`${webhookUrl}${sep}wait=true&with_components=true`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(discordPayload)
+                });
+                if (!r1.ok) {
+                    const { components, ...fallbackDiscordPayload } = discordPayload;
+                    await fetch(`${webhookUrl}${sep}wait=true`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(fallbackDiscordPayload)
+                    });
+                }
+            } catch (alertErr) {
+                console.warn('[Discord Alert] Erreur notification unifiée:', alertErr.message);
+            }
+        }
 
         // Initialisation avec les statistiques réelles fournies par TikTok ou restauration Firestore
         const initialStats = roomApiData?.stats || state.roomInfo?.data?.stats || {};
@@ -550,8 +619,8 @@ const startLiveTracker = async () => {
                         if (typeof userTotal === 'number' && userTotal > 0) {
                             totalUserCount = Math.max(totalUserCount, userTotal);
                         }
-                        if (typeof json.data.user_count === 'number' && json.data.user_count > 0) {
-                            viewersCount = Math.max(viewersCount, json.data.user_count);
+                        if (typeof json.data.user_count === 'number' && json.data.user_count >= 0) {
+                            viewersCount = json.data.user_count;
                             viewerSamples.push(viewersCount);
                             if (viewersCount > peakViewers) peakViewers = viewersCount;
                         }
@@ -572,18 +641,13 @@ const startLiveTracker = async () => {
 
         // 9. ATTACHEMENT DES ÉVÉNEMENTS WEBCASHPUSH
 
-        // Concurrent Viewers
+        // Concurrent Viewers & Cumulative Audience
         currentConnection.on('roomUser', (data) => {
-            const parsedTotal = parseInt(data?.total) || 0;
-            const parsedAnon = parseInt(data?.anonymous) || 0;
-            const ranksCount = Array.isArray(data?.ranks) ? data.ranks.length : 0;
-            const liveViewers = Math.max(
-                Number(data?.viewerCount || 0),
-                Number(data?.userCount || 0),
-                parsedTotal + parsedAnon,
-                ranksCount + parsedAnon,
-                parsedTotal
-            );
+            const liveViewers = parseInt(data?.total) || Number(data?.viewerCount || data?.userCount || 0);
+            const parsedTotalUser = Number(data?.totalUser || data?.total_user || 0);
+            if (parsedTotalUser > 0) {
+                totalUserCount = Math.max(totalUserCount, parsedTotalUser);
+            }
             if (liveViewers > 0) {
                 viewersCount = liveViewers;
                 viewerSamples.push(viewersCount);
@@ -608,16 +672,20 @@ const startLiveTracker = async () => {
         };
 
         const handleShareEvent = (data) => {
-            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_share` : null);
+            const msgId = data?.common?.msgId || data?.msgId || data?.id || (data?.user?.id ? `${data.user.id}_share_${Math.floor(Date.now() / 2000)}` : null);
             if (msgId && markSocialHandled(msgId)) return;
-            const count = Math.max(1, Number(data?.shareCount) || 1);
-            totalShares += count;
-            console.log(`[TikTok Event] 🔄 Partage détecté (+${count}, total: ${totalShares})`);
+            const reportedShareCount = Number(data?.shareCount || 0);
+            if (reportedShareCount > totalShares) {
+                totalShares = reportedShareCount;
+            } else {
+                totalShares += 1;
+            }
+            console.log(`[TikTok Event] 🔄 Partage détecté (total: ${totalShares})`);
             broadcastMetrics();
         };
 
         const handleFollowEvent = (data) => {
-            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_follow` : null);
+            const msgId = data?.common?.msgId || data?.msgId || data?.id || (data?.user?.id ? `${data.user.id}_follow_${Math.floor(Date.now() / 5000)}` : null);
             if (msgId && markSocialHandled(msgId)) return;
             newFollowers++; // Increment runtime tracker
             console.log(`[TikTok Event] ➕ Nouvel abonné détecté (total live: ${newFollowers})`);
@@ -641,10 +709,25 @@ const startLiveTracker = async () => {
         currentConnection.on('follow', handleFollowEvent);
 
         currentConnection.on('social', (data) => {
-            const displayType = String(data?.displayType || data?.label || data?.action || '').toLowerCase();
-            if (displayType.includes('share') || displayType.includes('partagé') || data?.shareType || data?.shareTarget) {
+            const actionStr = String(data?.action || '');
+            const displayKey = String(data?.common?.displayText?.key || data?.displayType || data?.label || '').toLowerCase();
+            const defaultPattern = String(data?.common?.displayText?.defaultPattern || '').toLowerCase();
+            if (
+                actionStr === '3' ||
+                displayKey.includes('share') ||
+                defaultPattern.includes('share') ||
+                defaultPattern.includes('partag') ||
+                Number(data?.shareCount || 0) > 0 ||
+                Boolean(data?.shareType || data?.shareTarget)
+            ) {
                 handleShareEvent(data);
-            } else if (displayType.includes('follow') || displayType.includes('abonné') || data?.followType) {
+            } else if (
+                actionStr === '1' ||
+                displayKey.includes('follow') ||
+                defaultPattern.includes('follow') ||
+                defaultPattern.includes('abonn') ||
+                Boolean(data?.followType)
+            ) {
                 handleFollowEvent(data);
             }
         });
@@ -655,9 +738,9 @@ const startLiveTracker = async () => {
             const diamonds = (data?.diamondCount || 0) * (data?.repeatCount || 1);
             totalDiamonds += diamonds;
 
-            const uid = data?.userId || data?.uniqueId;
+            const uid = data?.user?.id || data?.userId || data?.uniqueId;
             if (uid) {
-                const name = data.nickname || data.uniqueId || 'Anonyme';
+                const name = data?.user?.nickname || data.nickname || data.uniqueId || 'Anonyme';
                 if (!userGiftsTotal[uid]) userGiftsTotal[uid] = { nickname: name, diamonds: 0 };
                 userGiftsTotal[uid].diamonds += diamonds;
 
@@ -672,9 +755,9 @@ const startLiveTracker = async () => {
         currentConnection.on('chat', async (data) => {
             totalComments++;
 
-            const uid = data?.userId || data?.uniqueId;
-            const nickname = data?.nickname || data?.uniqueId || 'Spectateur';
-            const msg = (data?.comment || '').trim();
+            const uid = data?.user?.id || data?.user?.uniqueId || data?.userId || data?.uniqueId;
+            const nickname = data?.user?.nickname || data?.user?.uniqueId || data?.nickname || data?.uniqueId || 'Spectateur';
+            const msg = (data?.content || data?.comment || '').trim();
 
             if (uid) {
                 if (!userMessagesCount[uid]) userMessagesCount[uid] = { nickname, count: 0 };
@@ -707,10 +790,10 @@ const startLiveTracker = async () => {
             const wsMessage = {
                 id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
                 nickname: nickname,
-                uniqueId: data?.uniqueId || '',
+                uniqueId: data?.user?.uniqueId || data?.uniqueId || '',
                 comment: msg,
                 isQuestion,
-                avatar: data?.profilePictureUrl || null,
+                avatar: data?.user?.avatarThumb?.urlList?.[0] || data?.profilePictureUrl || null,
                 timestamp: new Date().toISOString()
             };
             io.emit('chatMessage', wsMessage);

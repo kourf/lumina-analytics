@@ -9,12 +9,14 @@ const db = getFirestore();
 async function check() {
     const docSnap = await db.collection('users').doc('karamokho').get();
     const data = docSnap.data();
-    console.log("tiktokLiveAPI isLive:", data?.tiktokLiveAPI?.isLive);
-    console.log("tiktokLiveAPI startedAt:", data?.tiktokLiveAPI?.startedAt);
-    console.log("tiktokLiveAPI started_at:", data?.tiktokLiveAPI?.started_at);
-    console.log("tiktokLiveAPI likes:", data?.tiktokLiveAPI?.likes);
-    console.log("tiktokLiveAPI totalLikes:", data?.tiktokLiveAPI?.totalLikes);
-    console.log("tiktokLiveAPI roomId:", data?.tiktokLiveAPI?.roomId);
+    const api = data?.tiktokLiveAPI || {};
+    console.log("isLive:", api.isLive);
+    console.log("startedAt:", api.startedAt);
+    console.log("currentViewers:", api.currentViewers);
+    console.log("totalUser:", api.totalUser);
+    console.log("likes:", api.likes);
+    console.log("shares:", api.shares);
+    console.log("newFollowers:", api.newFollowers);
     process.exit(0);
 }
 check();

@@ -121,17 +121,24 @@ function scheduleFirestoreSync() {
     try {
       const updateMaskFields = [
         'updateMask.fieldPaths=tiktokLiveAPI.isLive',
+        'updateMask.fieldPaths=tiktokLiveAPI.status',
         'updateMask.fieldPaths=tiktokLiveAPI.currentViewers',
         'updateMask.fieldPaths=tiktokLiveAPI.peakViewers',
+        'updateMask.fieldPaths=tiktokLiveAPI.totalUser',
+        'updateMask.fieldPaths=tiktokLiveAPI.total_user',
+        'updateMask.fieldPaths=tiktokLiveAPI.cumulative_audience',
+        'updateMask.fieldPaths=tiktokLiveAPI.enter_count',
         'updateMask.fieldPaths=tiktokLiveAPI.likes',
         'updateMask.fieldPaths=tiktokLiveAPI.totalLikes',
         'updateMask.fieldPaths=tiktokLiveAPI.shares',
         'updateMask.fieldPaths=tiktokLiveAPI.totalShares',
         'updateMask.fieldPaths=tiktokLiveAPI.comments',
+        'updateMask.fieldPaths=tiktokLiveAPI.totalComments',
         'updateMask.fieldPaths=tiktokLiveAPI.newFollowers',
         'updateMask.fieldPaths=tiktokLiveAPI.followers',
         'updateMask.fieldPaths=tiktokLiveAPI.roomId',
         'updateMask.fieldPaths=tiktokLiveAPI.started_at',
+        'updateMask.fieldPaths=tiktokLiveAPI.startedAt',
         'updateMask.fieldPaths=tiktokLiveAPI.topQuestions',
         'updateMask.fieldPaths=tiktokLiveAPI.topCommenters',
         'updateMask.fieldPaths=tiktokLiveAPI.recentComments',
@@ -139,20 +146,28 @@ function scheduleFirestoreSync() {
       ].join('&');
 
       const maskUrl = `${REST_URL}&${updateMaskFields}`;
+      const effectiveStartedAt = stateData.started_at || new Date().toISOString();
 
       const liveApiPayload = {
         isLive: toFirestoreValue(true),
+        status: toFirestoreValue('LIVE'),
         currentViewers: toFirestoreValue(stateData.currentViewers),
         peakViewers: toFirestoreValue(stateData.peakViewers),
+        totalUser: toFirestoreValue(stateData.totalUser),
+        total_user: toFirestoreValue(stateData.totalUser),
+        cumulative_audience: toFirestoreValue(stateData.totalUser),
+        enter_count: toFirestoreValue(stateData.totalUser),
         likes: toFirestoreValue(stateData.likes),
         totalLikes: toFirestoreValue(stateData.likes),
         shares: toFirestoreValue(stateData.shares),
         totalShares: toFirestoreValue(stateData.shares),
         comments: toFirestoreValue(stateData.comments),
+        totalComments: toFirestoreValue(stateData.comments),
         newFollowers: toFirestoreValue(stateData.followers),
         followers: toFirestoreValue(stateData.followers),
-        roomId: toFirestoreValue(stateData.roomId),
-        started_at: toFirestoreValue(stateData.started_at || new Date().toISOString()),
+        roomId: toFirestoreValue(String(stateData.roomId)),
+        started_at: toFirestoreValue(effectiveStartedAt),
+        startedAt: toFirestoreValue(effectiveStartedAt),
         topQuestions: toFirestoreValue(stateData.topQuestions.slice(0, 15)),
         topCommenters: toFirestoreValue(stateData.topCommenters.slice(0, 5)),
         recentComments: toFirestoreValue(stateData.recentComments.slice(0, 50)),
@@ -262,7 +277,7 @@ async function connectToLive() {
 
     const state = await connection.connect();
     isConnected = true;
-    const detectedRoomId = state.roomId || (state.roomInfo?.data?.id_str || state.roomInfo?.id_str || 'live_stream');
+    const detectedRoomId = String(state.roomId || state.roomInfo?.data?.id_str || state.roomInfo?.id_str || 'live_stream');
 
     // Réinitialisation stricte en cas de nouvelle session live
     if (stateData.roomId && String(stateData.roomId) !== String(detectedRoomId)) {
@@ -273,8 +288,8 @@ async function connectToLive() {
     stateData.roomId = detectedRoomId;
     stateData.isLive = true;
 
-    const createTime = state.roomInfo?.data?.create_time || state.roomInfo?.create_time;
-    if (createTime && typeof createTime === 'number' && createTime > 1e9) {
+    const createTime = Number(state.roomInfo?.data?.create_time || state.roomInfo?.create_time || 0);
+    if (createTime > 1e9) {
       stateData.started_at = new Date(createTime * 1000).toISOString();
     } else if (!stateData.started_at) {
       stateData.started_at = new Date().toISOString();
@@ -283,26 +298,21 @@ async function connectToLive() {
     console.log(`[Lumina Daemon] 🔴 LIVE EN DIRECT DÉTECTÉ ! Room ID: ${stateData.roomId}, Début: ${stateData.started_at}`);
 
     if (state.roomInfo?.data?.user_count) {
-      stateData.currentViewers = state.roomInfo.data.user_count;
+      stateData.currentViewers = Number(state.roomInfo.data.user_count);
       stateData.peakViewers = Math.max(stateData.peakViewers, stateData.currentViewers);
     }
     if (state.roomInfo?.data?.stats?.like_count) {
-      stateData.likes = Math.max(stateData.likes, state.roomInfo.data.stats.like_count);
+      stateData.likes = Math.max(stateData.likes, Number(state.roomInfo.data.stats.like_count));
     }
 
     scheduleFirestoreSync();
 
     connection.on('roomUser', (data) => {
-      const parsedTotal = parseInt(data.total) || 0;
-      const parsedAnon = parseInt(data.anonymous) || 0;
-      const ranksCount = Array.isArray(data.ranks) ? data.ranks.length : 0;
-      const liveViewers = Math.max(
-        Number(data.viewerCount || 0),
-        Number(data.userCount || 0),
-        parsedTotal + parsedAnon,
-        ranksCount + parsedAnon,
-        parsedTotal
-      );
+      const liveViewers = parseInt(data?.total) || Number(data?.viewerCount || data?.userCount || 0);
+      const parsedTotalUser = Number(data?.totalUser || data?.total_user || 0);
+      if (parsedTotalUser > 0) {
+        stateData.totalUser = Math.max(stateData.totalUser, parsedTotalUser);
+      }
       if (liveViewers > 0) {
         stateData.currentViewers = liveViewers;
         if (liveViewers > stateData.peakViewers) stateData.peakViewers = liveViewers;
@@ -324,8 +334,11 @@ async function connectToLive() {
           const json = await res.json();
           const d = json?.data;
           if (d) {
+            if (d.create_time && Number(d.create_time) > 1e9) {
+              stateData.started_at = new Date(Number(d.create_time) * 1000).toISOString();
+            }
             if (typeof d.user_count === 'number' && d.user_count > 0) {
-              stateData.currentViewers = Math.max(stateData.currentViewers, d.user_count);
+              stateData.currentViewers = d.user_count;
               if (stateData.currentViewers > stateData.peakViewers) {
                 stateData.peakViewers = stateData.currentViewers;
               }
@@ -347,10 +360,10 @@ async function connectToLive() {
     }, 10000);
 
     connection.on('like', (data) => {
-      const rawTotal = typeof data.total === 'number' ? data.total : parseInt(data.total);
-      const rawCount = typeof data.count === 'number' ? data.count : parseInt(data.count);
-      const totalLikesVal = (!isNaN(rawTotal) && rawTotal > 0) ? rawTotal : (typeof data.totalLikeCount === 'number' ? data.totalLikeCount : parseInt(data.totalLikeCount));
-      const countVal = (!isNaN(rawCount) && rawCount > 0) ? rawCount : (typeof data.likeCount === 'number' ? data.likeCount : parseInt(data.likeCount)) || 1;
+      const rawTotal = typeof data?.total === 'number' ? data.total : parseInt(data?.total);
+      const rawCount = typeof data?.count === 'number' ? data.count : parseInt(data?.count);
+      const totalLikesVal = (!isNaN(rawTotal) && rawTotal > 0) ? rawTotal : (typeof data?.totalLikeCount === 'number' ? data.totalLikeCount : parseInt(data?.totalLikeCount));
+      const countVal = (!isNaN(rawCount) && rawCount > 0) ? rawCount : (typeof data?.likeCount === 'number' ? data.likeCount : parseInt(data?.likeCount)) || 1;
 
       if (totalLikesVal && !isNaN(totalLikesVal) && totalLikesVal > 0) {
         stateData.likes = Math.max(stateData.likes, totalLikesVal);
@@ -362,35 +375,58 @@ async function connectToLive() {
 
     connection.on('chat', (data) => {
       stateData.comments++;
-      const text = data.content || data.comment || '';
-      const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname;
-      const uniqueId = data.user?.uniqueId || data.uniqueId;
+      const text = data?.content || data?.comment || '';
+      const nickname = data?.user?.nickname || data?.user?.uniqueId || data?.nickname;
+      const uniqueId = data?.user?.uniqueId || data?.uniqueId;
       processIncomingMessage(text, nickname, uniqueId);
     });
 
     connection.on('questionNew', (data) => {
-      const qText = data.details?.questionText || data.questionText || data.question || '';
-      const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname || 'Spectateur';
-      const uniqueId = data.user?.uniqueId || data.uniqueId;
+      const qText = data?.details?.questionText || data?.questionText || data?.question || '';
+      const nickname = data?.user?.nickname || data?.user?.uniqueId || data?.nickname || 'Spectateur';
+      const uniqueId = data?.user?.uniqueId || data?.uniqueId;
       processIncomingMessage(qText, nickname, uniqueId);
     });
 
+    const handledSocialIds = new Set();
+    const onShareDetected = (data) => {
+      const msgId = data?.common?.msgId || data?.msgId || data?.id;
+      if (msgId) {
+        if (handledSocialIds.has(msgId)) return;
+        handledSocialIds.add(msgId);
+      }
+      const reportedShares = Number(data?.shareCount || 0);
+      if (reportedShares > stateData.shares) {
+        stateData.shares = reportedShares;
+      } else {
+        stateData.shares += 1;
+      }
+      scheduleFirestoreSync();
+    };
+
+    const onFollowDetected = (data) => {
+      const msgId = data?.common?.msgId || data?.msgId || data?.id;
+      if (msgId) {
+        if (handledSocialIds.has(msgId)) return;
+        handledSocialIds.add(msgId);
+      }
+      stateData.followers += 1;
+      scheduleFirestoreSync();
+    };
+
     connection.on('social', (data) => {
-      const text = String(data.displayType || data.label || data.action || '').toLowerCase();
-      if (text.includes('share') || text.includes('partagé')) stateData.shares++;
-      if (text.includes('follow') || text.includes('abonné')) stateData.followers++;
-      scheduleFirestoreSync();
+      const actionStr = String(data?.action || '');
+      const key = String(data?.common?.displayText?.key || data?.displayType || data?.label || '').toLowerCase();
+      const pattern = String(data?.common?.displayText?.defaultPattern || '').toLowerCase();
+      if (actionStr === '3' || key.includes('share') || pattern.includes('share') || pattern.includes('partag') || Number(data?.shareCount || 0) > 0 || data?.shareType || data?.shareTarget) {
+        onShareDetected(data);
+      } else if (actionStr === '1' || key.includes('follow') || pattern.includes('follow') || pattern.includes('abonn') || data?.followType) {
+        onFollowDetected(data);
+      }
     });
 
-    connection.on('share', () => {
-      stateData.shares++;
-      scheduleFirestoreSync();
-    });
-
-    connection.on('follow', () => {
-      stateData.followers++;
-      scheduleFirestoreSync();
-    });
+    connection.on('share', onShareDetected);
+    connection.on('follow', onFollowDetected);
 
     connection.on('streamEnd', async () => {
       console.log('[Lumina Daemon] 🛑 Le live TikTok est terminé.');
@@ -401,7 +437,7 @@ async function connectToLive() {
     });
 
     connection.on('error', (err) => {
-      console.warn('[Lumina Daemon] Événement erreur TikTok:', err.message);
+      console.warn('[Lumina Daemon] Événement erreur TikTok:', err?.message || err);
     });
 
   } catch (err) {

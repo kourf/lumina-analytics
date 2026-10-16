@@ -12,52 +12,60 @@ async function updateFirestoreLive(liveData) {
     const shares = isLive ? Number(liveData.shares || 0) : 0;
     const totalUser = isLive ? Number(liveData.totalUser || liveData.cumulative_audience || 0) : 0;
     const newFollowers = isLive ? Number(liveData.followers || liveData.newFollowers || 0) : 0;
-
     const startedAt = isLive && (liveData.startedAt || liveData.started_at) ? String(liveData.startedAt || liveData.started_at) : null;
 
+    // Champs toujours mis à jour (sans jamais écraser les totaux historiques quand OFFLINE)
     const liveApiFields = {
       isLive: { booleanValue: isLive },
-      roomId: { stringValue: isLive ? roomId : '' },
-      title: { stringValue: title },
+      status: { stringValue: isLive ? 'LIVE' : 'OFFLINE' },
       currentViewers: { integerValue: String(currentViewers) },
-      likes: { integerValue: String(likes) },
-      totalLikes: { integerValue: String(likes) },
-      shares: { integerValue: String(shares) },
-      totalShares: { integerValue: String(shares) },
-      shareCount: { integerValue: String(shares) },
-      totalUser: { integerValue: String(totalUser) },
-      cumulative_audience: { integerValue: String(totalUser) },
-      newFollowers: { integerValue: String(newFollowers) },
-      followers: { integerValue: String(newFollowers) },
       lastDetected: { stringValue: new Date().toISOString() }
     };
 
-    if (startedAt) {
-      liveApiFields.startedAt = { stringValue: startedAt };
-      liveApiFields.started_at = { stringValue: startedAt };
-    }
-
     const fieldPaths = [
       'tiktokLiveAPI.isLive',
-      'tiktokLiveAPI.roomId',
-      'tiktokLiveAPI.title',
+      'tiktokLiveAPI.status',
       'tiktokLiveAPI.currentViewers',
-      'tiktokLiveAPI.likes',
-      'tiktokLiveAPI.totalLikes',
-      'tiktokLiveAPI.shares',
-      'tiktokLiveAPI.totalShares',
-      'tiktokLiveAPI.shareCount',
-      'tiktokLiveAPI.totalUser',
-      'tiktokLiveAPI.cumulative_audience',
-      'tiktokLiveAPI.newFollowers',
-      'tiktokLiveAPI.followers',
       'tiktokLiveAPI.lastDetected',
       'tiktokAPI.isLive',
       'isLive'
     ];
 
-    if (startedAt) {
-      fieldPaths.push('tiktokLiveAPI.startedAt', 'tiktokLiveAPI.started_at');
+    if (isLive) {
+      if (roomId) {
+        liveApiFields.roomId = { stringValue: roomId };
+        fieldPaths.push('tiktokLiveAPI.roomId');
+      }
+      if (title) {
+        liveApiFields.title = { stringValue: title };
+        fieldPaths.push('tiktokLiveAPI.title');
+      }
+      if (totalUser > 0) {
+        liveApiFields.totalUser = { integerValue: String(totalUser) };
+        liveApiFields.cumulative_audience = { integerValue: String(totalUser) };
+        fieldPaths.push('tiktokLiveAPI.totalUser', 'tiktokLiveAPI.cumulative_audience');
+      }
+      if (likes > 0) {
+        liveApiFields.likes = { integerValue: String(likes) };
+        liveApiFields.totalLikes = { integerValue: String(likes) };
+        fieldPaths.push('tiktokLiveAPI.likes', 'tiktokLiveAPI.totalLikes');
+      }
+      if (shares > 0) {
+        liveApiFields.shares = { integerValue: String(shares) };
+        liveApiFields.totalShares = { integerValue: String(shares) };
+        liveApiFields.shareCount = { integerValue: String(shares) };
+        fieldPaths.push('tiktokLiveAPI.shares', 'tiktokLiveAPI.totalShares', 'tiktokLiveAPI.shareCount');
+      }
+      if (newFollowers > 0) {
+        liveApiFields.newFollowers = { integerValue: String(newFollowers) };
+        liveApiFields.followers = { integerValue: String(newFollowers) };
+        fieldPaths.push('tiktokLiveAPI.newFollowers', 'tiktokLiveAPI.followers');
+      }
+      if (startedAt) {
+        liveApiFields.startedAt = { stringValue: startedAt };
+        liveApiFields.started_at = { stringValue: startedAt };
+        fieldPaths.push('tiktokLiveAPI.startedAt', 'tiktokLiveAPI.started_at');
+      }
     }
 
     const updateMask = fieldPaths.map(k => `updateMask.fieldPaths=${encodeURIComponent(k)}`).join('&');
@@ -70,7 +78,13 @@ async function updateFirestoreLive(liveData) {
             fields: liveApiFields
           }
         },
-        'tiktokAPI.isLive': { booleanValue: isLive },
+        tiktokAPI: {
+          mapValue: {
+            fields: {
+              isLive: { booleanValue: isLive }
+            }
+          }
+        },
         isLive: { booleanValue: isLive }
       }
     };

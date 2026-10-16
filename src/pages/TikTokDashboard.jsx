@@ -21,7 +21,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   // Vérification temps réel autonome via Edge Gateway TikTok (interrogation toutes les 30s)
   const liveChecker = useTikTokLiveStatus('karam.drame', {
     autoCheck: true,
-    pollInterval: 30000,
+    pollInterval: 10000,
     initialData: liveData
   });
 
@@ -42,19 +42,28 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   const storedLiveInitial = isStoredMatchingRoom ? rawStoredLive : null;
 
   const getEarliestStartedAt = () => {
-    const d1 = liveData?.started_at || liveData?.startedAt;
-    const d2 = storedLiveInitial?.startedAt || storedLiveInitial?.started_at;
-    // Si d1 provient d'une session active aujourd'hui (< 18h), lui donner la priorité absolue
-    if (d1) {
-      const t1 = new Date(d1).getTime();
-      if (!isNaN(t1) && (Date.now() - t1) < 18 * 3600 * 1000) return d1;
+    const candidates = [
+      liveData?.started_at,
+      liveData?.startedAt,
+      liveChecker?.startedAt,
+      storedLiveInitial?.started_at,
+      storedLiveInitial?.startedAt
+    ].filter(Boolean);
+
+    let earliestMs = Infinity;
+    let earliestIso = null;
+    const now = Date.now();
+
+    for (const raw of candidates) {
+      const ms = typeof raw === 'number' ? (raw > 1e11 ? raw : raw * 1000) : new Date(raw).getTime();
+      if (!isNaN(ms) && ms > 0 && ms <= now + 60000 && (now - ms) < 18 * 3600 * 1000) {
+        if (ms < earliestMs) {
+          earliestMs = ms;
+          earliestIso = new Date(ms).toISOString();
+        }
+      }
     }
-    if (d1 && d2) {
-      const t1 = new Date(d1).getTime();
-      const t2 = new Date(d2).getTime();
-      if (!isNaN(t1) && !isNaN(t2)) return t1 <= t2 ? d1 : d2;
-    }
-    return d1 || d2 || null;
+    return earliestIso || liveData?.started_at || liveData?.startedAt || liveChecker?.startedAt || null;
   };
 
   const lastPositiveMetrics = React.useRef({
@@ -77,7 +86,7 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
       likes: 0,
       shares: 0,
       comments: 0,
-      startedAt: liveData?.started_at || liveData?.startedAt || liveChecker.startedAt || null,
+      startedAt: getEarliestStartedAt(),
       roomId: currentActiveRoom
     };
     try {
@@ -99,22 +108,25 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     ? true 
     : (isConfirmedOffline ? false : isFirestoreLive);
 
-  // Résolution stricte et dynamique des spectateurs en direct (priorité absolue au flux Firestore temps réel certifié)
+  // Résolution stricte et dynamique des spectateurs en direct en temps réel (hausse ET baisse en temps réel)
   const firestoreViewers = Number(liveData?.currentViewers ?? liveData?.viewerCount ?? 0);
   const checkerViewers = Number(liveChecker?.viewerCount ?? 0);
-  const rawCurrentViewers = Math.max(firestoreViewers, checkerViewers);
+  // Priorité au flux en temps réel Firestore (mis à jour chaque seconde par le daemon) ou au checker direct
+  const latestLiveViewers = firestoreViewers > 0 
+    ? firestoreViewers 
+    : (checkerViewers > 0 ? checkerViewers : 0);
 
-  if (effectiveIsLive && rawCurrentViewers > 0) {
-    lastPositiveMetrics.current.viewers = rawCurrentViewers;
+  if (effectiveIsLive && latestLiveViewers > 0) {
+    lastPositiveMetrics.current.viewers = latestLiveViewers;
   }
 
   const resolvedCurrentViewers = effectiveIsLive 
-    ? (rawCurrentViewers > 0 ? rawCurrentViewers : lastPositiveMetrics.current.viewers)
+    ? (latestLiveViewers > 0 ? latestLiveViewers : (lastPositiveMetrics.current.viewers || 0))
     : 0;
 
   const rawPeakViewers = Math.max(
     Number(liveData?.peakViewers || 0), 
-    Number(liveChecker.viewerCount || 0), 
+    Number(liveChecker.peakViewers || liveChecker.viewerCount || 0), 
     resolvedCurrentViewers
   );
   if (effectiveIsLive && rawPeakViewers > 0) {
@@ -126,49 +138,58 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     Number(liveData?.peakViewers || 0)
   );
 
-  // Préservation absolue du timestamp réel authentique du direct (TikTok create_time / Firestore)
-  const incomingStartedAt = liveData?.started_at || liveData?.startedAt || liveChecker.startedAt || null;
-  if (incomingStartedAt) {
-    const incTime = new Date(incomingStartedAt).getTime();
-    if (!isNaN(incTime) && (Date.now() - incTime) < 18 * 3600 * 1000) {
-      lastPositiveMetrics.current.startedAt = incomingStartedAt;
-    }
+  // Préservation absolue du timestamp réel authentique le plus ancien du direct (TikTok create_time)
+  const bestStartedAt = getEarliestStartedAt();
+  if (bestStartedAt) {
+    lastPositiveMetrics.current.startedAt = bestStartedAt;
     if (currentActiveRoom) {
       lastPositiveMetrics.current.roomId = currentActiveRoom;
     }
   }
 
-  const resolvedStartedAt = lastPositiveMetrics.current.startedAt || incomingStartedAt || null;
+  const resolvedStartedAt = bestStartedAt || lastPositiveMetrics.current.startedAt || null;
 
   const resolvedRoomId = currentActiveRoom || lastPositiveMetrics.current.roomId || '';
 
   // Audience cumulée (total_user / enter_count) avec filet de sécurité par salon
-  const rawTotalUser = Number(
-    liveData?.cumulative_audience || 
-    liveData?.totalUser || 
-    liveData?.total_user || 
-    liveData?.enter_count || 
-    liveChecker.totalUser || 
-    0
+  const rawTotalUser = Math.max(
+    Number(liveData?.cumulative_audience || 0),
+    Number(liveData?.totalUser || 0),
+    Number(liveData?.total_user || 0),
+    Number(liveData?.enter_count || 0),
+    Number(liveChecker.totalUser || 0)
   );
   if (rawTotalUser > 0) {
     lastPositiveMetrics.current.totalUser = Math.max(lastPositiveMetrics.current.totalUser, rawTotalUser);
   }
   const resolvedTotalUser = Math.max(rawTotalUser, lastPositiveMetrics.current.totalUser, resolvedPeakViewers, resolvedCurrentViewers, 0);
 
-  const rawLikes = Number(liveData?.likes ?? liveData?.totalLikes ?? liveChecker.likes ?? 0);
+  const rawLikes = Math.max(
+    Number(liveData?.likes ?? 0),
+    Number(liveData?.totalLikes ?? 0),
+    Number(liveChecker.likes ?? 0)
+  );
   if (rawLikes > 0) {
     lastPositiveMetrics.current.likes = Math.max(lastPositiveMetrics.current.likes, rawLikes);
   }
   const resolvedLikes = Math.max(rawLikes, lastPositiveMetrics.current.likes, 0);
 
-  const rawShares = Number(liveData?.shares ?? liveData?.totalShares ?? liveData?.shareCount ?? liveChecker.shares ?? 0);
+  const rawShares = Math.max(
+    Number(liveData?.shares ?? 0),
+    Number(liveData?.totalShares ?? 0),
+    Number(liveData?.shareCount ?? 0),
+    Number(liveChecker.shares ?? 0)
+  );
   if (rawShares > 0) {
     lastPositiveMetrics.current.shares = Math.max(lastPositiveMetrics.current.shares, rawShares);
   }
   const resolvedShares = Math.max(rawShares, lastPositiveMetrics.current.shares, 0);
 
-  const rawComments = Number(liveData?.comments ?? liveData?.totalComments ?? liveChecker.comments ?? 0);
+  const rawComments = Math.max(
+    Number(liveData?.comments ?? 0),
+    Number(liveData?.totalComments ?? 0),
+    Number(liveChecker.comments ?? 0)
+  );
   if (rawComments > 0) {
     lastPositiveMetrics.current.comments = Math.max(lastPositiveMetrics.current.comments, rawComments);
   }
@@ -200,6 +221,12 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
     peakViewers: resolvedPeakViewers,
     totalUser: resolvedTotalUser,
     cumulative_audience: resolvedTotalUser,
+    likes: resolvedLikes,
+    totalLikes: resolvedLikes,
+    shares: resolvedShares,
+    totalShares: resolvedShares,
+    comments: resolvedComments,
+    totalComments: resolvedComments,
     started_at: resolvedStartedAt,
     startedAt: resolvedStartedAt,
     lastDetected: liveData?.lastDetected || liveChecker.lastChecked,

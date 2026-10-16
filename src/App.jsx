@@ -16,6 +16,7 @@ const TikTokDashboard = lazy(() => import('./pages/TikTokDashboard').then(m => (
 const LinkedInDashboard = lazy(() => import('./pages/LinkedInDashboard').then(m => ({ default: m.LinkedInDashboard })));
 const WebsiteDashboard = lazy(() => import('./pages/WebsiteDashboard').then(m => ({ default: m.WebsiteDashboard })));
 const DiscordDashboard = lazy(() => import('./pages/DiscordDashboard').then(m => ({ default: m.DiscordDashboard })));
+const TwitchDashboard = lazy(() => import('./pages/TwitchDashboard').then(m => ({ default: m.TwitchDashboard })));
 const Insights = lazy(() => import('./pages/Insights').then(m => ({ default: m.Insights })));
 
 const JARVIS_PHRASES = [
@@ -50,7 +51,7 @@ function App() {
   // Détection TikTok Live globale 24/7 au niveau racine de l'application
   const globalLiveChecker = useTikTokLiveStatus('karam.drame', {
     autoCheck: true,
-    pollInterval: 45000,
+    pollInterval: 15000,
     initialData: appData?.tiktokLiveAPI
   });
 
@@ -111,10 +112,13 @@ function App() {
 
             const liveRaw = firebaseData.tiktokLiveAPI || {};
             const tiktokLiveClean = {
+              ...liveRaw,
               isLive: Boolean((liveRaw.isLive === true || firebaseData.isLive === true) && firebaseData.isLive !== false),
+              status: liveRaw.status || (liveRaw.isLive ? 'LIVE' : 'OFFLINE'),
               currentViewers: Number(liveRaw.currentViewers || 0),
               peakViewers: Number(liveRaw.peakViewers || 0),
-              totalUser: Number(liveRaw.totalUser || liveRaw.total_user || liveRaw.enter_count || 0),
+              totalUser: Number(liveRaw.totalUser || liveRaw.total_user || liveRaw.enter_count || liveRaw.cumulative_audience || 0),
+              cumulative_audience: Number(liveRaw.cumulative_audience || liveRaw.totalUser || liveRaw.total_user || liveRaw.enter_count || 0),
               likes: Number(liveRaw.likes ?? liveRaw.totalLikes ?? liveRaw.likeCount ?? 0),
               totalLikes: Number(liveRaw.totalLikes ?? liveRaw.likes ?? liveRaw.likeCount ?? 0),
               shares: Number(liveRaw.shares ?? liveRaw.totalShares ?? liveRaw.shareCount ?? 0),
@@ -126,13 +130,15 @@ function App() {
               comments: Number(liveRaw.comments ?? liveRaw.totalComments ?? 0),
               roomId: liveRaw.roomId || '',
               title: liveRaw.title || '',
-              startedAt: liveRaw.startedAt || liveRaw.started_at || null,
+              startedAt: liveRaw.started_at || liveRaw.startedAt || null,
               started_at: liveRaw.started_at || liveRaw.startedAt || null,
               timeline: Array.isArray(liveRaw.timeline) ? liveRaw.timeline : [],
+              viewersHistory: Array.isArray(liveRaw.viewersHistory) ? liveRaw.viewersHistory : [],
               history: liveRaw.history || [],
               historyArchives: historyArchivesList,
               topQuestions: liveRaw.topQuestions || [],
-              topCommenters: Array.isArray(liveRaw.topCommenters) ? liveRaw.topCommenters : [],
+              topChatters: Array.isArray(liveRaw.topChatters) ? liveRaw.topChatters : (Array.isArray(liveRaw.topCommenters) ? liveRaw.topCommenters : []),
+              topCommenters: Array.isArray(liveRaw.topCommenters) ? liveRaw.topCommenters : (Array.isArray(liveRaw.topChatters) ? liveRaw.topChatters : []),
               topContributors: liveRaw.topContributors || [],
               topContributor: liveRaw.topContributor || null,
               topDonator: liveRaw.topDonator || null,
@@ -195,7 +201,16 @@ function App() {
       <ScrollToTop />
       <Suspense fallback={<DashboardLoader />}>
         <Routes>
-          <Route path="/" element={<Layout isTikTokLive={isGlobalTikTokLive} />}>
+          <Route
+            path="/"
+            element={
+              <Layout
+                isTikTokLive={isGlobalTikTokLive}
+                isTwitchLive={Boolean(appData?.twitchLiveAPI?.isLive)}
+                isYouTubeLive={Boolean(appData?.youtubeLiveAPI?.isLive)}
+              />
+            }
+          >
             <Route index element={<Dashboard data={appData} />} />
             <Route path="youtube" element={<YouTubeDashboard data={appData.youtube} />} />
             <Route path="website" element={<WebsiteDashboard />} />
@@ -208,15 +223,42 @@ function App() {
                   ...(appData.tiktokLiveAPI || {}),
                   isLive: isGlobalTikTokLive,
                   roomId: globalLiveChecker.roomId || appData?.tiktokLiveAPI?.roomId || '',
-                  currentViewers: Math.max(
-                    Number(appData?.tiktokLiveAPI?.currentViewers || 0),
-                    Number(globalLiveChecker.viewerCount || 0)
-                  )
+                  currentViewers: isGlobalTikTokLive
+                    ? (appData?.tiktokLiveAPI?.currentViewers !== undefined && Number(appData?.tiktokLiveAPI?.currentViewers) > 0
+                        ? Number(appData.tiktokLiveAPI.currentViewers)
+                        : Number(globalLiveChecker.viewerCount || 0))
+                    : 0
                 }}
               />
             } />
+            <Route path="twitch" element={<TwitchDashboard data={appData} />} />
             <Route path="linkedin" element={<LinkedInDashboard />} />
-            <Route path="discord" element={<DiscordDashboard data={appData.discordData || appData.discord} />} />
+            <Route path="discord" element={
+              <DiscordDashboard
+                data={{
+                  ...(appData.discordData || appData.discord || {}),
+                  autoBroadcastEnabled: appData.autoBroadcastEnabled,
+                  discordWebhookUrl: appData.discordWebhookUrl,
+                  discordBotWebhookUrl: appData.discordBotWebhookUrl,
+                  lastDiscordAlertRoomId: appData.lastDiscordAlertRoomId,
+                  lastDiscordAlertSessionKey: appData.lastDiscordAlertSessionKey,
+                  lastDiscordAlertMessageId: appData.lastDiscordAlertMessageId,
+                  lastDiscordAlertEndedEdited: appData.lastDiscordAlertEndedEdited,
+                  tiktokLiveAPI: {
+                    ...(appData.tiktokLiveAPI || {}),
+                    isLive: isGlobalTikTokLive,
+                    roomId: globalLiveChecker.roomId || appData?.tiktokLiveAPI?.roomId || '',
+                    currentViewers: isGlobalTikTokLive
+                      ? (Number(appData?.tiktokLiveAPI?.currentViewers || 0) || Number(globalLiveChecker.viewerCount || 0))
+                      : 0
+                  },
+                  youtubeLiveAPI: appData.youtubeLiveAPI || null,
+                  twitchLiveAPI: appData.twitchLiveAPI || null,
+                  youtubeAPI: appData.youtubeAPI || null,
+                  tiktokAPI: appData.tiktokAPI || null
+                }}
+              />
+            } />
             <Route path="insights" element={<Insights data={appData} />} />
           </Route>
         </Routes>

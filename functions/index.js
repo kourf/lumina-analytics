@@ -911,90 +911,228 @@ exports.scrapeCompetitor = functions.https.onCall(async (data, context) => {
 });
 
 
+// Helper : Envoi d'UN SEUL message Discord unifié (@here + logos TikTok/YouTube/Twitch + 3 boutons)
+async function sendUnifiedDiscordLiveAlert(webhookUrl, { tiktokLive, youtubeLive, twitchLive, title }) {
+    if (!webhookUrl) return false;
+    const tiktokUrl = 'https://www.tiktok.com/@karam.drame/live';
+    const youtubeUrl = youtubeLive?.videoId
+        ? `https://www.youtube.com/watch?v=${youtubeLive.videoId}`
+        : 'https://www.youtube.com/@karamdrm/live';
+    const twitchUrl = 'https://www.twitch.tv/karam_drm';
+
+    const streamTitle = title || tiktokLive?.title || twitchLive?.title || youtubeLive?.title || 'Session Live Multi-Stream avec la communauté !';
+
+    const payload = {
+        username: 'Karam • Alerte Live Multi-Stream',
+        avatar_url: twitchLive?.avatarUrl || 'https://static-cdn.jtvnw.net/jtv_user_pictures/ab914d68-d93b-4289-948d-aec685dcfafa-profile_image-300x300.png',
+        content: '🔴 **@here — KARAM EST EN LIVE SUR TIKTOK • YOUTUBE • TWITCH !** 🚀',
+        allowed_mentions: { parse: ['everyone'] }, // Active uniquement @here présent dans content (aucun @everyone)
+        embeds: [{
+            author: {
+                name: 'Karam • Diffusion Multi-Réseaux (TikTok • YouTube • Twitch)'
+            },
+            title: `🎥 EN DIRECT : ${streamTitle}`,
+            color: 16657493,
+            fields: [
+                { name: '🎵 TikTok', value: '`@karam.drame`\n🟢 En direct', inline: true },
+                { name: '▶️ YouTube', value: '`@karamdrm`\n🟢 En direct', inline: true },
+                { name: '🟣 Twitch', value: '`karam_drm`\n🟢 En direct', inline: true }
+            ],
+            thumbnail: { url: twitchLive?.avatarUrl || 'https://static-cdn.jtvnw.net/jtv_user_pictures/ab914d68-d93b-4289-948d-aec685dcfafa-profile_image-300x300.png' }
+        }],
+        components: [{
+            type: 1,
+            components: [
+                { type: 2, style: 5, label: '🔴 CLIQUER ICI : REJOINDRE LE LIVE TIKTOK ↗', url: tiktokUrl, emoji: { name: '🎵' } },
+                { type: 2, style: 5, label: '🔴 CLIQUER ICI : REJOINDRE LE LIVE YOUTUBE ↗', url: youtubeUrl, emoji: { name: '▶️' } },
+                { type: 2, style: 5, label: '🟣 CLIQUER ICI : REJOINDRE LE LIVE TWITCH ↗', url: twitchUrl, emoji: { name: '🟣' } }
+            ]
+        }]
+    };
+
+    const sep = webhookUrl.includes('?') ? '&' : '?';
+    const firstRes = await fetch(`${webhookUrl}${sep}wait=true&with_components=true`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (firstRes.ok) {
+        let j = null;
+        try { j = await firstRes.json(); } catch (_) {}
+        return { ok: true, messageId: j?.id || null };
+    }
+
+    const { components, ...fallbackPayload } = payload;
+    const secondRes = await fetch(`${webhookUrl}${sep}wait=true`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fallbackPayload)
+    });
+    let j2 = null;
+    if (secondRes.ok) {
+        try { j2 = await secondRes.json(); } catch (_) {}
+    }
+    return { ok: secondRes.ok, messageId: j2?.id || null };
+}
+
+async function editDiscordAlertOnLiveEnded(userRef, rootData) {
+    try {
+        const messageId = rootData?.lastDiscordAlertMessageId;
+        const webhookUrl = rootData?.lastDiscordAlertWebhookUrl || rootData?.discordBotWebhookUrl || rootData?.discordWebhookUrl;
+        if (!messageId || !webhookUrl || rootData?.lastDiscordAlertEndedEdited === true) return;
+
+        const baseWebhook = webhookUrl.split('?')[0];
+        const streamTitle = rootData?.lastDiscordAlertTitle || 'On crée un site ensemble';
+        const youtubeReplayUrl = rootData?.lastDiscordAlertYoutubeUrl || 'https://www.youtube.com/@karamdrm/streams';
+        const twitchReplayUrl = rootData?.lastDiscordAlertTwitchVodUrl || 'https://www.twitch.tv/karam_drm/videos';
+        const tiktokProfileUrl = 'https://www.tiktok.com/@karam.drame';
+
+        const endedPayload = {
+            content: '⚪ **LIVE TERMINÉ — MERCI À TOUS LES PARTICIPANTS !** 🙏',
+            embeds: [{
+                author: {
+                    name: 'Karam • Diffusion Multi-Réseaux (TikTok • YouTube • Twitch)'
+                },
+                title: `⚪ LIVE TERMINÉ : ${streamTitle}`,
+                color: 6582667,
+                fields: [
+                    { name: '🎵 TikTok', value: '`@karam.drame`\n⚪ Hors ligne', inline: true },
+                    { name: '▶️ YouTube', value: '`@karamdrm`\n🎬 Replay', inline: true },
+                    { name: '🟣 Twitch', value: '`karam_drm`\n🎬 VOD', inline: true }
+                ]
+            }],
+            components: [{
+                type: 1,
+                components: [
+                    { type: 2, style: 5, label: '▶️ CLIQUER ICI : VOIR LE REPLAY YOUTUBE ↗', url: youtubeReplayUrl, emoji: { name: '▶️' } },
+                    { type: 2, style: 5, label: '🟣 CLIQUER ICI : VOIR LE REPLAY TWITCH ↗', url: twitchReplayUrl, emoji: { name: '🟣' } },
+                    { type: 2, style: 5, label: '🎵 CLIQUER ICI : PROFIL TIKTOK ↗', url: tiktokProfileUrl, emoji: { name: '🎵' } }
+                ]
+            }]
+        };
+
+        const patchRes = await fetch(`${baseWebhook}/messages/${messageId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(endedPayload)
+        });
+        if (patchRes.ok) {
+            await userRef.set({
+                lastDiscordAlertEndedEdited: true,
+                lastDiscordAlertEndedAt: new Date().toISOString()
+            }, { merge: true });
+        }
+    } catch (e) {
+        console.warn("Erreur editDiscordAlertOnLiveEnded:", e.message);
+    }
+}
+
 exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeconds: 540, memory: "512MiB" }, async (event) => {
     const username = 'karam.drame';
     const db = getFirestore();
     const userRef = db.collection('users').doc('karamokho');
     
     const docSnap = await userRef.get();
-    const existingData = docSnap.data()?.tiktokLiveAPI || {};
+    const rootData = docSnap.data() || {};
+    const existingData = rootData.tiktokLiveAPI || {};
+    const existingYtLive = rootData.youtubeLiveAPI || {};
+    const existingTwLive = rootData.twitchLiveAPI || {};
     
     const now = Date.now();
     const lastHeartbeat = existingData.workerLastHeartbeat?.toMillis?.() || 0;
 
-    // --- 1. DÉTECTION & ALERTE LIVE YOUTUBE ---
+    let ytState = { isLive: Boolean(existingYtLive.isLive), videoId: existingYtLive.videoId || null, title: existingYtLive.title || '' };
+    let twState = { isLive: Boolean(existingTwLive.isLive), streamId: existingTwLive.streamId || null, title: existingTwLive.title || '', avatarUrl: existingTwLive.avatarUrl || '' };
+
+    // --- 1. DÉTECTION LIVE YOUTUBE (0 QUOTA API via page /live) ---
     try {
-        const ytUrl = `https://youtube.googleapis.com/youtube/v3/search?part=snippet&channelId=${YOUTUBE_CHANNEL_ID}&type=video&eventType=live&key=${YOUTUBE_API_KEY}`;
-        const ytRes = await fetch(ytUrl);
-        const ytJson = await ytRes.json();
-        const isYtLive = !!(ytJson.items && ytJson.items.length > 0);
-        const existingYtLive = docSnap.data()?.youtubeLiveAPI || {};
+        const ytRes = await fetch('https://www.youtube.com/@karamdrm/live', {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept-Language': 'fr-FR,fr;q=0.9'
+            },
+            redirect: 'follow'
+        });
+        const ytHtml = await ytRes.text();
+        const isYtLive = ytHtml.includes('"isLive":true') && ytHtml.includes('"isLiveNow":true') && ytHtml.includes('UC_V-hdqGtizf9g7gxahdmqQ');
+        const canonicalMatch = ytHtml.match(/<link rel="canonical" href="([^"]+)"/);
+        const videoIdMatch = canonicalMatch?.[1]?.match(/v=([^&]+)/);
+        const titleMatch = ytHtml.match(/<meta name="title" content="([^"]+)"/);
+        const viewMatch = ytHtml.match(/"originalViewCount":"(\d+)"/) || ytHtml.match(/"viewCount":"(\d+)"/);
 
         if (isYtLive) {
-            const liveItem = ytJson.items[0];
-            const videoId = liveItem.id.videoId;
-            const title = liveItem.snippet.title;
-            const startedAt = liveItem.snippet.publishedAt;
-            const isNewYtSession = existingYtLive.videoId !== videoId || !existingYtLive.isLive;
-
-            if (isNewYtSession) {
-                const autoBroadcast = existingData.autoBroadcastEnabled === true || docSnap.data()?.autoBroadcastEnabled === true;
-                if (autoBroadcast) {
-                    const discordWebhookUrl = 'https://discord.com/api/webhooks/1540098204714930319/w71fW-1Am_A4LVtIFg-2-b8s9J5Vryi32q_0LwTB76kX_j-yRQMhFMVRYt8wpiPqwPa9';
-                    fetch(discordWebhookUrl, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            username: "Karam Live",
-                            content: "🔴 **Karamokho est en direct sur YouTube !**",
-                            embeds: [{
-                                title: "🔴 REJOINDRE LE LIVE STREAM SUR YOUTUBE",
-                                description: "Karamokho est actuellement en direct sur YouTube ! Rejoignez la session dès maintenant pour participer et échanger en live.",
-                                url: "https://www.youtube.com/@karamdrm/live",
-                                color: 16711680,
-                                fields: [
-                                    { name: "🗨️ Chaîne", value: "Karamokho Dramé (@karamdrm)", inline: true },
-                                    { name: "⚡ Statut", value: "🔴 EN DIRECT", inline: true }
-                                ],
-                                footer: { text: "Karam Live" }
-                            }],
-                            components: [{
-                                type: 1,
-                                components: [{
-                                    type: 2,
-                                    style: 5,
-                                    label: "🔴 ACCÉDER AU LIVE YOUTUBE ↗",
-                                    url: "https://www.youtube.com/@karamdrm/live"
-                                }]
-                            }]
-                        })
-                    }).catch(err => console.error("Erreur envoi webhook Discord Live YouTube:", err));
-                }
-            }
-
+            ytState = {
+                isLive: true,
+                status: 'LIVE',
+                videoId: videoIdMatch?.[1] || existingYtLive.videoId || null,
+                title: titleMatch?.[1] || existingYtLive.title || 'Live YouTube en cours',
+                viewers: Number(viewMatch?.[1] || 0),
+                liveUrl: canonicalMatch?.[1] || 'https://www.youtube.com/@karamdrm/live'
+            };
             await userRef.set({
                 youtubeLiveAPI: {
-                    isLive: true,
-                    videoId: videoId,
-                    title: title,
-                    started_at: startedAt,
+                    ...existingYtLive,
+                    ...ytState,
                     lastDetected: FieldValue.serverTimestamp()
                 }
             }, { merge: true });
         } else if (existingYtLive.isLive) {
+            ytState = { isLive: false, status: 'OFFLINE', videoId: null, title: '' };
             await userRef.set({
                 youtubeLiveAPI: {
+                    ...existingYtLive,
                     isLive: false,
+                    status: 'OFFLINE',
                     ended_at: FieldValue.serverTimestamp()
                 }
             }, { merge: true });
         }
     } catch (ytErr) {
-        console.error("Erreur détection Live YouTube:", ytErr.message);
+        console.error("Erreur détection Live YouTube (0-quota):", ytErr.message);
     }
 
-    // --- 2. DÉTECTION & ALERTE LIVE TIKTOK ---
-    // Verrouillage : si le worker tourne déjà et a envoyé un battement il y a moins de 45s, on ne crée pas de doublon
+    // --- 2. DÉTECTION LIVE TWITCH (0 QUOTA API via GraphQL public) ---
+    try {
+        const twRes = await fetch('https://gql.twitch.tv/gql', {
+            method: 'POST',
+            headers: {
+                'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko',
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                query: '{ user(login: "karam_drm") { id login displayName profileImageURL(width: 300) followers { totalCount } stream { id title type viewersCount createdAt game { name } } } }'
+            })
+        });
+        if (twRes.ok) {
+            const twJson = await twRes.json();
+            const user = twJson?.data?.user;
+            const stream = user?.stream;
+            const isTwLive = Boolean(stream && stream.type === 'live');
+            twState = {
+                isLive: isTwLive,
+                status: isTwLive ? 'LIVE' : 'OFFLINE',
+                streamId: isTwLive ? String(stream.id) : null,
+                title: isTwLive ? (stream.title || 'Live Twitch en cours') : '',
+                viewers: isTwLive ? Number(stream.viewersCount || 0) : 0,
+                game: isTwLive ? (stream.game?.name || '') : '',
+                followers: Number(user?.followers?.totalCount || 0),
+                avatarUrl: user?.profileImageURL || '',
+                startedAt: isTwLive ? (stream.createdAt || null) : null,
+                liveUrl: 'https://www.twitch.tv/karam_drm'
+            };
+            await userRef.set({
+                twitchLiveAPI: {
+                    ...existingTwLive,
+                    ...twState,
+                    lastDetected: FieldValue.serverTimestamp()
+                }
+            }, { merge: true });
+        }
+    } catch (twErr) {
+        console.error("Erreur détection Live Twitch (0-quota):", twErr.message);
+    }
+
+    // --- 3. DÉTECTION & CONNEXION LIVE TIKTOK ---
     if (existingData.isLive && (now - lastHeartbeat) < 45000) {
         return { status: 'already_running' };
     }
@@ -1052,12 +1190,16 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                   };
                   await userRef.set({ 
                       tiktokLiveAPI: { 
-                          isLive: false, 
+                          isLive: false,
+                          status: 'OFFLINE',
                           ended_at: FieldValue.serverTimestamp(),
                           historyArchives: FieldValue.arrayUnion(archiveObj)
                       },
                       historyArchives: FieldValue.arrayUnion(archiveObj)
                   }, { merge: true });
+             }
+             if (!ytState.isLive && !twState.isLive) {
+                 await editDiscordAlertOnLiveEnded(userRef, rootData);
              }
              connection.disconnect();
              return { status: 'offline' };
@@ -1075,7 +1217,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
              startedAt = new Date().toISOString();
         }
 
-        const isNewSession = existingData.roomId !== state.roomId;
+        const isNewSession = String(existingData.roomId || '') !== String(state.roomId || '') && String(rootData.lastDiscordAlertRoomId || '') !== String(state.roomId || '');
         if (isNewSession) {
             existingData.likes = 0;
             existingData.shares = 0;
@@ -1088,64 +1230,74 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             existingData.topComments = [];
             existingData.recentComments = [];
 
-            // Notification Automatique Discord Webhook (Désactivée par défaut tant que Karam ne l'active pas)
-            const autoBroadcast = existingData.autoBroadcastEnabled === true || docSnap.data()?.autoBroadcastEnabled === true;
+            // Notification Automatique Discord Webhook UNIFIÉE (uniquement si activée par Karam dans le Studio Discord)
+            const autoBroadcast = rootData.autoBroadcastEnabled === true || existingData.autoBroadcastEnabled === true;
             if (autoBroadcast) {
-                const discordWebhookUrl = 'https://discord.com/api/webhooks/1540098204714930319/w71fW-1Am_A4LVtIFg-2-b8s9J5Vryi32q_0LwTB76kX_j-yRQMhFMVRYt8wpiPqwPa9';
-                fetch(discordWebhookUrl, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        username: "Karam Live",
-                        content: "🔴 **Karamokho est en direct sur TikTok !**",
-                        embeds: [{
-                            title: "🔴 REJOINDRE LE LIVE TIKTOK DE KARAMOKHO",
-                            description: "Venez poser vos questions, échanger sur Webflow et suivre la session de live-coding en direct.",
-                            url: "https://www.tiktok.com/@karam.drame/live",
-                            color: 16657493,
-                            fields: [
-                                { name: "📘 Plateforme", value: "TikTok Live", inline: true },
-                                { name: "⚡ Statut", value: "🔴 EN DIRECT", inline: true },
-                                { name: "👤 Créateur", value: "@karam.drame", inline: true }
-                            ],
-                            footer: { text: "Karam Live" }
-                        }],
-                        components: [{
-                            type: 1,
-                            components: [{
-                                type: 2,
-                                style: 5,
-                                label: "🔴 ACCÉDER AU LIVE TIKTOK ↗",
-                                url: "https://www.tiktok.com/@karam.drame/live"
-                            }]
-                        }]
-                    })
-                }).catch(err => console.error("Erreur envoi webhook Discord Live TikTok:", err));
+                const discordWebhookUrl = rootData.discordBotWebhookUrl || rootData.discordWebhookUrl || 'https://discord.com/api/webhooks/1540098204714930319/w71fW-1Am_A4LVtIFg-2-b8s9J5Vryi32q_0LwTB76kX_j-yRQMhFMVRYt8wpiPqwPa9';
+                await userRef.set({
+                    lastDiscordAlertRoomId: String(state.roomId),
+                    lastDiscordAlertAt: new Date().toISOString(),
+                    lastDiscordAlertEndedEdited: false
+                }, { merge: true });
+
+                sendUnifiedDiscordLiveAlert(discordWebhookUrl, {
+                    tiktokLive: { isLive: true, roomId: state.roomId, title: state.roomInfo?.data?.title || 'Live TikTok en cours' },
+                    youtubeLive: ytState,
+                    twitchLive: twState,
+                    title: state.roomInfo?.data?.title || twState.title || ytState.title
+                }).then(async (resAlert) => {
+                    if (resAlert?.messageId) {
+                        await userRef.set({
+                            lastDiscordAlertMessageId: String(resAlert.messageId),
+                            lastDiscordAlertWebhookUrl: discordWebhookUrl,
+                            lastDiscordAlertTitle: state.roomInfo?.data?.title || twState.title || ytState.title || 'Live Multi-Stream',
+                            lastDiscordAlertEndedEdited: false
+                        }, { merge: true });
+                    }
+                }).catch(err => console.error("Erreur envoi webhook Discord unifié:", err));
             }
         }
 
         const stats = state.roomInfo?.data?.stats || {};
-        let totalLikes = stats.like_count || existingData.likes || 0;
-        let totalShares = stats.share_count || existingData.shares || 0;
-        let newFollowers = stats.follow_count || existingData.followers || 0;
-        let totalDiamonds = stats.fan_ticket || existingData.diamonds || 0;
-        let totalComments = stats.comment_count || existingData.comments || 0;
-        let currentViewers = state.roomInfo?.data?.user_count || existingData.currentViewers || 0;
+        let totalLikes = Math.max(Number(stats.like_count || 0), Number(existingData.likes || existingData.totalLikes || 0));
+        let totalShares = Math.max(Number(stats.share_count || 0), Number(existingData.shares || existingData.totalShares || 0));
+        let newFollowers = Math.max(Number(stats.follow_count || 0), Number(existingData.followers || existingData.newFollowers || 0));
+        let totalDiamonds = Math.max(Number(stats.fan_ticket || 0), Number(existingData.diamonds || existingData.totalDiamonds || 0));
+        let totalComments = Math.max(Number(stats.comment_count || 0), Number(existingData.comments || existingData.totalComments || 0));
+        let currentViewers = Number(state.roomInfo?.data?.user_count || existingData.currentViewers || 0);
+        let totalUser = Math.max(
+            Number(stats.total_user || stats.enter_count || 0),
+            Number(existingData.totalUser || existingData.cumulative_audience || 0),
+            currentViewers
+        );
+        peakViewers = Math.max(currentViewers, Number(existingData.peakViewers || 0));
 
         await userRef.set({
             tiktokLiveAPI: {
                 isLive: true,
-                roomId: state.roomId,
+                status: 'LIVE',
+                roomId: String(state.roomId),
+                title: state.roomInfo?.data?.title || existingData.title || 'Live TikTok en cours',
                 started_at: startedAt,
                 startedAt: startedAt,
                 workerLastHeartbeat: FieldValue.serverTimestamp(),
+                lastDetected: new Date().toISOString(),
                 likes: totalLikes,
+                totalLikes: totalLikes,
                 shares: totalShares,
+                totalShares: totalShares,
                 followers: newFollowers,
+                newFollowers: newFollowers,
                 diamonds: totalDiamonds,
+                totalDiamonds: totalDiamonds,
                 comments: totalComments,
+                totalComments: totalComments,
                 currentViewers: currentViewers,
-                peakViewers: Math.max(currentViewers, existingData.peakViewers || 0)
+                peakViewers: peakViewers,
+                totalUser: totalUser,
+                total_user: totalUser,
+                cumulative_audience: totalUser,
+                enter_count: totalUser
             }
         }, { merge: true });
 
@@ -1165,10 +1317,13 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                 await userRef.set({
                     tiktokLiveAPI: {
                         isLive: true,
-                        roomId: state.roomId,
+                        status: 'LIVE',
+                        roomId: String(state.roomId),
+                        title: state.roomInfo?.data?.title || existingData.title || 'Live TikTok en cours',
                         started_at: startedAt,
                         startedAt: startedAt,
                         workerLastHeartbeat: FieldValue.serverTimestamp(),
+                        lastDetected: new Date().toISOString(),
                         likes: totalLikes,
                         totalLikes: totalLikes,
                         shares: totalShares,
@@ -1178,10 +1333,16 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                         diamonds: totalDiamonds,
                         totalDiamonds: totalDiamonds,
                         comments: totalComments,
+                        totalComments: totalComments,
                         currentViewers: currentViewers,
                         peakViewers: peakViewers,
+                        totalUser: totalUser,
+                        total_user: totalUser,
+                        cumulative_audience: totalUser,
+                        enter_count: totalUser,
                         topQuestions: topQuestions,
                         topComments: topComments,
+                        topCommenters: topCommentersList,
                         recentComments: recentComments
                     }
                 }, { merge: true });
@@ -1195,7 +1356,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             }
         };
 
-        const scheduleThrottledSync = (delayMs = 2500) => {
+        const scheduleThrottledSync = (delayMs = 2000) => {
             if (syncTimer) return;
             syncTimer = setTimeout(() => {
                 syncTimer = null;
@@ -1217,23 +1378,34 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
         };
 
         const handleShareEvent = (data) => {
-            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_share_${Date.now()}` : null);
+            const msgId = data?.common?.msgId || data?.msgId || data?.id || (data?.user?.id ? `${data.user.id}_share_${Math.floor(Date.now() / 2000)}` : null);
             if (msgId && markSocialHandled(msgId)) return;
-            const count = Math.max(1, Number(data?.shareCount) || 1);
-            totalShares += count;
+            const reportedShareCount = Number(data?.shareCount || 0);
+            if (reportedShareCount > totalShares) {
+                totalShares = reportedShareCount;
+            } else {
+                totalShares += 1;
+            }
             scheduleThrottledSync();
         };
 
         const handleFollowEvent = (data) => {
-            const msgId = data?.msgId || data?.id || (data?.userId ? `${data.userId}_follow_${Date.now()}` : null);
+            const msgId = data?.common?.msgId || data?.msgId || data?.id || (data?.user?.id ? `${data.user.id}_follow_${Math.floor(Date.now() / 5000)}` : null);
             if (msgId && markSocialHandled(msgId)) return;
             newFollowers++;
             scheduleThrottledSync();
         };
 
         connection.on('roomUser', (data) => {
-            currentViewers = data.viewerCount || parseInt(data.total) || parseInt(data.userCount) || currentViewers;
-            if (currentViewers > peakViewers) peakViewers = currentViewers;
+            const parsedViewers = parseInt(data?.total) || Number(data?.viewerCount || data?.userCount || 0);
+            if (parsedViewers > 0) {
+                currentViewers = parsedViewers;
+                if (currentViewers > peakViewers) peakViewers = currentViewers;
+            }
+            const parsedTotalUser = Number(data?.totalUser || data?.total_user || 0);
+            if (parsedTotalUser > 0) {
+                totalUser = Math.max(totalUser, parsedTotalUser);
+            }
             scheduleThrottledSync();
         });
         
@@ -1255,18 +1427,37 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
         connection.on('follow', handleFollowEvent);
 
         connection.on('social', (data) => {
-            const text = String(data?.displayType || data?.label || data?.action || '').toLowerCase();
-            if (text.includes('share') || text.includes('partagé') || data?.shareType || data?.shareTarget) {
+            const actionStr = String(data?.action || '');
+            const displayKey = String(data?.common?.displayText?.key || data?.displayType || data?.label || '').toLowerCase();
+            const defaultPattern = String(data?.common?.displayText?.defaultPattern || '').toLowerCase();
+            if (
+                actionStr === '3' ||
+                displayKey.includes('share') ||
+                defaultPattern.includes('share') ||
+                defaultPattern.includes('partag') ||
+                Number(data?.shareCount || 0) > 0 ||
+                Boolean(data?.shareType || data?.shareTarget)
+            ) {
                 handleShareEvent(data);
-            } else if (text.includes('follow') || text.includes('abonné') || data?.followType) {
+            } else if (
+                actionStr === '1' ||
+                displayKey.includes('follow') ||
+                defaultPattern.includes('follow') ||
+                defaultPattern.includes('abonn') ||
+                Boolean(data?.followType)
+            ) {
                 handleFollowEvent(data);
             }
         });
 
-        let topQuestions = existingData.topQuestions || [];
-        let topComments = existingData.topComments || [];
-        let recentComments = existingData.recentComments || [];
+        let topQuestions = Array.isArray(existingData.topQuestions) ? existingData.topQuestions : [];
+        let topComments = Array.isArray(existingData.topComments) ? existingData.topComments : [];
+        let recentComments = Array.isArray(existingData.recentComments) ? existingData.recentComments : [];
+        let topCommentersList = Array.isArray(existingData.topCommenters) ? existingData.topCommenters : [];
         let topContributorsMap = {};
+        topCommentersList.forEach(c => {
+            if (c?.nickname && c?.count) topContributorsMap[c.nickname] = c.count;
+        });
 
         function processLiveMessage(commentText, nickname) {
             if (!commentText || commentText.length < 2) return;
@@ -1289,8 +1480,9 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                 const existing = topQuestions.find(q => (q.original || '').toLowerCase() === lower || (q.original && q.original.length > 8 && lower.includes(q.original.toLowerCase().slice(0, 12))));
                 if (existing) {
                     existing.count = (existing.count || 1) + 1;
+                    existing.lastAskedBy = nickname || 'Spectateur';
                 } else {
-                    topQuestions.unshift({ original: text, count: 1 });
+                    topQuestions.unshift({ original: text, count: 1, lastAskedBy: nickname || 'Spectateur' });
                 }
                 topQuestions.sort((a, b) => (b.count || 1) - (a.count || 1));
                 topQuestions = topQuestions.slice(0, 15);
@@ -1309,10 +1501,20 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
         connection.on('chat', (data) => {
             totalComments++;
             const commentText = data.content || data.comment || '';
-            const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname;
+            const nickname = data.user?.nickname || data.user?.uniqueId || data.nickname || 'Spectateur';
             
             if (nickname) {
                 topContributorsMap[nickname] = (topContributorsMap[nickname] || 0) + 1;
+                topCommentersList = Object.entries(topContributorsMap)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 5)
+                    .map(([name, count], idx) => ({
+                        rank: idx + 1,
+                        nickname: name,
+                        count,
+                        lastComment: commentText || '',
+                        badge: idx === 0 ? '👑 MVP' : idx === 1 ? '🥈 VIP' : idx === 2 ? '🥉 Bronze' : '⭐ Actif'
+                    }));
             }
             if (commentText) {
                 processLiveMessage(commentText, nickname);
@@ -1334,9 +1536,17 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             const diamondCount = (data.diamondCount || 0) * (data.repeatCount || 1);
             totalDiamonds += diamondCount;
             userRef.collection('liveGifts').add({
-                giftId: data.giftId, giftName: data.giftName, diamondCount, senderName: data.nickname, timestamp: FieldValue.serverTimestamp()
+                giftId: data.giftId, giftName: data.giftName, diamondCount, senderName: data.user?.nickname || data.nickname, timestamp: FieldValue.serverTimestamp()
             }).catch(() => {});
             scheduleThrottledSync();
+        });
+
+        connection.on('linkMicFanTicketMethod', (data) => {
+            const fanTicket = Number(data?.fanTicketRoomNotice?.totalLinkmicFanTicket || 0);
+            if (fanTicket > totalDiamonds) {
+                totalDiamonds = fanTicket;
+                scheduleThrottledSync();
+            }
         });
 
         let ticks = 0;
@@ -1345,6 +1555,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             ticks++;
             const updates = { 
                 workerLastHeartbeat: FieldValue.serverTimestamp(),
+                lastDetected: new Date().toISOString(),
                 likes: totalLikes,
                 totalLikes: totalLikes,
                 shares: totalShares,
@@ -1354,12 +1565,17 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                 diamonds: totalDiamonds,
                 totalDiamonds: totalDiamonds,
                 comments: totalComments,
+                totalComments: totalComments,
                 currentViewers: currentViewers,
-                peakViewers: peakViewers
+                peakViewers: peakViewers,
+                totalUser: totalUser,
+                total_user: totalUser,
+                cumulative_audience: totalUser,
+                enter_count: totalUser
             };
             
-            // Push history every 5 minutes (5 ticks)
-            if (ticks % 5 === 0) {
+            // Push history every 2 minutes (2 ticks)
+            if (ticks % 2 === 0) {
                 const nowString = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
                 updates.history = FieldValue.arrayUnion({ time: nowString, viewers: currentViewers });
             }
@@ -1367,7 +1583,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
             await userRef.set({
                tiktokLiveAPI: updates
             }, { merge: true }).catch(() => {});
-        }, 60000);
+        }, 30000);
 
         return new Promise((resolve) => {
             connection.on('streamEnd', async () => {
@@ -1388,7 +1604,7 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                     durationStr: `${h}h${m}`,
                     peakViewers: Math.max(peakViewers || 0, existingData.peakViewers || 0),
                     avgViewers: avgViewers,
-                    views: Math.max(peakViewers || 0, existingData.peakViewers || 0),
+                    views: Math.max(totalUser || 0, peakViewers || 0, existingData.peakViewers || 0),
                     likes: totalLikes || existingData.likes || 0,
                     totalLikes: totalLikes || existingData.likes || 0,
                     comments: totalComments || existingData.comments || 0,
@@ -1397,16 +1613,20 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
                     followers: newFollowers || existingData.followers || 0,
                     topQuestions: topQuestions || [],
                     topComments: topComments || [],
+                    topCommenters: topCommentersList || [],
                     topFans: Object.entries(topContributorsMap || {}).map(([name, score]) => ({ name, score })).sort((a, b) => b.score - a.score).slice(0, 5),
                     startedAt: startedAt,
                     endedAt: endedAt,
-                    title: 'Session Live TikTok'
+                    title: state.roomInfo?.data?.title || 'Session Live TikTok'
                 };
                 
                 await userRef.set({ 
                     tiktokLiveAPI: { 
-                        isLive: false, 
+                        isLive: false,
+                        status: 'OFFLINE',
+                        currentViewers: 0,
                         ended_at: FieldValue.serverTimestamp(),
+                        endedAt: endedAt,
                         historyArchives: FieldValue.arrayUnion(archiveObj)
                     },
                     historyArchives: FieldValue.arrayUnion(archiveObj)
@@ -1427,11 +1647,11 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
     } catch(e) {
        console.error("Daemon Live erreur (stream inactif ou erreur API):", e.message);
        try {
-         // Sécurité absolue : si une erreur survient, on ne laisse jamais un état LIVE fantôme
          if (existingData.isLive) {
            await userRef.set({
              tiktokLiveAPI: {
                isLive: false,
+               status: 'OFFLINE',
                currentViewers: 0,
                ended_at: FieldValue.serverTimestamp()
              }
@@ -1441,6 +1661,335 @@ exports.liveWorkerDaemon = onSchedule({ schedule: "every 1 minutes", timeoutSeco
          console.warn("Erreur fallback Firestore liveWorkerDaemon:", dbErr.message);
        }
        return { status: 'offline', error: e.message };
+    }
+});
+
+// ============================================================================
+// PASSERELLE TEMPS RÉEL TIKTOK LIVE (0€, 0 QUOTA, REMPLACE LE WORKER EXPIRÉ)
+// ============================================================================
+let warmLiveSession = {
+    roomId: null,
+    isConnected: false,
+    connection: null,
+    startedAt: null,
+    title: '',
+    currentViewers: 0,
+    peakViewers: 0,
+    totalUser: 0,
+    likes: 0,
+    shares: 0,
+    comments: 0,
+    followers: 0,
+    diamonds: 0,
+    recentComments: [],
+    topQuestions: [],
+    topCommenters: [],
+    lastEventAt: 0
+};
+
+exports.getTikTokLiveStatus = functions.https.onRequest(async (req, res) => {
+    res.set('Access-Control-Allow-Origin', '*');
+    res.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.set('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+
+    if (req.method === 'OPTIONS') {
+        return res.status(204).send('');
+    }
+
+    const username = String(req.query.username || req.body?.username || 'karam.drame').replace(/^@/, '').trim();
+    const db = getFirestore();
+    const userRef = db.collection('users').doc('karamokho');
+
+    try {
+        // 1. Lecture de l'état Firestore existant
+        const docSnap = await userRef.get();
+        const rootData = docSnap.data() || {};
+        const existingLive = rootData.tiktokLiveAPI || {};
+
+        // 2. Appel ultra-rapide à l'API officielle TikTok /api-live/user/room/ (donne startTime exact + userCount exact + enterCount)
+        const apiLiveUrl = `https://www.tiktok.com/api-live/user/room/?aid=1988&uniqueId=${encodeURIComponent(username)}&sourceType=54`;
+        const apiRes = await fetch(apiLiveUrl, {
+            headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                'Accept': 'application/json',
+                'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8'
+            }
+        });
+
+        let isLive = false;
+        let roomId = null;
+        let title = '';
+        let startedAt = null;
+        let currentViewers = 0;
+        let totalUser = 0;
+        let profileFollowers = 0;
+
+        if (apiRes.ok) {
+            const apiJson = await apiRes.json();
+            const liveRoom = apiJson?.data?.liveRoom;
+            const userObj = apiJson?.data?.user;
+            const statsObj = apiJson?.data?.stats;
+
+            const status = Number(liveRoom?.status ?? userObj?.status ?? 0);
+            const detectedRoomId = String(userObj?.roomId || liveRoom?.roomId || '');
+
+            if (status === 2 && detectedRoomId && detectedRoomId !== '0') {
+                isLive = true;
+                roomId = detectedRoomId;
+                title = liveRoom?.title || 'TikTok Live en cours';
+                if (liveRoom?.startTime && Number(liveRoom.startTime) > 1e9) {
+                    startedAt = new Date(Number(liveRoom.startTime) * 1000).toISOString();
+                }
+                currentViewers = Number(liveRoom?.liveRoomStats?.userCount || 0);
+                totalUser = Number(liveRoom?.liveRoomStats?.enterCount || 0);
+                profileFollowers = Number(statsObj?.followerCount || 0);
+            }
+        }
+
+        // 3. Complément via /webcast/room/info/ si roomId détecté
+        if (isLive && roomId) {
+            try {
+                const roomInfoRes = await fetch(`https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=${roomId}`, {
+                    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+                });
+                if (roomInfoRes.ok) {
+                    const roomJson = await roomInfoRes.json();
+                    const rd = roomJson?.data;
+                    if (rd) {
+                        if (!startedAt && rd.create_time && Number(rd.create_time) > 1e9) {
+                            startedAt = new Date(Number(rd.create_time) * 1000).toISOString();
+                        }
+                        if (currentViewers === 0 && Number(rd.user_count) > 0) {
+                            currentViewers = Number(rd.user_count);
+                        }
+                        const roomTotalUser = Number(rd.stats?.total_user || rd.stats?.enter_count || 0);
+                        if (roomTotalUser > totalUser) {
+                            totalUser = roomTotalUser;
+                        }
+                    }
+                }
+            } catch (_) {}
+        }
+
+        if (!isLive) {
+            if (warmLiveSession.connection) {
+                try { warmLiveSession.connection.disconnect(); } catch (_) {}
+                warmLiveSession.connection = null;
+                warmLiveSession.isConnected = false;
+            }
+            return res.status(200).json({
+                status: 'success',
+                data: {
+                    isLive: false,
+                    status: 'OFFLINE',
+                    roomId: null,
+                    title: '',
+                    currentViewers: 0,
+                    viewers: 0,
+                    checkedAt: new Date().toISOString(),
+                    source: 'firebase-live-gateway'
+                }
+            });
+        }
+
+        // 4. Consolidation avec la session Firestore existante (si même roomId)
+        const isSameRoom = String(existingLive.roomId || '') === String(roomId);
+        let likes = isSameRoom ? Number(existingLive.likes ?? existingLive.totalLikes ?? 0) : 0;
+        let shares = isSameRoom ? Number(existingLive.shares ?? existingLive.totalShares ?? 0) : 0;
+        let comments = isSameRoom ? Number(existingLive.comments ?? existingLive.totalComments ?? 0) : 0;
+        let followers = isSameRoom ? Number(existingLive.followers ?? existingLive.newFollowers ?? 0) : 0;
+        let diamonds = isSameRoom ? Number(existingLive.diamonds ?? existingLive.totalDiamonds ?? 0) : 0;
+        let peakViewers = isSameRoom ? Math.max(Number(existingLive.peakViewers || 0), currentViewers) : currentViewers;
+        totalUser = isSameRoom ? Math.max(totalUser, Number(existingLive.totalUser || existingLive.cumulative_audience || 0), peakViewers) : Math.max(totalUser, currentViewers);
+
+        // 5. Connexion Protobuf persistante en mémoire (warmLiveSession) pour capter likes.total, shares et chat en temps réel
+        if (!warmLiveSession.isConnected || String(warmLiveSession.roomId) !== String(roomId)) {
+            if (warmLiveSession.connection) {
+                try { warmLiveSession.connection.disconnect(); } catch (_) {}
+            }
+            warmLiveSession = {
+                roomId,
+                isConnected: false,
+                connection: null,
+                startedAt: startedAt || existingLive.started_at || new Date().toISOString(),
+                title,
+                currentViewers,
+                peakViewers,
+                totalUser,
+                likes,
+                shares,
+                comments,
+                followers,
+                diamonds,
+                recentComments: isSameRoom && Array.isArray(existingLive.recentComments) ? existingLive.recentComments : [],
+                topQuestions: isSameRoom && Array.isArray(existingLive.topQuestions) ? existingLive.topQuestions : [],
+                topCommenters: isSameRoom && Array.isArray(existingLive.topCommenters) ? existingLive.topCommenters : [],
+                lastEventAt: Date.now()
+            };
+
+            try {
+                const { TikTokLiveConnection } = require('tiktok-live-connector');
+                const conn = new TikTokLiveConnection(username, { processInitialData: true });
+                warmLiveSession.connection = conn;
+
+                conn.on('roomUser', (d) => {
+                    const v = parseInt(d?.total) || Number(d?.viewerCount || d?.userCount || 0);
+                    if (v > 0) {
+                        warmLiveSession.currentViewers = v;
+                        if (v > warmLiveSession.peakViewers) warmLiveSession.peakViewers = v;
+                    }
+                    const tu = Number(d?.totalUser || d?.total_user || 0);
+                    if (tu > warmLiveSession.totalUser) warmLiveSession.totalUser = tu;
+                    warmLiveSession.lastEventAt = Date.now();
+                });
+
+                conn.on('like', (d) => {
+                    const rawTotal = Number(d?.total || d?.totalLikeCount || 0);
+                    const rawCount = Number(d?.count || d?.likeCount || 1);
+                    if (rawTotal > 0) {
+                        warmLiveSession.likes = Math.max(warmLiveSession.likes, rawTotal);
+                    } else {
+                        warmLiveSession.likes += rawCount;
+                    }
+                    warmLiveSession.lastEventAt = Date.now();
+                });
+
+                const onShare = (d) => {
+                    const sc = Number(d?.shareCount || 0);
+                    if (sc > warmLiveSession.shares) {
+                        warmLiveSession.shares = sc;
+                    } else {
+                        warmLiveSession.shares += 1;
+                    }
+                    warmLiveSession.lastEventAt = Date.now();
+                };
+
+                conn.on('share', onShare);
+                conn.on('social', (d) => {
+                    const act = String(d?.action || '');
+                    const key = String(d?.common?.displayText?.key || d?.displayType || '').toLowerCase();
+                    const pat = String(d?.common?.displayText?.defaultPattern || '').toLowerCase();
+                    if (act === '3' || key.includes('share') || pat.includes('share') || pat.includes('partag') || Number(d?.shareCount || 0) > 0) {
+                        onShare(d);
+                    } else if (act === '1' || key.includes('follow') || pat.includes('follow') || pat.includes('abonn')) {
+                        warmLiveSession.followers += 1;
+                    }
+                });
+
+                conn.on('chat', (d) => {
+                    warmLiveSession.comments += 1;
+                    const txt = (d?.content || d?.comment || '').trim();
+                    const nick = d?.user?.nickname || d?.user?.uniqueId || d?.nickname || 'Spectateur';
+                    if (txt) {
+                        warmLiveSession.recentComments.unshift({
+                            id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                            nickname: nick,
+                            comment: txt,
+                            time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+                        });
+                        warmLiveSession.recentComments = warmLiveSession.recentComments.slice(0, 50);
+                    }
+                    warmLiveSession.lastEventAt = Date.now();
+                });
+
+                conn.on('streamEnd', () => {
+                    warmLiveSession.isConnected = false;
+                });
+
+                await Promise.race([
+                    conn.connect().then(() => {
+                        warmLiveSession.isConnected = true;
+                        // Laisser 1200ms pour décoder le buffer initial (processInitialData)
+                        return new Promise(r => setTimeout(r, 1200));
+                    }),
+                    new Promise(r => setTimeout(r, 3000))
+                ]);
+            } catch (connErr) {
+                console.warn('[getTikTokLiveStatus] Note connexion Protobuf:', connErr.message);
+            }
+        }
+
+        // Fusionner les compteurs temps réel de warmLiveSession
+        if (warmLiveSession.roomId === roomId) {
+            if (warmLiveSession.likes > likes) likes = warmLiveSession.likes;
+            if (warmLiveSession.shares > shares) shares = warmLiveSession.shares;
+            if (warmLiveSession.comments > comments) comments = warmLiveSession.comments;
+            if (warmLiveSession.followers > followers) followers = warmLiveSession.followers;
+            if (warmLiveSession.totalUser > totalUser) totalUser = warmLiveSession.totalUser;
+            if (warmLiveSession.peakViewers > peakViewers) peakViewers = warmLiveSession.peakViewers;
+            // Si warmLiveSession a reçu un roomUser très récent (< 10s), utiliser sa valeur exacte
+            if (warmLiveSession.currentViewers > 0 && (Date.now() - warmLiveSession.lastEventAt) < 10000) {
+                currentViewers = warmLiveSession.currentViewers;
+            }
+        }
+
+        const finalStartedAt = startedAt || (isSameRoom ? (existingLive.started_at || existingLive.startedAt) : null) || new Date().toISOString();
+
+        // Mise à jour propre de Firestore sans jamais écraser les listes existantes
+        const updatedLiveObj = {
+            ...existingLive,
+            isLive: true,
+            status: 'LIVE',
+            roomId: String(roomId),
+            title,
+            started_at: finalStartedAt,
+            startedAt: finalStartedAt,
+            currentViewers,
+            peakViewers,
+            totalUser,
+            total_user: totalUser,
+            cumulative_audience: totalUser,
+            enter_count: totalUser,
+            likes,
+            totalLikes: likes,
+            shares,
+            totalShares: shares,
+            comments,
+            totalComments: comments,
+            followers,
+            newFollowers: followers,
+            diamonds,
+            totalDiamonds: diamonds,
+            lastDetected: new Date().toISOString(),
+            checkSource: 'firebase-live-gateway'
+        };
+        if (warmLiveSession.recentComments?.length > 0) {
+            updatedLiveObj.recentComments = warmLiveSession.recentComments;
+        }
+
+        await userRef.set({
+            tiktokLiveAPI: updatedLiveObj
+        }, { merge: true });
+
+        return res.status(200).json({
+            status: 'success',
+            data: {
+                isLive: true,
+                status: 'LIVE',
+                roomId: String(roomId),
+                title,
+                currentViewers,
+                viewers: currentViewers,
+                peakViewers,
+                totalUser,
+                likes,
+                shares,
+                comments,
+                followers,
+                profileFollowers,
+                startedAt: finalStartedAt,
+                started_at: finalStartedAt,
+                checkedAt: new Date().toISOString(),
+                source: 'firebase-live-gateway'
+            }
+        });
+    } catch (err) {
+        console.error('[getTikTokLiveStatus] Erreur:', err.message);
+        return res.status(500).json({
+            status: 'error',
+            error: err.message
+        });
     }
 });
 

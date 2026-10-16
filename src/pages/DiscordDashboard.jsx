@@ -11,6 +11,13 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 
 import { db } from '../config/firebase';
 import { doc, setDoc } from 'firebase/firestore';
 import { cn } from '../lib/utils';
+import { TikTokIcon, YoutubeIcon, TwitchIcon, DiscordIcon } from '../components/SocialIcons';
+import {
+  CREATOR_LIVE_ACCOUNTS,
+  DISCORD_ALERT_TARGET,
+  checkMultiPlatformLiveStatus,
+  dispatchDiscordAlertIfNeeded
+} from '../services/multiLiveAlertService';
 
 // Composant Réutilisable d'Infobulle Pédagogique (Vocabulaire Simple & Utilité Dirigeant)
 const SectionInfoTooltip = ({ title, definition, utility, align = "left", width = "w-[300px] sm:w-[340px]" }) => {
@@ -68,26 +75,125 @@ export const DiscordDashboard = ({ data }) => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState(new Date());
   
-  // Contrôle interactif de l'état d'alerte automatique (Toggle Switch)
+  // Contrôle interactif de l'état d'alerte automatique (Toggle Switch) synchronisé avec Firestore
   const [autoBroadcastEnabled, setAutoBroadcastEnabled] = useState(
-    data?.tiktokLiveAPI?.autoBroadcastEnabled || data?.autoBroadcastEnabled || false
+    Boolean(data?.autoBroadcastEnabled ?? data?.tiktokLiveAPI?.autoBroadcastEnabled ?? false)
   );
   const [isUpdatingBroadcast, setIsUpdatingBroadcast] = useState(false);
 
-  // Synchronisation de l'état Firestore
+  // Synchronisation réactive dès que Firestore met à jour `data`
+  useEffect(() => {
+    if (data && (typeof data.autoBroadcastEnabled === 'boolean' || typeof data?.tiktokLiveAPI?.autoBroadcastEnabled === 'boolean')) {
+      const remoteVal =
+        typeof data.autoBroadcastEnabled === 'boolean'
+          ? data.autoBroadcastEnabled
+          : Boolean(data?.tiktokLiveAPI?.autoBroadcastEnabled);
+      setAutoBroadcastEnabled(remoteVal);
+    }
+  }, [data?.autoBroadcastEnabled, data?.tiktokLiveAPI?.autoBroadcastEnabled]);
+
+  // Radar Multi-Réseaux en temps réel (TikTok @karam.drame, YouTube @karamdrm, Twitch karam_drm)
+  const [multiLive, setMultiLive] = useState(() => ({
+    anyLive: Boolean(data?.tiktokLiveAPI?.isLive || data?.youtubeLiveAPI?.isLive || data?.twitchLiveAPI?.isLive),
+    unifiedTitle:
+      data?.tiktokLiveAPI?.title ||
+      data?.twitchLiveAPI?.title ||
+      data?.youtubeLiveAPI?.title ||
+      'On crée un site ensemble • Live Coding Webflow & Design',
+    sessionKey: data?.lastDiscordAlertSessionKey || null,
+    tiktok: {
+      isLive: Boolean(data?.tiktokLiveAPI?.isLive),
+      roomId: data?.tiktokLiveAPI?.roomId || null,
+      title: data?.tiktokLiveAPI?.title || '',
+      viewers: Number(data?.tiktokLiveAPI?.currentViewers || 0),
+      liveUrl: CREATOR_LIVE_ACCOUNTS.tiktok.liveUrl,
+      profileUrl: CREATOR_LIVE_ACCOUNTS.tiktok.profileUrl,
+      handle: CREATOR_LIVE_ACCOUNTS.tiktok.handle
+    },
+    youtube: {
+      isLive: Boolean(data?.youtubeLiveAPI?.isLive),
+      videoId: data?.youtubeLiveAPI?.videoId || null,
+      title: data?.youtubeLiveAPI?.title || '',
+      viewers: Number(data?.youtubeLiveAPI?.viewers || 0),
+      liveUrl: data?.youtubeLiveAPI?.liveUrl || CREATOR_LIVE_ACCOUNTS.youtube.liveUrl,
+      profileUrl: CREATOR_LIVE_ACCOUNTS.youtube.profileUrl,
+      handle: CREATOR_LIVE_ACCOUNTS.youtube.handle
+    },
+    twitch: {
+      isLive: Boolean(data?.twitchLiveAPI?.isLive),
+      streamId: data?.twitchLiveAPI?.streamId || null,
+      title: data?.twitchLiveAPI?.title || '',
+      viewers: Number(data?.twitchLiveAPI?.viewers || 0),
+      game: data?.twitchLiveAPI?.game || '',
+      followers: Number(data?.twitchLiveAPI?.followers || 0),
+      liveUrl: CREATOR_LIVE_ACCOUNTS.twitch.liveUrl,
+      profileUrl: CREATOR_LIVE_ACCOUNTS.twitch.profileUrl,
+      handle: CREATOR_LIVE_ACCOUNTS.twitch.handle
+    },
+    isChecking: false,
+    checkedAt: null
+  }));
+
+  const [broadcastFeedback, setBroadcastFeedback] = useState(null);
+  const [previewMode, setPreviewMode] = useState('live'); // 'live' | 'ended'
+
+  const refreshMultiPlatformLive = async (force = false) => {
+    setMultiLive((prev) => ({ ...prev, isChecking: true }));
+    try {
+      const res = await checkMultiPlatformLiveStatus({ forceRefresh: force, syncFirestore: true });
+      setMultiLive({
+        ...res,
+        isChecking: false
+      });
+      if (res?.anyLive) {
+        const dispatchRes = await dispatchDiscordAlertIfNeeded(res);
+        if (dispatchRes?.dispatched) {
+          setBroadcastFeedback('Alerte @here publiée dans #📢・ᴀɴɴᴏɴᴄᴇꜱ !');
+        }
+      }
+      return res;
+    } catch (err) {
+      setMultiLive((prev) => ({ ...prev, isChecking: false }));
+      return null;
+    }
+  };
+
+  // Synchronisation de l'état Firestore pour le bouton Activer / Désactiver les Alertes
   const toggleAutoBroadcast = async () => {
     setIsUpdatingBroadcast(true);
+    setBroadcastFeedback(null);
     const newState = !autoBroadcastEnabled;
     try {
       const userRef = doc(db, 'users', 'karamokho');
-      await setDoc(userRef, {
+      const updates = {
         autoBroadcastEnabled: newState,
         tiktokLiveAPI: {
           ...(data?.tiktokLiveAPI || {}),
           autoBroadcastEnabled: newState
         }
-      }, { merge: true });
+      };
+      await setDoc(userRef, updates, { merge: true });
       setAutoBroadcastEnabled(newState);
+
+      // Si l'utilisateur vient d'ACTIVER le bouton et qu'un live est en cours,
+      // on déclenche immédiatement l'envoi unique (@here) s'il n'a pas encore été envoyé pour cette session
+      if (newState) {
+        const currentLive = multiLive?.anyLive
+          ? multiLive
+          : await checkMultiPlatformLiveStatus({ forceRefresh: true, syncFirestore: true });
+        if (currentLive?.anyLive) {
+          const dispatchRes = await dispatchDiscordAlertIfNeeded(currentLive, { immediate: true });
+          if (dispatchRes?.dispatched) {
+            setBroadcastFeedback('✅ Alerte @here envoyée dans #📢・ᴀɴɴᴏɴᴄᴇꜱ !');
+          } else {
+            setBroadcastFeedback('✅ Veille active (alerte déjà envoyée pour cette session)');
+          }
+        } else {
+          setBroadcastFeedback('✅ Veille active : l’alerte @here partira dès le prochain live');
+        }
+      } else {
+        setBroadcastFeedback('🔒 Mode silencieux activé');
+      }
     } catch (e) {
       console.error("Erreur mise à jour autoBroadcast:", e);
       setAutoBroadcastEnabled(!newState);
@@ -97,9 +203,9 @@ export const DiscordDashboard = ({ data }) => {
   };
 
   const [liveCounts, setLiveCounts] = useState({
-    totalMembers: 208,
-    onlineMembers: 28,
-    activityRate: 13.46,
+    totalMembers: data?.discordAPI?.totalMembers || 208,
+    onlineMembers: data?.discordAPI?.onlineMembers || 28,
+    activityRate: data?.discordAPI?.activityRate || 13.46,
     guildName: "La Forge",
     ownerName: "Karamokho Dramé (@karam_png)",
     inviteCode: "VqtFa8wSQd",
@@ -128,25 +234,44 @@ export const DiscordDashboard = ({ data }) => {
     { name: '☕・ᴅɪꜱᴄᴜꜱꜱɪᴏɴ ʟɪʙʀᴇ', desc: 'Espace de discussion vocal informel et entraide', isLive: false }
   ], []);
 
-  // Fonction de synchronisation directe avec l'API Discord v10
+  // Fonction de synchronisation directe avec l'API Discord v10 + Radar Multi-Live
   const fetchDiscordLiveCounts = async () => {
     setIsRefreshing(true);
     try {
-      const response = await fetch('https://discord.com/api/v10/invites/VqtFa8wSQd?with_counts=true');
-      if (response.ok) {
-        const json = await response.json();
+      const [inviteRes] = await Promise.allSettled([
+        fetch('https://discord.com/api/v10/invites/VqtFa8wSQd?with_counts=true'),
+        refreshMultiPlatformLive(false)
+      ]);
+      if (inviteRes.status === 'fulfilled' && inviteRes.value.ok) {
+        const json = await inviteRes.value.json();
         if (json.approximate_member_count) {
           const total = json.approximate_member_count;
           const online = json.approximate_presence_count || 28;
           const rate = parseFloat(((online / total) * 100).toFixed(2));
+          const gName = json.guild?.name || "La Forge";
           setLiveCounts(prev => ({
             ...prev,
             totalMembers: total,
             onlineMembers: online,
             activityRate: rate,
-            guildName: json.guild?.name || "La Forge"
+            guildName: gName
           }));
           setLastSyncTime(new Date());
+
+          // Persister les KPIs Discord réels dans Firestore pour la Vue Globale (Dashboard.jsx)
+          setDoc(doc(db, 'users', 'karamokho'), {
+            discordAPI: {
+              totalMembers: total,
+              onlineMembers: online,
+              activityRate: rate,
+              guildName: gName,
+              guildId: DISCORD_ALERT_TARGET.guildId,
+              channelId: DISCORD_ALERT_TARGET.channelId,
+              channelName: DISCORD_ALERT_TARGET.channelName,
+              inviteCode: 'VqtFa8wSQd',
+              lastSyncedAt: new Date().toISOString()
+            }
+          }, { merge: true }).catch(() => {});
         }
       }
     } catch (e) {
@@ -568,169 +693,554 @@ export const DiscordDashboard = ({ data }) => {
         </div>
       </div>
 
-      {/* 4. SECTION 3 : STUDIO D'ALERTES MULTI-RÉSEAUX & BOUTON TOGGLE */}
+      {/* 4. SECTION 3 : STUDIO D'ALERTES MULTI-RÉSEAUX (TIKTOK • YOUTUBE • TWITCH) & BOUTON TOGGLE */}
       <div className="bg-white dark:bg-[#111827]/80 rounded-[24px] p-6 lg:p-8 border border-slate-200 dark:border-white/10 shadow-sm space-y-6">
         
         {/* En-tête avec Explication & Bouton Toggle Interactif */}
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6 pb-6 border-b border-slate-100 dark:border-white/5">
-          <div className="space-y-2 max-w-2xl">
-            <div className="flex items-center gap-2">
+          <div className="space-y-2.5 max-w-2xl">
+            <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-lg font-black text-slate-900 dark:text-white flex items-center gap-2 tracking-tight">
                 <Bell size={18} className="text-red-500" />
                 Studio de Diffusion & Alertes Multi-Réseaux
               </h3>
               <SectionInfoTooltip 
-                title="Studio d'Alertes et Diffusion Directe"
-                definition="Le centre de contrôle automatique pour annoncer vos lives TikTok, YouTube et nouvelles vidéos sur Discord avec des boutons cliquables."
-                utility="Gagner du temps : vos membres sont prévenus automatiquement dès que vous lancez un live sans que vous ayez à poster vous-même."
+                title="Studio d'Alertes Multi-Stream (TikTok • YouTube • Twitch)"
+                definition="Le centre de contrôle automatique qui surveille vos 3 comptes (@karam.drame, @karamdrm, karam_drm) et prépare une alerte unique dans #📢・ᴀɴɴᴏɴᴄᴇꜱ avec mention @here, logos officiels et 3 boutons d'accès direct."
+                utility="Prévenir votre communauté en un seul message propre (@here) dès que vous lancez votre live, avec 1 bouton cliquable par plateforme."
                 align="left"
               />
-              <span className="text-[10px] bg-red-500/10 text-red-500 px-2 py-0.5 rounded-full font-mono font-bold">
-                Live & Vidéos
+              <span className="text-[10px] bg-red-500/10 text-red-500 border border-red-500/20 px-2.5 py-0.5 rounded-full font-mono font-bold">
+                1 Seul Message Unifié • @here
+              </span>
+              <span className="text-[10px] bg-[#5865F2]/10 text-[#5865F2] dark:text-[#7983F5] border border-[#5865F2]/20 px-2.5 py-0.5 rounded-full font-mono font-bold">
+                Salon : {DISCORD_ALERT_TARGET.channelName}
               </span>
             </div>
             
             <p className="text-xs text-slate-600 dark:text-gray-300 leading-relaxed">
-              <strong>À quoi sert cette section ?</strong> C'est votre centre de commande pour diffuser automatiquement des annonces enrichies avec de <strong>vrais boutons cliquables</strong> dans votre salon <code># 📢 • ANNONCES</code> dès que vous démarrez un live TikTok/YouTube ou publiez une nouvelle vidéo.
+              <strong>Comment fonctionne ce studio ?</strong> Il veille en temps réel sur vos 3 comptes officiels (<strong>TikTok</strong>, <strong>YouTube</strong> et <strong>Twitch</strong>). Lorsqu'un direct est détecté, il regroupe l'annonce dans <strong>un seul message unifié</strong> publié dans <code>{DISCORD_ALERT_TARGET.channelName}</code> (serveur <strong>{DISCORD_ALERT_TARGET.serverName}</strong>) avec la mention <code>@here</code> (jamais <code>@everyone</code>), les <strong>logos des 3 applications</strong> et <strong>3 boutons cliquables</strong> d'accès direct.
             </p>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 text-[11px] text-slate-500 dark:text-gray-400 font-mono">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px] text-slate-500 dark:text-gray-400 font-mono">
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span>Détection TikTok : WebSocket Daemon (toutes les 2min)</span>
+                <span className={cn("w-2 h-2 rounded-full", multiLive.tiktok?.isLive ? "bg-emerald-400 animate-ping" : "bg-emerald-400")}></span>
+                <span>TikTok : Edge Anycast (0€)</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-                <span>Détection YouTube : API Data v3 (@karamdrm)</span>
+                <span className={cn("w-2 h-2 rounded-full", multiLive.youtube?.isLive ? "bg-emerald-400 animate-ping" : "bg-emerald-400")}></span>
+                <span>YouTube : Sync 0-Quota (@karamdrm)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className={cn("w-2 h-2 rounded-full", multiLive.twitch?.isLive ? "bg-emerald-400 animate-ping" : "bg-emerald-400")}></span>
+                <span>Twitch : GQL Temps Réel (karam_drm)</span>
               </div>
             </div>
           </div>
 
           {/* VRAI BOUTON ACTIVER / DÉSACTIVER LES ANNONCES DISCORD */}
-          <div className="shrink-0 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 flex flex-col gap-3 min-w-[280px]">
+          <div className="shrink-0 p-4 rounded-2xl bg-slate-50 dark:bg-white/5 border border-slate-200/80 dark:border-white/10 flex flex-col gap-3 min-w-[310px]">
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
                 <RadioReceiver size={14} className={autoBroadcastEnabled ? "text-emerald-500" : "text-amber-500"} />
-                Publication Discord
+                Publication Discord ({DISCORD_ALERT_TARGET.mention})
               </span>
               <span className={cn(
-                "text-[10px] font-mono font-bold px-2 py-0.5 rounded-full",
-                autoBroadcastEnabled ? "bg-emerald-500/10 text-emerald-500" : "bg-amber-500/10 text-amber-500"
+                "text-[10px] font-mono font-bold px-2.5 py-0.5 rounded-full",
+                autoBroadcastEnabled ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20" : "bg-amber-500/10 text-amber-500 border border-amber-500/20"
               )}>
                 {autoBroadcastEnabled ? "ACTIVÉ" : "MODE SILENCIEUX"}
               </span>
             </div>
 
             <button
+              type="button"
               onClick={toggleAutoBroadcast}
               disabled={isUpdatingBroadcast}
+              aria-pressed={autoBroadcastEnabled}
               className={cn(
-                "w-full py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 shadow-sm",
+                "w-full py-3 px-4 rounded-xl text-xs font-black transition-all flex items-center justify-center gap-2 shadow-sm cursor-pointer active:scale-95",
                 autoBroadcastEnabled
                   ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-500/20"
-                  : "bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-700 dark:text-gray-200"
+                  : "bg-slate-200 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/15 text-slate-800 dark:text-white border border-slate-300 dark:border-white/15"
               )}
             >
               {isUpdatingBroadcast ? (
                 <RefreshCw size={14} className="animate-spin" />
               ) : autoBroadcastEnabled ? (
                 <>
-                  <Check size={14} />
-                  <span>Annonces Automatiques : Activées</span>
+                  <ToggleRight size={17} />
+                  <span>Alertes Automatiques : Activées (Cliquer pour Désactiver)</span>
                 </>
               ) : (
                 <>
-                  <Lock size={14} className="text-amber-500" />
+                  <ToggleLeft size={17} className="text-amber-500" />
                   <span>Cliquer pour Activer les Alertes</span>
                 </>
               )}
             </button>
 
-            <p className="text-[10px] text-slate-400 text-center">
-              {autoBroadcastEnabled 
-                ? "🟢 Les alertes avec boutons seront envoyées dès votre prochain live !" 
-                : "🔒 Aucune notification n'est envoyée sans votre accord."}
+            {broadcastFeedback ? (
+              <p className="text-[10px] font-bold text-emerald-500 dark:text-emerald-400 text-center">
+                {broadcastFeedback}
+              </p>
+            ) : (
+              <p className="text-[10px] text-slate-400 text-center">
+                {autoBroadcastEnabled 
+                  ? "🟢 Une seule alerte unifiée (@here) est publiée automatiquement à chaque live." 
+                  : "🔒 Mode silencieux actif : aucune publication n'est envoyée sur Discord."}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* RADAR DE VEILLE DES 3 COMPTES OFFICIELS (TIKTOK • YOUTUBE • TWITCH) */}
+        <div className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <h4 className="text-xs font-black uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-2 font-mono">
+              <Radio size={14} className="text-[#5865F2]" />
+              Comptes Surveillés en Temps Réel (Détection Automatique Multi-Stream)
+            </h4>
+            <button
+              type="button"
+              onClick={() => refreshMultiPlatformLive(true)}
+              disabled={multiLive.isChecking}
+              className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#5865F2] dark:text-[#7983F5] hover:underline cursor-pointer disabled:opacity-50"
+            >
+              <RefreshCw size={12} className={cn(multiLive.isChecking && "animate-spin")} />
+              <span>{multiLive.isChecking ? "Vérification des 3 plateformes..." : "Vérifier les 3 lives maintenant"}</span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Compte 1 : TikTok */}
+            <div className={cn(
+              "p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3",
+              multiLive.tiktok?.isLive
+                ? "bg-[#FE2C55]/10 border-[#FE2C55]/40 shadow-[0_0_25px_rgba(254,44,85,0.15)]"
+                : "bg-slate-50 dark:bg-white/5 border-slate-200/80 dark:border-white/10"
+            )}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-black text-white flex items-center justify-center border border-white/15 shadow-md shrink-0">
+                    <TikTokIcon size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-sm text-slate-900 dark:text-white">TikTok</span>
+                      <span className="text-[11px] font-mono text-slate-500 dark:text-gray-400">@karam.drame</span>
+                    </div>
+                    <a
+                      href="https://www.tiktok.com/@karam.drame"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-[#FE2C55] hover:underline block truncate max-w-[200px]"
+                    >
+                      tiktok.com/@karam.drame
+                    </a>
+                  </div>
+                </div>
+                <span className={cn(
+                  "text-[10px] font-mono font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0",
+                  multiLive.tiktok?.isLive
+                    ? "bg-[#FE2C55] text-white shadow-sm"
+                    : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-gray-400"
+                )}>
+                  <span className={cn("w-1.5 h-1.5 rounded-full", multiLive.tiktok?.isLive ? "bg-white animate-ping" : "bg-slate-400")}></span>
+                  {multiLive.tiktok?.isLive ? "EN DIRECT" : "VEILLE ACTIVE"}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-600 dark:text-gray-300 flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-white/10 font-mono">
+                <span className="truncate max-w-[180px]">
+                  {multiLive.tiktok?.isLive ? (multiLive.tiktok.title || "Live TikTok actif") : "Prêt à détecter le prochain live"}
+                </span>
+                {multiLive.tiktok?.isLive && (
+                  <span className="font-bold text-[#FE2C55] shrink-0">{multiLive.tiktok.viewers || 0} spectateurs</span>
+                )}
+              </div>
+            </div>
+
+            {/* Compte 2 : YouTube */}
+            <div className={cn(
+              "p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3",
+              multiLive.youtube?.isLive
+                ? "bg-[#FF0000]/10 border-[#FF0000]/40 shadow-[0_0_25px_rgba(255,0,0,0.15)]"
+                : "bg-slate-50 dark:bg-white/5 border-slate-200/80 dark:border-white/10"
+            )}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#FF0000] text-white flex items-center justify-center shadow-md shrink-0">
+                    <YoutubeIcon size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-sm text-slate-900 dark:text-white">YouTube</span>
+                      <span className="text-[11px] font-mono text-slate-500 dark:text-gray-400">@karamdrm</span>
+                    </div>
+                    <a
+                      href="https://www.youtube.com/@karamdrm"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-red-500 hover:underline block truncate max-w-[200px]"
+                    >
+                      youtube.com/@karamdrm
+                    </a>
+                  </div>
+                </div>
+                <span className={cn(
+                  "text-[10px] font-mono font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0",
+                  multiLive.youtube?.isLive
+                    ? "bg-[#FF0000] text-white shadow-sm"
+                    : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-gray-400"
+                )}>
+                  <span className={cn("w-1.5 h-1.5 rounded-full", multiLive.youtube?.isLive ? "bg-white animate-ping" : "bg-slate-400")}></span>
+                  {multiLive.youtube?.isLive ? "EN DIRECT" : "VEILLE ACTIVE"}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-600 dark:text-gray-300 flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-white/10 font-mono">
+                <span className="truncate max-w-[180px]">
+                  {multiLive.youtube?.isLive ? (multiLive.youtube.title || "Live YouTube actif") : "Prêt à détecter le prochain live"}
+                </span>
+                {multiLive.youtube?.isLive && (
+                  <span className="font-bold text-red-500 shrink-0">{multiLive.youtube.viewers || 0} vues live</span>
+                )}
+              </div>
+            </div>
+
+            {/* Compte 3 : Twitch */}
+            <div className={cn(
+              "p-4 rounded-2xl border transition-all flex flex-col justify-between gap-3",
+              multiLive.twitch?.isLive
+                ? "bg-[#9146FF]/10 border-[#9146FF]/40 shadow-[0_0_25px_rgba(145,70,255,0.15)]"
+                : "bg-slate-50 dark:bg-white/5 border-slate-200/80 dark:border-white/10"
+            )}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-[#9146FF] text-white flex items-center justify-center shadow-md shrink-0">
+                    <TwitchIcon size={20} />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-black text-sm text-slate-900 dark:text-white">Twitch</span>
+                      <span className="text-[11px] font-mono text-slate-500 dark:text-gray-400">karam_drm</span>
+                    </div>
+                    <a
+                      href="https://www.twitch.tv/karam_drm"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[10px] font-mono text-[#9146FF] dark:text-[#A970FF] hover:underline block truncate max-w-[200px]"
+                    >
+                      twitch.tv/karam_drm
+                    </a>
+                  </div>
+                </div>
+                <span className={cn(
+                  "text-[10px] font-mono font-bold px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0",
+                  multiLive.twitch?.isLive
+                    ? "bg-[#9146FF] text-white shadow-sm"
+                    : "bg-slate-200 dark:bg-white/10 text-slate-600 dark:text-gray-400"
+                )}>
+                  <span className={cn("w-1.5 h-1.5 rounded-full", multiLive.twitch?.isLive ? "bg-white animate-ping" : "bg-slate-400")}></span>
+                  {multiLive.twitch?.isLive ? "EN DIRECT" : "VEILLE ACTIVE"}
+                </span>
+              </div>
+              <div className="text-[11px] text-slate-600 dark:text-gray-300 flex items-center justify-between pt-2 border-t border-slate-200/60 dark:border-white/10 font-mono">
+                <span className="truncate max-w-[180px]">
+                  {multiLive.twitch?.isLive ? (multiLive.twitch.title || "Live Twitch actif") : "Prêt à détecter le prochain live"}
+                </span>
+                {multiLive.twitch?.isLive && (
+                  <span className="font-bold text-[#9146FF] dark:text-[#A970FF] shrink-0">{multiLive.twitch.viewers || 0} spectateurs</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* LES 4 AUTOMATISATIONS STRATÉGIQUES ACTIVÉES (VALIDÉES) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-1">
+          <div className="p-3.5 rounded-2xl bg-emerald-500/5 border border-emerald-500/20 space-y-1">
+            <div className="flex items-center justify-between text-xs font-black text-emerald-600 dark:text-emerald-400">
+              <span>🔄 Auto-Replay Fin de Live</span>
+              <span className="text-[10px] font-mono bg-emerald-500/15 px-2 py-0.5 rounded-full">ACTIF</span>
+            </div>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300 leading-snug">
+              Édite automatiquement le message Discord en <code>⚪ LIVE TERMINÉ • Voir le Replay</code> dès la fin du multistream.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-[#5865F2]/5 border border-[#5865F2]/20 space-y-1">
+            <div className="flex items-center justify-between text-xs font-black text-[#5865F2] dark:text-[#7983F5]">
+              <span>⏱️ Grace Period Multi-Stream</span>
+              <span className="text-[10px] font-mono bg-[#5865F2]/15 px-2 py-0.5 rounded-full">15s–45s</span>
+            </div>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300 leading-snug">
+              Synchronise les 3 flux OBS/Restream (TikTok, YouTube, Twitch) pour regrouper leurs titres dans l'unique message <code>@here</code>.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-[#9146FF]/5 border border-[#9146FF]/20 space-y-1">
+            <div className="flex items-center justify-between text-xs font-black text-[#9146FF] dark:text-[#A970FF]">
+              <span>📊 Onglet Twitch &amp; Vue Globale</span>
+              <span className="text-[10px] font-mono bg-[#9146FF]/15 px-2 py-0.5 rounded-full">0 QUOTA</span>
+            </div>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300 leading-snug">
+              Synchronise vos Followers, VODs et Heures streamées sur l'onglet <strong>Twitch</strong> et la <strong>Vue d'ensemble</strong>.
+            </p>
+          </div>
+
+          <div className="p-3.5 rounded-2xl bg-amber-500/5 border border-amber-500/20 space-y-1">
+            <div className="flex items-center justify-between text-xs font-black text-amber-600 dark:text-amber-400">
+              <span>🤖 Double Moteur Boutons</span>
+              <span className="text-[10px] font-mono bg-amber-500/15 px-2 py-0.5 rounded-full">100% FIABLE</span>
+            </div>
+            <p className="text-[11px] text-slate-600 dark:text-gray-300 leading-snug">
+              Envoie les boutons natifs <code>components</code> FireBOT + les 3 boutons explicites intégrés pour un transfert garanti en 1 clic.
             </p>
           </div>
         </div>
 
-        {/* Maquette Rendu Discord avec Vrai Bouton Physique */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* APERÇU OFFICIEL DU MESSAGE UNIQUE SUR DISCORD (#📢・ᴀɴɴᴏɴᴄᴇꜱ) AVEC SWITCH EN DIRECT / FIN DE LIVE */}
+        <div className="bg-[#313338] text-white p-5 sm:p-6 rounded-2xl border border-white/10 shadow-xl space-y-4 font-sans">
           
-          {/* Alerte Live TikTok avec Bouton */}
-          <div className="bg-[#2B2D31] text-white p-5 rounded-2xl border border-white/5 shadow-md space-y-3 font-sans">
-            <div className="flex items-center gap-2 text-xs text-gray-300">
-              <span className="w-2 h-2 rounded-full bg-red-500"></span>
-              <strong className="text-white">Karam Live</strong>
-              <span className="bg-[#5865F2] text-[9px] font-bold px-1.5 py-0.2 rounded text-white uppercase">APP</span>
-              <span className="text-gray-400 text-[10px]">Aujourd'hui</span>
-            </div>
-            
-            <p className="text-xs text-gray-200">🔴 <strong>Karamokho est en direct sur TikTok !</strong></p>
-
-            <div className="border-l-4 border-[#FE2C55] bg-[#1E1F22] p-4 rounded-r-xl space-y-2">
-              <p className="text-xs font-bold text-white tracking-wide">🔴 REJOINDRE LE LIVE TIKTOK DE KARAMOKHO</p>
-              <p className="text-[11px] text-gray-300 leading-relaxed">
-                Venez poser vos questions, échanger sur Webflow et suivre la session de live-coding en direct.
-              </p>
-              <div className="flex gap-4 text-[10px] text-gray-400 pt-1 font-mono">
-                <span>📱 TikTok Live</span>
-                <span>⚡ Statut : 🔴 EN DIRECT</span>
-                <span>👤 @karam.drame</span>
-              </div>
+          {/* Barre supérieure du salon Discord cible + Switcher Mode En Direct / Mode Fin de Live */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-white/10 text-xs">
+            <div className="flex items-center gap-2">
+              <DiscordIcon size={16} className="text-[#5865F2]" />
+              <span className="font-bold text-gray-200">Aperçu temps réel dans le salon :</span>
+              <span className="bg-[#5865F2]/20 text-[#949CF7] border border-[#5865F2]/30 px-2.5 py-0.5 rounded-md font-mono font-bold">
+                {DISCORD_ALERT_TARGET.channelName}
+              </span>
             </div>
 
-            {/* VRAI BOUTON PHYSIQUE DISCORD */}
-            <div className="pt-1">
-              <a 
-                href="https://www.tiktok.com/@karam.drame/live"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-xs px-4 py-2.5 rounded-lg shadow transition-all group"
+            <div className="flex items-center gap-1.5 bg-[#1E1F22] p-1 rounded-xl border border-white/10">
+              <button
+                type="button"
+                onClick={() => setPreviewMode('live')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer",
+                  previewMode === 'live'
+                    ? "bg-[#FE2C55] text-white shadow"
+                    : "text-gray-400 hover:text-white"
+                )}
               >
-                <Play size={13} fill="currentColor" />
-                <span>🔴 ACCÉDER AU LIVE TIKTOK ↗</span>
-              </a>
+                🔴 1. Pendant le Live (@here)
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewMode('ended')}
+                className={cn(
+                  "px-3 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer",
+                  previewMode === 'ended'
+                    ? "bg-slate-600 text-white shadow"
+                    : "text-gray-400 hover:text-white"
+                )}
+              >
+                ⚪ 2. Fin de Live Auto-Replay
+              </button>
             </div>
           </div>
 
-          {/* Alerte Live YouTube avec Bouton */}
-          <div className="bg-[#2B2D31] text-white p-5 rounded-2xl border border-white/5 shadow-md space-y-3 font-sans">
-            <div className="flex items-center gap-2 text-xs text-gray-300">
-              <span className="w-2 h-2 rounded-full bg-red-600"></span>
-              <strong className="text-white">Karam Live</strong>
-              <span className="bg-[#5865F2] text-[9px] font-bold px-1.5 py-0.2 rounded text-white uppercase">APP</span>
-              <span className="text-gray-400 text-[10px]">Aujourd'hui</span>
+          {/* En-tête du Bot Webhook Discord */}
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#FE2C55] via-[#9146FF] to-[#5865F2] flex items-center justify-center text-white font-black text-sm shrink-0 shadow-md">
+              KL
             </div>
-            
-            <p className="text-xs text-gray-200">🔴 <strong>Karamokho est en direct sur YouTube !</strong></p>
 
-            <div className="border-l-4 border-[#FF0000] bg-[#1E1F22] p-4 rounded-r-xl space-y-2">
-              <p className="text-xs font-bold text-white tracking-wide">🔴 REJOINDRE LE LIVE STREAM SUR YOUTUBE</p>
-              <p className="text-[11px] text-gray-300 leading-relaxed">
-                Karamokho est actuellement en direct sur YouTube ! Rejoignez la session dès maintenant pour participer et échanger en live.
-              </p>
-              <div className="flex gap-4 text-[10px] text-gray-400 pt-1 font-mono">
-                <span>📺 YouTube Live</span>
-                <span>⚡ Statut : 🔴 EN DIRECT</span>
-                <span>👤 @karamdrm</span>
+            <div className="flex-1 space-y-2.5 min-w-0">
+              <div className="flex flex-wrap items-center gap-2 text-xs">
+                <strong className="text-white font-bold text-sm">Karam • Alerte Live Multi-Stream</strong>
+                <span className="bg-[#5865F2] text-[10px] font-bold px-1.5 py-0.5 rounded text-white uppercase tracking-wider">
+                  APP
+                </span>
+                <span className="text-gray-400 text-[11px]">
+                  Aujourd'hui dans {DISCORD_ALERT_TARGET.channelName}
+                  {previewMode === 'ended' && ' (modifié automatiquement en fin de live)'}
+                </span>
               </div>
-            </div>
 
-            {/* VRAI BOUTON PHYSIQUE DISCORD */}
-            <div className="pt-1">
-              <a 
-                href="https://www.youtube.com/@karamdrm/live"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 bg-[#5865F2] hover:bg-[#4752C4] text-white font-bold text-xs px-4 py-2.5 rounded-lg shadow transition-all group"
-              >
-                <Play size={13} fill="currentColor" />
-                <span>🔴 ACCÉDER AU LIVE YOUTUBE ↗</span>
-              </a>
+              {previewMode === 'live' ? (
+                <>
+                  {/* Contenu texte du message avec mention @here (JAMAIS @everyone) */}
+                  <div className="text-xs sm:text-sm text-gray-100 leading-relaxed">
+                    🔴{' '}
+                    <span className="bg-[#F0B232]/25 text-[#F0B232] font-bold px-1.5 py-0.5 rounded border border-[#F0B232]/40 font-mono">
+                      @here
+                    </span>{' '}
+                    <strong>— KARAM EST EN LIVE SUR TIKTOK • YOUTUBE • TWITCH !</strong> 🚀
+                  </div>
+
+                  {/* EMBED DISCORD ÉPURÉ : UNIQUEMENT LES NOMS DES COMPTES (ZÉRO LIEN DEDANS) */}
+                  <div className="border-l-4 border-[#FE2C55] bg-[#2B2D31] p-4 sm:p-5 rounded-r-xl space-y-4 max-w-3xl shadow-inner">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-[11px] text-gray-300 font-semibold">
+                          <span>Karam • Diffusion Multi-Réseaux (TikTok • YouTube • Twitch)</span>
+                        </div>
+                        <h5 className="text-sm sm:text-base font-black text-white tracking-wide">
+                          🎥 EN DIRECT : {multiLive.unifiedTitle || "On crée un site ensemble"}
+                        </h5>
+                      </div>
+                    </div>
+
+                    {/* Cartes des 3 plateformes avec uniquement le nom des comptes */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                      {/* Colonne TikTok */}
+                      <div className="bg-[#1E1F22] p-3 rounded-xl border border-white/5 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-black flex items-center justify-center text-white border border-white/10 shrink-0">
+                            <TikTokIcon size={13} />
+                          </div>
+                          <span className="text-xs font-bold text-white">TikTok</span>
+                        </div>
+                        <p className="text-[11px] font-mono text-gray-300">@karam.drame</p>
+                        <p className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          En direct
+                        </p>
+                      </div>
+
+                      {/* Colonne YouTube */}
+                      <div className="bg-[#1E1F22] p-3 rounded-xl border border-white/5 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-[#FF0000] flex items-center justify-center text-white shrink-0">
+                            <YoutubeIcon size={13} />
+                          </div>
+                          <span className="text-xs font-bold text-white">YouTube</span>
+                        </div>
+                        <p className="text-[11px] font-mono text-gray-300">@karamdrm</p>
+                        <p className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          En direct
+                        </p>
+                      </div>
+
+                      {/* Colonne Twitch */}
+                      <div className="bg-[#1E1F22] p-3 rounded-xl border border-white/5 space-y-1">
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-[#9146FF] flex items-center justify-center text-white shrink-0">
+                            <TwitchIcon size={13} />
+                          </div>
+                          <span className="text-xs font-bold text-white">Twitch</span>
+                        </div>
+                        <p className="text-[11px] font-mono text-gray-300">karam_drm</p>
+                        <p className="text-[11px] font-bold text-emerald-400 flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                          En direct
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* LES 3 BOUTONS EXPLICITES CLIQUABLES D'ACCÈS DIRECT AU LIVE (TRANSFERT EN 1 CLIC) */}
+                  <div className="pt-2 space-y-2">
+                    <p className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 font-bold flex items-center gap-1.5">
+                      <ExternalLink size={12} />
+                      Boutons de transfert direct en 1 clic (TikTok • YouTube • Twitch) :
+                    </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                      {/* 1. Bouton Explicite TikTok */}
+                      <a
+                        href={CREATOR_LIVE_ACCOUNTS.tiktok.liveUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2.5 bg-[#FE2C55] hover:bg-[#e02449] active:scale-95 text-white font-black text-xs px-4 py-3 rounded-xl shadow-lg border border-white/15 transition-all group"
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-black flex items-center justify-center text-[#25F4EE] shrink-0 shadow-sm">
+                          <TikTokIcon size={14} />
+                        </span>
+                        <span>🔴 CLIQUER ICI : REJOINDRE LE LIVE TIKTOK</span>
+                        <ExternalLink size={14} className="text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                      </a>
+
+                      {/* 2. Bouton Explicite YouTube */}
+                      <a
+                        href={multiLive.youtube?.liveUrl || CREATOR_LIVE_ACCOUNTS.youtube.liveUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2.5 bg-[#FF0000] hover:bg-[#d90000] active:scale-95 text-white font-black text-xs px-4 py-3 rounded-xl shadow-lg border border-white/15 transition-all group"
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-white flex items-center justify-center text-[#FF0000] shrink-0 shadow-sm">
+                          <YoutubeIcon size={14} />
+                        </span>
+                        <span>🔴 CLIQUER ICI : REJOINDRE LE LIVE YOUTUBE</span>
+                        <ExternalLink size={14} className="text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                      </a>
+
+                      {/* 3. Bouton Explicite Twitch */}
+                      <a
+                        href={CREATOR_LIVE_ACCOUNTS.twitch.liveUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2.5 bg-[#9146FF] hover:bg-[#7c32e8] active:scale-95 text-white font-black text-xs px-4 py-3 rounded-xl shadow-lg border border-white/15 transition-all group"
+                      >
+                        <span className="w-6 h-6 rounded-lg bg-black/30 flex items-center justify-center text-white shrink-0 shadow-sm">
+                          <TwitchIcon size={14} />
+                        </span>
+                        <span>🟣 CLIQUER ICI : REJOINDRE LE LIVE TWITCH</span>
+                        <ExternalLink size={14} className="text-white group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+                      </a>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* APERÇU MODE 2 : FIN DE LIVE AUTOMATIQUE (RECOMMANDATION 1) */}
+                  <div className="text-xs sm:text-sm text-gray-100 leading-relaxed">
+                    ⚪ <strong>LIVE TERMINÉ — MERCI À TOUS LES PARTICIPANTS !</strong> 🙏
+                    <p className="text-xs text-gray-300 mt-1">
+                      Le direct multi-stream est désormais terminé. Vous pouvez revoir le replay complet ci-dessous ou suivre les chaînes pour ne pas manquer le prochain live 👇
+                    </p>
+                  </div>
+
+                  <div className="border-l-4 border-slate-500 bg-[#2B2D31] p-4 sm:p-5 rounded-r-xl space-y-4 max-w-3xl shadow-inner">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-[11px] text-gray-400 font-semibold">
+                        <span>Karam • Diffusion Multi-Réseaux (Session Terminée • Replay Disponible)</span>
+                      </div>
+                      <h5 className="text-sm sm:text-base font-black text-gray-200 tracking-wide">
+                        ⚪ LIVE TERMINÉ : {multiLive.unifiedTitle || "On crée un site ensemble • Live Coding Webflow"}
+                      </h5>
+                    </div>
+
+                    <p className="text-xs text-gray-300 leading-relaxed">
+                      Merci à tous ceux qui étaient présents en direct avec la communauté <strong>La Forge</strong> ! Cliquez sur l'un des boutons explicites ci-dessous pour accéder au Replay :
+                    </p>
+
+                    <div className="flex flex-wrap items-center gap-3 pt-1">
+                      <a
+                        href={multiLive.youtube?.liveUrl || CREATOR_LIVE_ACCOUNTS.youtube.profileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-[#FF0000] hover:bg-[#d90000] text-white font-black text-xs px-4 py-2.5 rounded-xl shadow"
+                      >
+                        <YoutubeIcon size={14} />
+                        <span>▶️ CLIQUER ICI : VOIR LE REPLAY YOUTUBE ↗</span>
+                      </a>
+                      <a
+                        href={`${CREATOR_LIVE_ACCOUNTS.twitch.profileUrl}/videos`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-[#9146FF] hover:bg-[#7c32e8] text-white font-black text-xs px-4 py-2.5 rounded-xl shadow"
+                      >
+                        <TwitchIcon size={14} />
+                        <span>🟣 CLIQUER ICI : VOIR LE REPLAY VOD TWITCH ↗</span>
+                      </a>
+                      <a
+                        href={CREATOR_LIVE_ACCOUNTS.tiktok.profileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-2 bg-[#4E5058] hover:bg-[#6D6F78] text-white font-black text-xs px-4 py-2.5 rounded-xl shadow"
+                      >
+                        <TikTokIcon size={14} />
+                        <span>🎵 CLIQUER ICI : PROFIL TIKTOK ↗</span>
+                      </a>
+                    </div>
+                  </div>
+                </>
+              )}
+
             </div>
           </div>
-
         </div>
       </div>
 

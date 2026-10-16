@@ -39,7 +39,6 @@ async function detect() {
       console.log('User Info roomId:', roomId);
       
       if (roomId && roomId !== '0') {
-        isLive = true;
         const roomRes = await fetch('https://webcast.tiktok.com/webcast/room/info/?aid=1988&room_id=' + roomId, {
           headers: {
             'User-Agent': USER_AGENT,
@@ -47,17 +46,31 @@ async function detect() {
             'Referer': 'https://www.tiktok.com/@karam.drame'
           }
         });
-        const rJson = await roomRes.json();
-        r = rJson.data;
-        currentViewers = r?.user_count || 0;
-        title = r?.title || '';
-        console.log('STATUS:', r?.status, 'TITLE:', r?.title, 'VIEWERS:', r?.user_count, 'STATS:', r?.stats);
+        if (roomRes.ok) {
+          const rJson = await roomRes.json();
+          r = rJson.data;
+          const ownerHandle = String(r?.owner?.display_id || r?.owner?.unique_id || '').toLowerCase();
+          const isOwnerValid = !ownerHandle || ownerHandle === 'karam.drame';
+          if (r && r.status === 2 && isOwnerValid) {
+            isLive = true;
+            currentViewers = r?.user_count || 0;
+            title = r?.title || '';
+            console.log('STATUS:', r?.status, 'TITLE:', r?.title, 'VIEWERS:', r?.user_count);
+          } else {
+            console.log('Live inactif ou autre streamer (status:', r?.status, ')');
+            isLive = false;
+            currentViewers = 0;
+            roomId = '';
+          }
+        }
       }
     }
 
     const userRef = doc(db, 'users', 'karamokho');
     const updateData = {
       'tiktokLiveAPI.isLive': isLive,
+      'tiktokAPI.isLive': isLive,
+      'isLive': isLive,
       'tiktokLiveAPI.currentViewers': currentViewers,
       'tiktokLiveAPI.roomId': roomId,
       'tiktokLiveAPI.title': title,
@@ -74,10 +87,18 @@ async function detect() {
       if (r?.stats?.follow_count !== undefined) {
         updateData['tiktokLiveAPI.newFollowers'] = r?.stats?.follow_count || 0;
       }
-      if (r?.stats?.total_user !== undefined) {
-        updateData['tiktokLiveAPI.totalUser'] = r?.stats?.total_user || 0;
+      const totalUser = r?.stats?.total_user || r?.stats?.enter_count || 0;
+      if (totalUser > 0) {
+        updateData['tiktokLiveAPI.totalUser'] = totalUser;
+        updateData['tiktokLiveAPI.total_user'] = totalUser;
+        updateData['tiktokLiveAPI.cumulative_audience'] = totalUser;
+        updateData['tiktokLiveAPI.enter_count'] = totalUser;
       }
-      updateData['tiktokLiveAPI.startedAt'] = new Date().toISOString();
+      if (r?.create_time && typeof r.create_time === 'number' && r.create_time > 1e9) {
+        const trueStart = new Date(r.create_time * 1000).toISOString();
+        updateData['tiktokLiveAPI.startedAt'] = trueStart;
+        updateData['tiktokLiveAPI.started_at'] = trueStart;
+      }
     }
 
     await updateDoc(userRef, updateData);

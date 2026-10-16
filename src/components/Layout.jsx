@@ -1,21 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 import { Home, Sparkles, Globe, Sun, Moon, Menu, Settings } from 'lucide-react';
-import { YoutubeIcon, InstagramIcon, TikTokIcon, LinkedinIcon, DiscordIcon } from './SocialIcons';
+import { YoutubeIcon, InstagramIcon, TikTokIcon, LinkedinIcon, DiscordIcon, TwitchIcon } from './SocialIcons';
 import { MOCK_DATA } from '../data/mockData';
 
 const NAV_ITEMS = [
   { path: '/', icon: Home, label: 'Accueil' },
   { path: '/youtube', icon: YoutubeIcon, label: 'YouTube' },
-  { path: '/instagram', icon: InstagramIcon, label: 'Instagram' },
   { path: '/tiktok', icon: TikTokIcon, label: 'TikTok' },
-  { path: '/linkedin', icon: LinkedinIcon, label: 'LinkedIn' },
+  { path: '/twitch', icon: TwitchIcon, label: 'Twitch' },
   { path: '/discord', icon: DiscordIcon, label: 'Discord' },
+  { path: '/instagram', icon: InstagramIcon, label: 'Instagram' },
+  { path: '/linkedin', icon: LinkedinIcon, label: 'LinkedIn' },
   { path: '/website', icon: Globe, label: 'Site Web' },
   { path: '/insights', icon: Sparkles, label: 'Assistant IA' },
 ];
 
-export const Layout = ({ isTikTokLive = false }) => {
+export const Layout = ({ isTikTokLive = false, isTwitchLive = false, isYouTubeLive = false }) => {
   const [isDark, setIsDark] = useState(() => {
     if (typeof window !== 'undefined') {
       if ('theme' in localStorage) {
@@ -37,6 +38,13 @@ export const Layout = ({ isTikTokLive = false }) => {
     }
   }, [isDark]);
 
+  const isItemLive = (path) => {
+    if (path === '/tiktok') return isTikTokLive;
+    if (path === '/twitch') return isTwitchLive;
+    if (path === '/youtube') return isYouTubeLive;
+    return false;
+  };
+
   return (
     <div className="min-h-screen w-full max-w-[100vw] overflow-x-hidden flex bg-lumina-light dark:bg-lumina-dark text-gray-900 dark:text-lumina-light transition-colors duration-300">
       
@@ -54,6 +62,7 @@ export const Layout = ({ isTikTokLive = false }) => {
         <nav className="flex-1 py-6 flex flex-col gap-2 px-3">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
+            const liveActive = isItemLive(item.path);
             return (
               <NavLink
                 key={item.path}
@@ -68,7 +77,7 @@ export const Layout = ({ isTikTokLive = false }) => {
               >
                 <div className="relative flex-shrink-0 flex items-center justify-center">
                   <Icon size={22} />
-                  {isTikTokLive && item.path === '/tiktok' && (
+                  {liveActive && (
                     <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FE2C55] opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#FE2C55]"></span>
@@ -77,7 +86,7 @@ export const Layout = ({ isTikTokLive = false }) => {
                 </div>
                 <span className="font-medium opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap flex items-center gap-2">
                   {item.label}
-                  {isTikTokLive && item.path === '/tiktok' && (
+                  {liveActive && (
                     <span className="text-[10px] font-black uppercase tracking-wider bg-[#FE2C55] text-white px-1.5 py-0.5 rounded-full shadow-sm animate-pulse">
                       LIVE
                     </span>
@@ -136,6 +145,7 @@ export const Layout = ({ isTikTokLive = false }) => {
         <nav className="pointer-events-auto w-full max-w-[100vw] overflow-x-auto hide-scrollbar bg-white/90 dark:bg-lumina-darkSurface/90 backdrop-blur-xl rounded-[2rem] p-2 flex justify-start gap-1 items-center shadow-[0_8px_30px_rgb(0,0,0,0.12)] border border-gray-100 dark:border-lumina-darkBorder">
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
+            const liveActive = isItemLive(item.path);
             const shortLabel = item.label === 'Assistant IA' ? 'IA' : item.label === 'LinkedIn' ? 'In' : item.label;
             return (
               <NavLink
@@ -152,7 +162,7 @@ export const Layout = ({ isTikTokLive = false }) => {
               >
                 <div className="relative flex items-center justify-center mb-0.5">
                   <Icon size={20} />
-                  {isTikTokLive && item.path === '/tiktok' && (
+                  {liveActive && (
                     <span className="absolute -top-1 -right-1 flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FE2C55] opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-[#FE2C55]"></span>
@@ -161,7 +171,7 @@ export const Layout = ({ isTikTokLive = false }) => {
                 </div>
                 <span className="text-[9px] font-semibold tracking-wide truncate w-full text-center flex items-center justify-center gap-0.5">
                   {shortLabel}
-                  {isTikTokLive && item.path === '/tiktok' && (
+                  {liveActive && (
                     <span className="w-1.5 h-1.5 rounded-full bg-[#FE2C55] animate-pulse shrink-0 inline-block" />
                   )}
                 </span>
