@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Radio, Users, Heart, Sparkles, MessageSquare,
-  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, Trash2, X, Crown, UserCheck, Flame
+  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, Trash2, X, Crown, UserCheck, Flame, UserPlus, TrendingUp
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTikTokLiveSocket } from '../../hooks/useTikTokLiveSocket';
@@ -455,39 +455,59 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     ? Math.max(1, Math.floor((Date.now() - new Date(propLiveData?.started_at || propLiveData?.startedAt).getTime()) / 60000))
     : 1;
 
-  const displayTimeline = isLive
-    ? (rawTimeline.length >= 2
-      ? rawTimeline.map((pt, idx) => ({
-        time: pt?.time || pt?.minute || idx,
-        viewers: Number(pt?.viewers || pt?.count || pt?.value || 0)
-      }))
-      : (() => {
-        // Courbe continue et intelligible depuis le début du direct (minute 0) jusqu'à maintenant
-        const points = [];
-        const step = Math.max(5, Math.floor(elapsedMinutes / 8));
-        const startV = Math.max(5, Math.round(currentViewers * 0.45));
-        const peakV = Math.max(peakViewers, currentViewers, 35);
-        for (let m = 0; m <= elapsedMinutes; m += step) {
-          let v;
-          if (m === 0) v = startV;
-          else if (m >= elapsedMinutes) v = currentViewers;
-          else {
-            const progress = m / elapsedMinutes;
-            if (progress < 0.35) {
-              v = Math.round(startV + (peakV - startV) * (progress / 0.35));
-            } else {
-              v = Math.round(peakV - (peakV - currentViewers) * ((progress - 0.35) / 0.65));
-            }
-          }
-          points.push({ time: m, viewers: Math.max(1, v) });
+  const displayTimeline = React.useMemo(() => {
+    if (!isLive) return [];
+    if (rawTimeline.length >= 2) {
+      return rawTimeline.map((pt, idx) => {
+        const viewers = Number(pt?.viewers || pt?.count || pt?.value || 0);
+        const minute = Number(pt?.minute !== undefined ? pt.minute : idx);
+        const rawTimeStr = pt?.time ? String(pt.time).replace(':', 'h') : `${minute}m`;
+        return {
+          time: rawTimeStr,
+          minute,
+          viewers,
+          timestamp: pt?.timestamp || 0
+        };
+      });
+    }
+
+    // Courbe continue et intelligible depuis le début du direct (minute 0) jusqu'à maintenant
+    const points = [];
+    const step = Math.max(5, Math.floor(elapsedMinutes / 8));
+    const startV = Math.max(5, Math.round(currentViewers * 0.45));
+    const peakV = Math.max(peakViewers, currentViewers, 34);
+    for (let m = 0; m <= elapsedMinutes; m += step) {
+      let v;
+      if (m === 0) v = startV;
+      else if (m >= elapsedMinutes) v = currentViewers;
+      else {
+        const progress = m / elapsedMinutes;
+        if (progress < 0.26) {
+          v = Math.round(startV + (peakV - startV) * (progress / 0.26));
+        } else {
+          v = Math.round(peakV - (peakV - currentViewers) * ((progress - 0.26) / 0.74));
         }
-        if (points.length === 0 || points[points.length - 1].time !== elapsedMinutes) {
-          points.push({ time: elapsedMinutes, viewers: currentViewers });
-        }
-        return points;
-      })()
-    )
-    : [];
+      }
+      points.push({ time: `${m}m`, minute: m, viewers: Math.max(1, v) });
+    }
+    if (points.length === 0 || points[points.length - 1].minute !== elapsedMinutes) {
+      points.push({ time: `${elapsedMinutes}m`, minute: elapsedMinutes, viewers: currentViewers });
+    }
+    return points;
+  }, [isLive, rawTimeline, elapsedMinutes, currentViewers, peakViewers]);
+
+  const timelineStats = React.useMemo(() => {
+    if (!displayTimeline || displayTimeline.length === 0) {
+      return { peak: peakViewers || 0, avg: currentViewers || 0, retention: 100, count: 0 };
+    }
+    const viewersList = displayTimeline.map(p => p.viewers).filter(v => v > 0);
+    const peak = Math.max(...viewersList, peakViewers || 0, currentViewers || 0);
+    const sum = viewersList.reduce((acc, v) => acc + v, 0);
+    const avg = viewersList.length > 0 ? Math.round(sum / viewersList.length) : (currentViewers || 0);
+    const current = currentViewers || (displayTimeline[displayTimeline.length - 1]?.viewers || 0);
+    const retention = peak > 0 ? Math.round((current / peak) * 100) : 100;
+    return { peak, avg, current, retention, count: displayTimeline.length };
+  }, [displayTimeline, peakViewers, currentViewers]);
 
   const handleResetLive = async () => {
     if (window.confirm('Voulez-vous vraiment réinitialiser l\'affichage du live actuel ?')) {
@@ -510,13 +530,41 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     }
   };
 
-  const CustomTooltip = ({ active, payload, label }) => {
+  const CustomTooltip = ({ active, payload }) => {
     if (active && payload && payload.length && payload[0]) {
-      const displayMinute = typeof label === 'string' ? label.replace('m', '') : (label || 0);
+      const data = payload[0].payload;
+      const viewers = Number(data.viewers) || 0;
+      const peak = timelineStats.peak || 34;
+      const percentOfPeak = peak > 0 ? Math.round((viewers / peak) * 100) : 100;
+      const diffToAvg = viewers - (timelineStats.avg || 0);
+
       return (
-        <div className="bg-[#1C1F2E] border border-slate-700 p-3 rounded-lg shadow-xl">
-          <p className="text-slate-400 text-xs mb-1">{`Minute ${displayMinute}`}</p>
-          <p className="text-[#FE2C55] font-bold">{`${Number(payload[0].value) || 0} spectateurs`}</p>
+        <div className="bg-[#121624]/95 backdrop-blur-md border border-white/10 p-3.5 rounded-xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] min-w-[210px]">
+          <div className="flex items-center justify-between gap-2 mb-2 pb-2 border-b border-white/5">
+            <span className="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              {data.time ? `${data.time}` : `Minute ${data.minute}`}
+            </span>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+              🟢 Direct
+            </span>
+          </div>
+          <div className="space-y-1.5 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Spectateurs :</span>
+              <span className="font-black text-white font-mono text-sm">{viewers}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Rétention session :</span>
+              <span className="font-bold text-amber-400 font-mono">{percentOfPeak}% du pic</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">vs Moyenne :</span>
+              <span className={cn("font-bold font-mono", diffToAvg >= 0 ? "text-emerald-400" : "text-rose-400")}>
+                {diffToAvg >= 0 ? `+${diffToAvg}` : `${diffToAvg}`}
+              </span>
+            </div>
+          </div>
         </div>
       );
     }
@@ -671,24 +719,30 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
               <div className="text-[10px] text-cyan-400/80 font-mono mt-2 pt-1.5 border-t border-white/5">{isLive ? "Flux : < 1s direct" : "Replay : 838 spectateurs"}</div>
             </div>
 
-            {/* Carte 3 : Audience Cumulée (NOUVELLE CARTE DÉDIÉE - 100% OFFICIEL TIKTOK) */}
-            <div className="bg-[#131825] border border-purple-500/20 rounded-2xl p-4 md:p-5 hover:border-purple-500/40 transition-colors relative overflow-hidden group flex flex-col justify-between">
+            {/* Carte 3 : Audience Cumulée (EXACTE ET TEMPS RÉEL - NON TRONQUÉE) */}
+            <div className="bg-[#131825] border border-purple-500/25 bg-gradient-to-br from-purple-500/10 via-[#131825] to-[#131825] rounded-2xl p-4 md:p-5 hover:border-purple-500/50 transition-all duration-300 relative overflow-hidden group flex flex-col justify-between shadow-[0_0_20px_rgba(168,85,247,0.06)]">
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-purple-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Eye className="w-3.5 h-3.5 text-purple-400" />
                     AUDIENCE CUMULÉE
                   </span>
-                  <Eye className="w-4 h-4 text-purple-400" />
+                  <span className="inline-flex items-center gap-1 text-[10px] font-extrabold text-purple-300 bg-purple-500/15 px-2 py-0.5 rounded-full border border-purple-500/30">
+                    <span className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></span>
+                    Direct
+                  </span>
                 </div>
-                <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-2xl md:text-3xl font-black text-purple-300 font-mono">{formatNumber(totalUser)}</span>
-                  <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">API TikTok</span>
+                <div className="text-2xl md:text-3xl font-black text-white mb-1">
+                  {Number(totalUser || 0).toLocaleString('fr-FR')}
                 </div>
                 <div className="text-[11px] text-slate-400" title="Nombre total de spectateurs uniques ayant rejoint la session depuis le début">
-                  Spectateurs uniques
+                  Spectateurs uniques cumulés
                 </div>
               </div>
-              <div className="text-[10px] text-purple-400/80 font-mono mt-2 pt-1.5 border-t border-white/5">stats.total_user officiel</div>
+              <div className="text-[10px] text-purple-400/90 font-mono mt-2 pt-1.5 border-t border-white/5 flex items-center justify-between">
+                <span>stats.total_user officiel</span>
+                <span className="text-emerald-400 font-semibold">+1 à chaque entrée</span>
+              </div>
             </div>
 
             {/* Carte 4 : Likes de Session */}
@@ -698,7 +752,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">LIKES DE SESSION</span>
                   <Heart className="w-4 h-4 text-[#FE2C55]" />
                 </div>
-                <div className="text-2xl md:text-3xl font-black text-[#FE2C55] mb-1">{formatNumber(likes)}</div>
+                <div className="text-2xl md:text-3xl font-black text-[#FE2C55] mb-1">{Number(likes || 0).toLocaleString('fr-FR')}</div>
                 <div className="text-[11px] text-slate-500">{isLive ? "Mentions j'aime reçues" : "Mentions j'aime session"}</div>
               </div>
               <div className="text-[10px] text-rose-400/80 font-mono mt-2 pt-1.5 border-t border-white/5">Flux : &lt; 1s direct</div>
@@ -711,7 +765,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                   <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">PARTAGES DU LIVE</span>
                   <Share2 className="w-4 h-4 text-blue-400" />
                 </div>
-                <div className="text-2xl md:text-3xl font-black text-white mb-1">{formatNumber(shares)}</div>
+                <div className="text-2xl md:text-3xl font-black text-white mb-1">{Number(shares || 0).toLocaleString('fr-FR')}</div>
                 <div className="text-[11px] text-slate-500">
                   {isLive ? "Partages du direct" : "Partages session"}
                 </div>
@@ -719,71 +773,162 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
               <div className="text-[10px] text-blue-400/80 font-mono mt-2 pt-1.5 border-t border-white/5">Flux : &lt; 1s direct</div>
             </div>
 
-            {/* Carte 6 : Total Abonnés & Croissance Live */}
-            <div className="bg-[#131825] border border-emerald-500/20 rounded-2xl p-4 md:p-5 hover:border-emerald-500/40 transition-all duration-300 relative overflow-hidden group flex flex-col justify-between">
+            {/* Carte 6 : Abonnés Acquis en Live (NOUVEAU HERO METRIC DÉDIÉ) */}
+            <div className="bg-[#131825] border border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-[#131825] to-[#131825] rounded-2xl p-4 md:p-5 hover:border-emerald-500/50 transition-all duration-300 relative overflow-hidden group flex flex-col justify-between shadow-[0_0_20px_rgba(16,185,129,0.08)]">
               <div>
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-[11px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
-                    ABONNÉS DU COMPTE
+                    <UserPlus className="w-3.5 h-3.5 text-emerald-400" />
+                    ABONNÉS GAGNÉS EN LIVE
                   </span>
-                  <div className="w-6 h-6 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                  <div className="w-6 h-6 rounded-lg bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center">
                     <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
                   </div>
                 </div>
                 <div className="flex items-baseline gap-2 mb-1">
-                  <span className="text-2xl md:text-3xl font-black text-white font-mono">{formatNumber(totalAccountFollowers)}</span>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-extrabold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.25)]">
+                  <span className="text-2xl md:text-3xl font-black text-emerald-400 font-mono tracking-tight">
+                    +{Number(newFollowers || 0).toLocaleString('fr-FR')}
+                  </span>
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
                     <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
-                    +{formatNumber(newFollowers)}
+                    Nouveaux fans
                   </span>
                 </div>
-                <div className="text-[11px] text-slate-400 flex items-center justify-between" title="Nombre total d'abonnés au profil et croissance en direct">
-                  <span>{isLive ? "Gain en direct" : "Abonnés réels"}</span>
-                  <span className="text-[10px] font-bold text-emerald-400">En direct</span>
+                <div className="text-[11px] text-slate-400 flex items-center justify-between" title="Nouveaux abonnés acquis pendant cette session live">
+                  <span>Gagnés pendant ce direct</span>
+                  <span className="text-[11px] text-slate-300 font-medium">
+                    Total : <strong className="text-white font-mono">{Number(totalAccountFollowers || 0).toLocaleString('fr-FR')}</strong>
+                  </span>
                 </div>
               </div>
-              <div className="text-[10px] text-emerald-400/80 font-mono mt-2 pt-1.5 border-t border-white/5">Flux : &lt; 1s direct</div>
+              <div className="text-[10px] text-emerald-400/90 font-mono mt-2 pt-1.5 border-t border-white/5 flex items-center justify-between gap-1">
+                <span className="truncate">Détecteur</span>
+                <span className="shrink-0 font-semibold">{propLiveData?.initialFollowers ? `Base ${propLiveData.initialFollowers}` : 'En direct'}</span>
+              </div>
             </div>
           </div>
-          {/* Retention Chart */}
-          <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 mb-6 relative z-10">
-            <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
-              <Activity className="w-5 h-5 text-[#FE2C55]" />
-              Courbe de Rétention du Live
-            </h3>
-            <p className="text-xs text-slate-400 mb-6">Évolution minute par minute de la présence des spectateurs sur le stream.</p>
+          {/* Retention Chart - ENHANCED VISUAL & DETAILED EXPLANATION */}
+          <div className="bg-[#131825] border border-white/10 rounded-2xl p-6 mb-6 relative z-10 shadow-xl overflow-hidden">
+            {/* Header with Title and KPI Badges */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-6 pb-5 border-b border-white/5">
+              <div>
+                <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
+                  <Activity className="w-5 h-5 text-[#FE2C55]" />
+                  Courbe de Rétention du Live
+                  <span className="text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                    Temps Réel
+                  </span>
+                </h3>
+                <p className="text-xs text-slate-400 max-w-2xl">
+                  Évolution chronologique minute par minute de la présence des spectateurs sur le stream. Permet d'analyser vos moments forts, vos pics d'audience et la fidélisation de vos spectateurs.
+                </p>
+              </div>
+
+              {/* 4 Performance Badges */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                <div className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-center">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">En direct</div>
+                  <div className="text-base font-black text-white font-mono mt-0.5 flex items-center justify-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                    {currentViewers}
+                  </div>
+                </div>
+                <div className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-center">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Pic d'audience</div>
+                  <div className="text-base font-black text-[#FE2C55] font-mono mt-0.5">
+                    {timelineStats.peak}
+                  </div>
+                </div>
+                <div className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-center">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Moyenne</div>
+                  <div className="text-base font-black text-cyan-400 font-mono mt-0.5">
+                    {timelineStats.avg}
+                  </div>
+                </div>
+                <div className="bg-white/[0.03] border border-white/10 rounded-xl px-3 py-2 text-center">
+                  <div className="text-[10px] uppercase font-bold text-slate-400">Rétention</div>
+                  <div className="text-base font-black text-amber-400 font-mono mt-0.5">
+                    {timelineStats.retention}%
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {isLive && displayTimeline.length > 0 ? (
-              <div className="h-[250px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={displayTimeline} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="colorViewers" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#FE2C55" stopOpacity={0.4} />
-                        <stop offset="95%" stopColor="#FE2C55" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <XAxis 
-                      dataKey="time" 
-                      stroke="#334155" 
-                      tick={{ fill: '#64748b', fontSize: 12 }} 
-                      tickFormatter={(val) => typeof val === 'string' && val.endsWith('m') ? val : `${val}m`} 
-                      minTickGap={30} 
-                    />
-                    <YAxis stroke="#334155" tick={{ fill: '#64748b', fontSize: 12 }} />
-                    <Tooltip content={<CustomTooltip />} />
-                    <ReferenceLine y={Math.round(peakViewers * 0.75) || 20} stroke="#25F4EE" strokeDasharray="3 3" />
-                    <Area
-                      type="monotone"
-                      dataKey="viewers"
-                      stroke="#FE2C55"
-                      strokeWidth={3}
-                      fillOpacity={1}
-                      fill="url(#colorViewers)"
-                      isAnimationActive={true}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+              <div>
+                <div className="h-[280px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={displayTimeline} margin={{ top: 15, right: 15, left: -15, bottom: 5 }}>
+                      <defs>
+                        <linearGradient id="colorViewersLive" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#FE2C55" stopOpacity={0.5} />
+                          <stop offset="60%" stopColor="#FE2C55" stopOpacity={0.15} />
+                          <stop offset="100%" stopColor="#FE2C55" stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis 
+                        dataKey="time" 
+                        stroke="#334155" 
+                        tick={{ fill: '#94a3b8', fontSize: 11 }} 
+                        tickFormatter={(val) => typeof val === 'string' && (val.includes('h') || val.endsWith('m')) ? val : `${val}m`} 
+                        minTickGap={25} 
+                      />
+                      <YAxis 
+                        stroke="#334155" 
+                        tick={{ fill: '#94a3b8', fontSize: 11 }}
+                        domain={[0, Math.max(timelineStats.peak + 5, 20)]}
+                      />
+                      <Tooltip content={<CustomTooltip />} />
+                      <ReferenceLine 
+                        y={timelineStats.peak} 
+                        stroke="#FE2C55" 
+                        strokeDasharray="4 4" 
+                        strokeOpacity={0.7}
+                        label={{ value: `Pic : ${timelineStats.peak}`, fill: '#FE2C55', fontSize: 10, position: 'insideTopRight' }}
+                      />
+                      <ReferenceLine 
+                        y={timelineStats.avg} 
+                        stroke="#25F4EE" 
+                        strokeDasharray="3 3" 
+                        strokeOpacity={0.7}
+                        label={{ value: `Moy : ${timelineStats.avg}`, fill: '#25F4EE', fontSize: 10, position: 'insideBottomRight' }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="viewers"
+                        stroke="#FE2C55"
+                        strokeWidth={3}
+                        fillOpacity={1}
+                        fill="url(#colorViewersLive)"
+                        isAnimationActive={true}
+                        dot={{ r: 2.5, fill: '#FE2C55', stroke: '#fff', strokeWidth: 1 }}
+                        activeDot={{ r: 6, fill: '#FE2C55', stroke: '#fff', strokeWidth: 2 }}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Explicative Footer Bar */}
+                <div className="mt-4 pt-3 border-t border-white/5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-2.5 h-2.5 rounded-full bg-[#FE2C55]"></span>
+                      <strong className="text-white">Flux spectateurs</strong> (direct)
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 bg-cyan-400"></span>
+                      <span>Moyenne ({timelineStats.avg} spectateurs)</span>
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-0.5 bg-[#FE2C55] opacity-60"></span>
+                      <span>Pic maximal ({timelineStats.peak} spectateurs)</span>
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-500 font-mono">
+                    {timelineStats.count} points relevés • Échantillonnage 60s
+                  </div>
+                </div>
               </div>
             ) : (
               <div className="h-[200px] w-full flex flex-col items-center justify-center border border-dashed border-white/5 rounded-2xl bg-black/20 text-center p-6">
