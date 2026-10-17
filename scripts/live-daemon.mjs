@@ -131,8 +131,32 @@ function classifyComment(text) {
   return null;
 }
 
+let allTimeUserStats = {};
+
+function updateAllTimeTopCommenters() {
+  stateData.allTimeTopCommenters = Object.values(allTimeUserStats)
+    .sort((a, b) => b.totalMessages - a.totalMessages)
+    .slice(0, 5)
+    .map((user, idx) => ({
+      rank: idx + 1,
+      nickname: user.nickname,
+      count: user.totalMessages,
+      totalMessages: user.totalMessages,
+      livesCount: user.livesCount || 1,
+      lastSeen: user.lastSeen || 'Récemment',
+      badge: idx === 0 ? '👑 Légende' : idx === 1 ? '🥈 Pilier' : idx === 2 ? '🥉 Fidèle' : '⭐ Actif'
+    }));
+}
+
 function updateThematicTopics() {
   const totalThematic = Object.values(stateData.thematicCounts).reduce((sum, v) => sum + v, 0);
+  const liveDateStr = stateData.started_at 
+    ? new Date(stateData.started_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })
+    : new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+  const liveTimeStr = stateData.started_at
+    ? new Date(stateData.started_at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+    : '';
+
   stateData.thematicTopics = THEMATIC_CATEGORIES.map(cat => {
     const count = stateData.thematicCounts[cat.id] || 0;
     const percentage = totalThematic > 0 
@@ -144,7 +168,12 @@ function updateThematicTopics() {
       color: cat.color,
       count: count,
       percentage: percentage,
-      sampleQuestion: cat.lastSample || cat.sampleQuestion
+      sampleQuestion: cat.lastSample || cat.sampleQuestion,
+      lastMessageTime: cat.lastMessageTime || new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      liveDate: liveDateStr,
+      liveTime: liveTimeStr,
+      liveRoomId: String(stateData.roomId || ''),
+      messages: (cat.messages || []).slice(0, 30)
     };
   });
 }
@@ -167,13 +196,15 @@ function getInitialState() {
     roomId: '',
     topQuestions: [],
     topCommenters: [],
+    allTimeTopCommenters: [],
     thematicTopics: THEMATIC_CATEGORIES.map(cat => ({
       id: cat.id,
       title: cat.title,
       color: cat.color,
       count: 0,
       percentage: 25,
-      sampleQuestion: cat.sampleQuestion
+      sampleQuestion: cat.sampleQuestion,
+      messages: []
     })),
     thematicCounts: {},
     userMessageCounts: {},
@@ -250,7 +281,7 @@ async function initExistingData() {
             time: m?.time?.stringValue || ''
           };
         });
-        // Seed thematic analysis from recent comments
+        // Seed thematic analysis and messages from recent comments
         for (const rc of stateData.recentComments) {
           if (rc.comment) {
             const cat = classifyComment(rc.comment);
@@ -259,10 +290,54 @@ async function initExistingData() {
               if (rc.comment.includes('?') || rc.comment.length > 12) {
                 cat.lastSample = rc.comment;
               }
+              if (!cat.messages) cat.messages = [];
+              cat.messages.push({
+                id: rc.id || `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                nickname: rc.nickname || 'Spectateur',
+                comment: rc.comment,
+                time: rc.time || 'En direct',
+                date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }),
+                roomId: String(stateData.roomId || 'Live en cours')
+              });
             }
           }
         }
       }
+
+      if (f.allTimeTopCommenters?.arrayValue?.values) {
+        stateData.allTimeTopCommenters = f.allTimeTopCommenters.arrayValue.values.map(v => {
+          const m = v.mapValue?.fields;
+          const u = {
+            rank: parseInt(m?.rank?.integerValue || '1'),
+            nickname: m?.nickname?.stringValue || '',
+            count: parseInt(m?.count?.integerValue || '0'),
+            totalMessages: parseInt(m?.totalMessages?.integerValue || m?.count?.integerValue || '0'),
+            livesCount: parseInt(m?.livesCount?.integerValue || '1'),
+            lastSeen: m?.lastSeen?.stringValue || 'Récemment',
+            badge: m?.badge?.stringValue || '⭐ Fidèle'
+          };
+          if (u.nickname) {
+            allTimeUserStats[u.nickname] = {
+              nickname: u.nickname,
+              totalMessages: u.totalMessages,
+              livesCount: u.livesCount,
+              lastSeen: u.lastSeen
+            };
+          }
+          return u;
+        });
+      }
+      for (const tc of stateData.topCommenters) {
+        if (tc.nickname && !allTimeUserStats[tc.nickname]) {
+          allTimeUserStats[tc.nickname] = {
+            nickname: tc.nickname,
+            totalMessages: tc.count,
+            livesCount: 1,
+            lastSeen: 'Ce direct'
+          };
+        }
+      }
+      updateAllTimeTopCommenters();
       updateThematicTopics();
       if (f.timeline?.arrayValue?.values) {
         stateData.timeline = f.timeline.arrayValue.values.map(v => {
@@ -315,6 +390,7 @@ function scheduleFirestoreSync() {
         'updateMask.fieldPaths=tiktokLiveAPI.startedAt',
         'updateMask.fieldPaths=tiktokLiveAPI.topQuestions',
         'updateMask.fieldPaths=tiktokLiveAPI.topCommenters',
+        'updateMask.fieldPaths=tiktokLiveAPI.allTimeTopCommenters',
         'updateMask.fieldPaths=tiktokLiveAPI.thematicTopics',
         'updateMask.fieldPaths=tiktokLiveAPI.recentComments',
         'updateMask.fieldPaths=tiktokLiveAPI.lastDetected'
@@ -349,6 +425,7 @@ function scheduleFirestoreSync() {
         startedAt: toFirestoreValue(effectiveStartedAt),
         topQuestions: toFirestoreValue(stateData.topQuestions.slice(0, 15)),
         topCommenters: toFirestoreValue(stateData.topCommenters.slice(0, 5)),
+        allTimeTopCommenters: toFirestoreValue(stateData.allTimeTopCommenters || []),
         thematicTopics: toFirestoreValue(stateData.thematicTopics),
         recentComments: toFirestoreValue(stateData.recentComments.slice(0, 50)),
         lastDetected: toFirestoreValue(new Date().toISOString())
@@ -417,15 +494,41 @@ function processIncomingMessage(commentText, nickname, uniqueId) {
     stateData.recentComments = stateData.recentComments.slice(0, 50);
   }
 
-  // Classification thématique temps réel
+  // Classification thématique temps réel avec horodatage et rattachement au live
   const matchedCat = classifyComment(text);
   if (matchedCat) {
     stateData.thematicCounts[matchedCat.id] = (stateData.thematicCounts[matchedCat.id] || 0) + 1;
     if (lower.includes('?') || text.length > 12) {
       matchedCat.lastSample = text;
     }
+    if (!matchedCat.messages) matchedCat.messages = [];
+    matchedCat.messages.unshift({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+      nickname: author,
+      comment: text,
+      time: nowTime,
+      date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' }),
+      roomId: String(stateData.roomId || 'Live en cours')
+    });
+    if (matchedCat.messages.length > 30) {
+      matchedCat.messages = matchedCat.messages.slice(0, 30);
+    }
+    matchedCat.lastMessageTime = nowTime;
   }
   updateThematicTopics();
+
+  // Mise à jour de la fidélité globale (Dans le temps / Multi-lives)
+  if (!allTimeUserStats[author]) {
+    allTimeUserStats[author] = {
+      nickname: author,
+      totalMessages: 0,
+      livesCount: 1,
+      lastSeen: nowTime
+    };
+  }
+  allTimeUserStats[author].totalMessages += 1;
+  allTimeUserStats[author].lastSeen = nowTime;
+  updateAllTimeTopCommenters();
 
   const questionKeywords = [
     'comment', 'pourquoi', 'combien', 'est ce', 'est-ce', 'c quoi', "c'est quoi",

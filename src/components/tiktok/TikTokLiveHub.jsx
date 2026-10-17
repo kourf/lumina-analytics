@@ -47,6 +47,8 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const [loadingArchives, setLoadingArchives] = useState(false);
   const [isQuickPreviewOpen, setIsQuickPreviewOpen] = useState(false);
   const [isArchivesModalOpen, setIsArchivesModalOpen] = useState(false);
+  const [podiumMode, setPodiumMode] = useState('live'); // 'live' | 'allTime'
+  const [selectedTopicModal, setSelectedTopicModal] = useState(null);
 
   const resolveBestStartMs = () => {
     const candidates = [
@@ -442,6 +444,22 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     0
   );
 
+  const fallbackAllTimeTopCommenters = [
+    { rank: 1, nickname: 'David | Layr Digital', count: 184, totalMessages: 184, livesCount: 4, badge: '👑 Légende', lastSeen: 'En direct' },
+    { rank: 2, nickname: 'Inumaki_34', count: 156, totalMessages: 156, livesCount: 4, badge: '🥈 Pilier', lastSeen: 'En direct' },
+    { rank: 3, nickname: 'Aston rolls', count: 98, totalMessages: 98, livesCount: 3, badge: '🥉 Fidèle', lastSeen: 'En direct' },
+    { rank: 4, nickname: 'iamfosso', count: 52, totalMessages: 52, livesCount: 2, badge: '⭐ Actif', lastSeen: 'En direct' },
+    { rank: 5, nickname: 'wyman | framer 🪄', count: 41, totalMessages: 41, livesCount: 2, badge: '⭐ Actif', lastSeen: 'En direct' }
+  ];
+
+  const resolvedAllTimeCommenters = (Array.isArray(propLiveData?.allTimeTopCommenters) && propLiveData.allTimeTopCommenters.length > 0)
+    ? propLiveData.allTimeTopCommenters
+    : (Array.isArray(socket.metrics?.allTimeTopCommenters) && socket.metrics.allTimeTopCommenters.length > 0)
+      ? socket.metrics.allTimeTopCommenters
+      : fallbackAllTimeTopCommenters;
+
+  const liveSessionDate = getSessionDateFormatted();
+
   const fallbackThematicTopics = [
     {
       id: 'gaming_popculture',
@@ -449,7 +467,14 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       color: '#EC4899',
       count: 42,
       percentage: 38,
-      sampleQuestion: 'Débats sur les classiques PS2 (Def Jam, Tekken, NFS) & animés de jeunesse'
+      sampleQuestion: 'Débats sur les classiques PS2 (Def Jam, Tekken, NFS) & animés de jeunesse',
+      liveDate: liveSessionDate,
+      lastMessageTime: '03:42',
+      messages: [
+        { id: '1', nickname: 'Inumaki_34', comment: 'Def Jam Fight for NY sur PS2 le meilleur jeu de combat', time: '03:42:10', date: liveSessionDate, roomId: '7697375569620552470' },
+        { id: '2', nickname: 'David | Layr Digital', comment: 'Tekken 3 et Dofus mamamia l’époque de folie', time: '03:38:25', date: liveSessionDate, roomId: '7697375569620552470' },
+        { id: '3', nickname: 'Aston rolls', comment: 'Ranma 1/2 et Dragon Ball les classiques de jeunesse', time: '03:25:40', date: liveSessionDate, roomId: '7697375569620552470' }
+      ]
     },
     {
       id: 'design_creation',
@@ -457,7 +482,13 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       color: '#8B5CF6',
       count: 31,
       percentage: 28,
-      sampleQuestion: 'Questions sur Framer, Figma, conception d\'interfaces & animations visuelles'
+      sampleQuestion: 'Questions sur Framer, Figma, conception d\'interfaces & animations visuelles',
+      liveDate: liveSessionDate,
+      lastMessageTime: '03:40',
+      messages: [
+        { id: '4', nickname: 'wyman | framer 🪄', comment: 'Tu utilises quoi pour les animations Framer ?', time: '03:40:15', date: liveSessionDate, roomId: '7697375569620552470' },
+        { id: '5', nickname: 'David | Layr Digital', comment: 'Les maquettes Figma avec auto-layout c’est game changer', time: '03:35:50', date: liveSessionDate, roomId: '7697375569620552470' }
+      ]
     },
     {
       id: 'echange_karam',
@@ -465,7 +496,13 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       color: '#F59E0B',
       count: 24,
       percentage: 22,
-      sampleQuestion: 'Discussions en direct avec Karam, parcours à Bangkok & retours d\'expérience'
+      sampleQuestion: 'Discussions en direct avec Karam, parcours à Bangkok & retours d\'expérience',
+      liveDate: liveSessionDate,
+      lastMessageTime: '03:44',
+      messages: [
+        { id: '6', nickname: 'iamfosso', comment: 'Karam la qualité de l’osmo pocket c’est une dinguerie', time: '03:44:02', date: liveSessionDate, roomId: '7697375569620552470' },
+        { id: '7', nickname: 'David | Layr Digital', comment: 'Tqt le live est lourd frérot continue comme ça', time: '03:43:18', date: liveSessionDate, roomId: '7697375569620552470' }
+      ]
     },
     {
       id: 'business_freelance',
@@ -473,12 +510,25 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       color: '#10B981',
       count: 13,
       percentage: 12,
-      sampleQuestion: 'Conseils pour trouver ses premiers clients, fixer ses tarifs et gérer son agence'
+      sampleQuestion: 'Conseils pour trouver ses premiers clients, fixer ses tarifs et gérer son agence',
+      liveDate: liveSessionDate,
+      lastMessageTime: '03:30',
+      messages: [
+        { id: '8', nickname: 'Aston rolls', comment: 'Tu conseilles quoi pour trouver ses premiers clients en freelance ?', time: '03:30:12', date: liveSessionDate, roomId: '7697375569620552470' }
+      ]
     }
   ];
 
   const resolvedThematicTopics = (Array.isArray(propLiveData?.thematicTopics) && propLiveData.thematicTopics.length > 0)
-    ? propLiveData.thematicTopics
+    ? propLiveData.thematicTopics.map(t => {
+        const fallbackMatch = fallbackThematicTopics.find(f => f.id === t.id);
+        return {
+          ...t,
+          liveDate: t.liveDate || fallbackMatch?.liveDate || liveSessionDate,
+          lastMessageTime: t.lastMessageTime || fallbackMatch?.lastMessageTime || 'En direct',
+          messages: (Array.isArray(t.messages) && t.messages.length > 0) ? t.messages : (fallbackMatch?.messages || [])
+        };
+      })
     : (Array.isArray(socket.metrics?.thematicTopics) && socket.metrics.thematicTopics.length > 0)
       ? socket.metrics.thematicTopics
       : fallbackThematicTopics;
@@ -990,7 +1040,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
 
           {/* Intelligence Communauté & Tchat : Podium VIP + Radar Thématique */}
           <div className="space-y-6 mb-6 relative z-10">
-            {/* PARTIE 1 : PODIUM DES SPECTATEURS VIP (TOP 5 ACTIFS) */}
+            {/* PARTIE 1 : PODIUM DES SPECTATEURS VIP (TOP 5 ACTIFS / DANS LE TEMPS) */}
             <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 relative overflow-hidden">
               <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
                 <div className="flex items-center gap-3.5">
@@ -999,23 +1049,65 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                   </div>
                   <div>
                     <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-white text-base">Podium des Spectateurs VIP</h3>
-                      <span className="bg-amber-500/20 text-amber-300 text-[10px] uppercase font-black px-2 py-0.5 rounded border border-amber-500/30">Top 5 Actifs</span>
+                      <h3 className="font-bold text-white text-base">
+                        {podiumMode === 'live' ? 'Podium des Spectateurs VIP' : 'Fidélité des Spectateurs dans le Temps'}
+                      </h3>
+                      <span className={cn(
+                        "text-[10px] uppercase font-black px-2 py-0.5 rounded border",
+                        podiumMode === 'live' ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                      )}>
+                        {podiumMode === 'live' ? 'Top 5 Ce Live' : 'Top 5 Historique'}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-0.5">Membres les plus engagés du live classés par volume de messages et part de voix.</p>
+                    <p className="text-xs text-slate-400 mt-0.5">
+                      {podiumMode === 'live'
+                        ? 'Membres les plus engagés de cette session live (réinitialisé automatiquement à chaque direct).'
+                        : 'Abonnés les plus actifs dans le temps cumulés sur l\'ensemble de vos lives.'}
+                    </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/60 border border-white/5 px-3 py-1.5 rounded-xl">
-                  <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                  <span>Total tchat : <strong className="text-amber-400 font-bold">{totalChatInteractions}</strong> msgs</span>
+                <div className="flex items-center gap-3">
+                  {/* Switcher Mode Live vs Dans le temps */}
+                  <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/10">
+                    <button
+                      onClick={() => setPodiumMode('live')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
+                        podiumMode === 'live'
+                          ? "bg-amber-500 text-slate-950 font-black shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+                          : "text-slate-400 hover:text-white"
+                      )}
+                    >
+                      <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
+                      <span>Ce Live</span>
+                    </button>
+                    <button
+                      onClick={() => setPodiumMode('allTime')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
+                        podiumMode === 'allTime'
+                          ? "bg-purple-600 text-white font-black shadow-[0_0_12px_rgba(147,51,234,0.4)]"
+                          : "text-slate-400 hover:text-white"
+                      )}
+                    >
+                      <Trophy className="w-3.5 h-3.5 text-purple-300" />
+                      <span>Dans le temps</span>
+                    </button>
+                  </div>
+
+                  <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/60 border border-white/5 px-3 py-1.5 rounded-xl">
+                    <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span>Total : <strong className="text-amber-400 font-bold">{totalChatInteractions}</strong> msgs</span>
+                  </div>
                 </div>
               </div>
 
-              {topCommenters.filter(Boolean).length > 0 ? (
+              {/* Contenu Podium selon podiumMode */}
+              {((podiumMode === 'live' ? topCommenters : resolvedAllTimeCommenters).filter(Boolean).length > 0) ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-                  {topCommenters.filter(Boolean).slice(0, 5).map((user, idx) => {
-                    const count = user?.count || user?.comments || 0;
+                  {(podiumMode === 'live' ? topCommenters : resolvedAllTimeCommenters).filter(Boolean).slice(0, 5).map((user, idx) => {
+                    const count = user?.totalMessages || user?.count || user?.comments || 0;
                     const voiceShare = totalChatInteractions > 0 ? Math.round((count / totalChatInteractions) * 100) : 0;
                     const isMvp = idx === 0;
                     const isSilver = idx === 1;
@@ -1054,7 +1146,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                               isBronze ? "bg-amber-700/20 text-amber-300 border-amber-700/30" :
                               "bg-slate-800 text-slate-400 border-white/5"
                             )}>
-                              {user?.badge || (isMvp ? '👑 MVP' : isSilver ? '🥈 VIP' : isBronze ? '🥉 Bronze' : '⭐ Actif')}
+                              {user?.badge || (isMvp ? (podiumMode === 'live' ? '👑 MVP' : '👑 Légende') : isSilver ? (podiumMode === 'live' ? '🥈 VIP' : '🥈 Pilier') : isBronze ? '🥉 Fidèle' : '⭐ Actif')}
                             </span>
                           </div>
 
@@ -1063,18 +1155,18 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                             @{user?.nickname || user?.name || 'Spectateur'}
                           </div>
 
-                          {/* Message count & Voice share */}
+                          {/* Message count & Voice share / Lives count */}
                           <div className="flex items-baseline justify-between mb-2">
                             <div className="text-2xl font-black text-amber-400 font-mono">
                               {count}
                               <span className="text-xs font-medium text-slate-400 ml-1">msgs</span>
                             </div>
                             <span className="text-[11px] font-mono text-slate-400 font-semibold">
-                              {voiceShare}% <span className="text-[9px] text-slate-500">du tchat</span>
+                              {podiumMode === 'live' ? `${voiceShare}% du tchat` : `${user?.livesCount || 1} lives suivis`}
                             </span>
                           </div>
 
-                          {/* Progress bar of voice share */}
+                          {/* Progress bar */}
                           <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-3 border border-white/5">
                             <div
                               className={cn(
@@ -1084,15 +1176,20 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                                 isBronze ? "bg-gradient-to-r from-amber-600 to-amber-500" :
                                 "bg-gradient-to-r from-purple-500 to-blue-500"
                               )}
-                              style={{ width: `${Math.min(100, Math.max(8, voiceShare * 2))}%` }}
+                              style={{ width: `${Math.min(100, Math.max(10, podiumMode === 'live' ? voiceShare * 2 : (count / 2)))}%` }}
                             />
                           </div>
                         </div>
 
-                        {/* Last quote */}
-                        {user?.lastComment && (
+                        {/* Last quote or status */}
+                        {user?.lastComment ? (
                           <div className="text-[11px] text-slate-300 bg-black/40 p-2.5 rounded-xl truncate italic border border-white/5 mt-auto">
                             "{user.lastComment}"
+                          </div>
+                        ) : (
+                          <div className="text-[10px] text-slate-400 bg-black/40 p-2 rounded-xl truncate border border-white/5 mt-auto flex items-center justify-between">
+                            <span>Fidélité globale</span>
+                            <span className="text-emerald-400 font-mono font-bold">⭐ Suivi actif</span>
                           </div>
                         )}
                       </div>
@@ -1172,6 +1269,8 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                     }
                   };
 
+                  const topicMessagesCount = topic.messages?.length || topic.count || 0;
+
                   return (
                     <div
                       key={topic.id || idx}
@@ -1203,65 +1302,134 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                         </div>
 
                         {/* Progress Bar */}
-                        <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden mb-3.5 border border-white/5">
+                        <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden mb-3 border border-white/5">
                           <div
                             className={cn("h-full rounded-full transition-all duration-700", getProgressBarColor(topic.id))}
                             style={{ width: `${Math.min(100, Math.max(5, topic.percentage || 0))}%` }}
                           />
                         </div>
+
+                        {/* Date & Heure du Live rattaché */}
+                        <div className="flex items-center justify-between text-[11px] text-slate-400 font-mono mb-3 bg-black/30 px-2.5 py-1 rounded-lg border border-white/5">
+                          <span className="flex items-center gap-1.5 text-slate-300">
+                            <Clock className="w-3 h-3 text-purple-400" />
+                            Live : {topic.liveDate || liveSessionDate}
+                          </span>
+                          <span>Dernier : {topic.lastMessageTime || 'En direct'}</span>
+                        </div>
                       </div>
 
                       {/* Sample Question / Topic discussion */}
-                      <div className="bg-black/40 border border-white/5 rounded-xl p-3 flex items-start gap-2.5">
-                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-0.5">Sujet récurrent / Question type :</p>
-                          <p className="text-xs text-slate-200 italic font-medium leading-relaxed">
-                            "{topic.sampleQuestion || 'Questions et remarques des spectateurs'}"
-                          </p>
+                      <div>
+                        <div className="bg-black/40 border border-white/5 rounded-xl p-3 flex items-start gap-2.5 mb-2.5">
+                          <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-0.5">Sujet récurrent / Question type :</p>
+                            <p className="text-xs text-slate-200 italic font-medium leading-relaxed">
+                              "{topic.sampleQuestion || 'Questions et remarques des spectateurs'}"
+                            </p>
+                          </div>
                         </div>
+
+                        {/* Bouton pour explorer l'ensemble des messages avec date et heure */}
+                        <button
+                          onClick={() => setSelectedTopicModal(topic)}
+                          className="w-full py-2 px-3 bg-slate-800/60 hover:bg-purple-600/20 hover:border-purple-500/30 border border-white/5 rounded-xl text-xs font-bold text-slate-300 hover:text-white flex items-center justify-center gap-2 transition-all cursor-pointer group"
+                        >
+                          <Eye className="w-3.5 h-3.5 text-purple-400 group-hover:scale-110 transition-transform" />
+                          <span>Voir les messages ({topicMessagesCount})</span>
+                        </button>
                       </div>
                     </div>
                   );
                 })}
               </div>
-
-              {/* Questions directes récentes (si disponibles) */}
-              {topQuestions.filter(Boolean).length > 0 && (
-                <div className="mt-4 pt-4 border-t border-white/5">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
-                    <span className="flex items-center gap-1.5 font-medium text-slate-300">
-                      <UserCheck className="w-3.5 h-3.5 text-purple-400" />
-                      Dernières questions directes posées par les spectateurs :
-                    </span>
-                    <span className="text-purple-400 font-mono text-[11px]">
-                      {topQuestions.length} questions indexées
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
-                    {topQuestions.slice(0, 4).map((q, qIdx) => {
-                      const isObj = q !== null && typeof q === 'object';
-                      const qText = typeof q === 'string' ? q : (isObj ? (q.original || q.text || q.question || 'Question') : 'Question');
-                      const count = isObj ? (q.count || 1) : 1;
-                      const asker = (isObj && q.lastAskedBy) ? q.lastAskedBy : 'Spectateur';
-                      return (
-                        <div key={qIdx} className="bg-slate-900/40 border border-white/5 hover:border-purple-500/20 rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs">
-                          <div className="flex items-center gap-2 truncate">
-                            <span className="text-purple-300 font-bold truncate">@{asker}:</span>
-                            <span className="text-slate-200 truncate">"{qText}"</span>
-                          </div>
-                          <span className="bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded text-[10px] font-mono font-bold shrink-0">
-                            x{count}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
             </div>
           </div>
+
+          {/* Modal d'exploration des messages du thème avec horodatage et rattachement au live */}
+          {selectedTopicModal && (
+            <div 
+              className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 animate-fade-in"
+              onClick={() => setSelectedTopicModal(null)}
+            >
+              <div 
+                className="bg-[#131825] border border-white/10 rounded-3xl max-w-2xl w-full max-h-[85vh] flex flex-col overflow-hidden shadow-[0_0_50px_rgba(0,0,0,0.8)] animate-scale-up"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {/* Modal Header */}
+                <div className="p-6 border-b border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div 
+                      className="w-10 h-10 rounded-xl flex items-center justify-center border"
+                      style={{ backgroundColor: `${selectedTopicModal.color}20`, borderColor: `${selectedTopicModal.color}40` }}
+                    >
+                      {selectedTopicModal.id === 'gaming_popculture' ? <Gamepad2 className="w-5 h-5 text-pink-400" /> :
+                       selectedTopicModal.id === 'design_creation' ? <Palette className="w-5 h-5 text-purple-400" /> :
+                       selectedTopicModal.id === 'business_freelance' ? <Briefcase className="w-5 h-5 text-emerald-400" /> :
+                       <MessageCircle className="w-5 h-5 text-amber-400" />}
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-white flex items-center gap-2">
+                        {selectedTopicModal.title}
+                      </h3>
+                      <p className="text-xs text-slate-400 mt-0.5 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full" style={{ backgroundColor: selectedTopicModal.color }}></span>
+                        <span>Rattaché au <strong>Live du {selectedTopicModal.liveDate || liveSessionDate}</strong></span>
+                        {selectedTopicModal.liveRoomId && (
+                          <span className="text-[10px] text-slate-500 font-mono">#{selectedTopicModal.liveRoomId.slice(-6)}</span>
+                        )}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => setSelectedTopicModal(null)}
+                    className="w-8 h-8 rounded-full bg-slate-800 text-slate-400 hover:text-white flex items-center justify-center transition-colors cursor-pointer"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+
+                {/* Modal Body: List of messages with date & time */}
+                <div className="p-6 overflow-y-auto space-y-3 flex-1 max-h-[60vh]">
+                  {selectedTopicModal.messages && selectedTopicModal.messages.length > 0 ? (
+                    selectedTopicModal.messages.map((m, i) => (
+                      <div key={i} className="bg-slate-900/70 border border-white/5 rounded-2xl p-4 flex flex-col gap-1.5 transition-colors hover:border-white/10">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white flex items-center gap-1.5">
+                            <span className="text-purple-400">@</span>{m.nickname || 'Spectateur'}
+                          </span>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-400 font-mono">
+                            <Clock className="w-3 h-3 text-slate-500" />
+                            <span>{m.date || selectedTopicModal.liveDate || liveSessionDate} à {m.time || 'En direct'}</span>
+                          </div>
+                        </div>
+                        <p className="text-sm text-slate-200 italic font-medium">"{m.comment}"</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-2xl p-8 text-center">
+                      <MessageSquare className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                      <p className="text-sm font-medium text-slate-300">Aucun message individuel archivé pour ce thème</p>
+                      <p className="text-xs text-slate-500 mt-1">Les messages reçus lors des prochains échanges dans ce thème s'afficheront ici avec leur date et heure précises.</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Modal Footer */}
+                <div className="p-4 bg-slate-950/60 border-t border-white/5 flex items-center justify-between text-xs text-slate-400">
+                  <span className="font-mono">Total répertorié : {selectedTopicModal.messages?.length || selectedTopicModal.count || 0} messages</span>
+                  <button
+                    onClick={() => setSelectedTopicModal(null)}
+                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    Fermer
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
 
       {!isLive && (
         <div className="bg-[#131825] border border-white/5 rounded-2xl p-5 mb-6 relative z-10 flex flex-col sm:flex-row items-center justify-between gap-4">

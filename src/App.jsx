@@ -144,6 +144,7 @@ function App() {
               topDonator: liveRaw.topDonator || null,
               recentComments: liveRaw.recentComments || [],
               thematicTopics: Array.isArray(liveRaw.thematicTopics) ? liveRaw.thematicTopics : [],
+              allTimeTopCommenters: Array.isArray(liveRaw.allTimeTopCommenters) ? liveRaw.allTimeTopCommenters : [],
               lastDetected: liveRaw.lastDetected || null,
               workerLastHeartbeat: liveRaw.workerLastHeartbeat || null
             };
