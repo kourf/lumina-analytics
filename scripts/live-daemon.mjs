@@ -9,8 +9,121 @@ const PORT = process.env.PORT || 8080;
 
 console.log(`[Lumina Live Daemon] 🚀 Initialisation du service de surveillance TikTok Live pour @${TIKTOK_USERNAME}...`);
 
-// Serveur HTTP de santé pour Render / Koyeb (obligatoire pour le binding de port)
-const server = http.createServer((req, res) => {
+// Scraper de profil TikTok en direct pour l'outil de Veille Concurrentielle
+export async function scrapeTikTokProfile(targetUsername) {
+  const cleanUsername = String(targetUsername || '')
+    .trim()
+    .replace(/^@+/, '')
+    .split('?')[0]
+    .split('/')[0]
+    .toLowerCase();
+
+  if (!cleanUsername) {
+    throw new Error('Nom d\'utilisateur requis.');
+  }
+
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8',
+    'Cache-Control': 'no-cache'
+  };
+
+  const res = await fetch(`https://www.tiktok.com/@${encodeURIComponent(cleanUsername)}`, { headers });
+  if (!res.ok) {
+    throw new Error(`Profil TikTok non accessible (code ${res.status})`);
+  }
+
+  const html = await res.text();
+  const idx = html.indexOf('__UNIVERSAL_DATA_FOR_REHYDRATION__');
+  if (idx === -1) {
+    throw new Error('Données de réhydratation TikTok introuvables.');
+  }
+
+  const tagClose = html.indexOf('>', idx);
+  const endTag = html.indexOf('</script>', tagClose);
+  const json = JSON.parse(html.substring(tagClose + 1, endTag));
+  const userDetail = json.__DEFAULT_SCOPE__?.['webapp.user-detail'];
+
+  if (!userDetail?.userInfo?.stats) {
+    throw new Error('Statistiques utilisateur introuvables sur TikTok.');
+  }
+
+  const stats = userDetail.userInfo.stats;
+  const user = userDetail.userInfo.user || {};
+
+  const followerCount = Number(stats.followerCount || 0);
+  const heartCount = Number(stats.heartCount || stats.heart || 0);
+  const videoCount = Math.max(1, Number(stats.videoCount || 0));
+
+  // Ratios & estimations dérivées basées sur les chiffres réels (~18 vues par like)
+  const viewsPerVideo = Math.round((heartCount * 18) / videoCount);
+  const totalViews = viewsPerVideo * videoCount;
+  const commentsPerVideo = Math.max(1, Math.round((heartCount * 0.03) / videoCount));
+  const sharesPerVideo = Math.max(1, Math.round((heartCount * 0.015) / videoCount));
+
+  return {
+    username: user.uniqueId || cleanUsername,
+    nickname: user.nickname || cleanUsername,
+    avatar: user.avatarLarger || user.avatarMedium || user.avatarThumb || '',
+    followers: followerCount,
+    likes: heartCount,
+    totalLikes: heartCount,
+    videoCount: videoCount,
+    videos: videoCount,
+    viewsPerVideo: viewsPerVideo,
+    views: totalViews,
+    commentsPerVideo: commentsPerVideo,
+    comments: commentsPerVideo * videoCount,
+    sharesPerVideo: sharesPerVideo,
+    shares: sharesPerVideo * videoCount,
+    source: 'live_daemon'
+  };
+}
+
+// Serveur HTTP de santé et API concurrentielle pour Lumina
+const server = http.createServer(async (req, res) => {
+  const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    });
+    return res.end();
+  }
+
+  // Endpoint API pour la Veille Concurrentielle
+  if (reqUrl.pathname === '/api/competitor' || reqUrl.pathname === '/competitor') {
+    const targetUsername = reqUrl.searchParams.get('username');
+    if (!targetUsername) {
+      res.writeHead(400, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.end(JSON.stringify({ success: false, error: 'Nom d\'utilisateur requis' }));
+    }
+
+    try {
+      console.log(`[Lumina Daemon] 🔎 Extraction API demandée pour @${targetUsername}...`);
+      const data = await scrapeTikTokProfile(targetUsername);
+      console.log(`[Lumina Daemon] ✅ Données extraites avec succès pour @${data.username} (${data.followers} abos, ${data.likes} likes)`);
+      res.writeHead(200, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.end(JSON.stringify({ success: true, source: 'live_daemon', data }));
+    } catch (err) {
+      console.warn(`[Lumina Daemon] ⚠️ Échec extraction @${targetUsername}:`, err.message);
+      res.writeHead(500, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+      });
+      return res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+  }
+
   res.writeHead(200, {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*'
@@ -37,7 +150,7 @@ server.on('error', (err) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[Lumina Live Daemon] ✅ Serveur de santé écoutant sur le port ${PORT} (0.0.0.0:${PORT})`);
+  console.log(`[Lumina Live Daemon] ✅ Serveur de santé & API écoutant sur le port ${PORT} (0.0.0.0:${PORT})`);
 });
 
 function toFirestoreValue(val) {
@@ -1101,4 +1214,88 @@ async function saveArchiveToFirestore() {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Worker Firestore pour la Veille Concurrentielle multi-écrans (Mobile 4G & Desktop)
+// ---------------------------------------------------------------------------
+let isProcessingCompetitor = false;
+
+async function checkCompetitorRequests() {
+  if (isProcessingCompetitor) return;
+  try {
+    const res = await fetch(REST_URL);
+    if (!res.ok) return;
+    const doc = await res.json();
+    const reqField = doc?.fields?.competitorRequest?.mapValue?.fields;
+    if (reqField && reqField.status?.stringValue === 'pending') {
+      const username = reqField.username?.stringValue;
+      const requestId = reqField.requestId?.stringValue || reqField.requestId?.integerValue || String(Date.now());
+      if (username) {
+        isProcessingCompetitor = true;
+        console.log(`[Competitor Worker] 🔍 Analyse Firestore demandée pour @${username} (id: ${requestId})...`);
+        try {
+          const profileData = await scrapeTikTokProfile(username);
+          console.log(`[Competitor Worker] ✅ Succès analyse @${username} : ${profileData.followers} abonnés, ${profileData.likes} likes`);
+          
+          const patchUrl = `${REST_URL}&updateMask.fieldPaths=competitorResponse&updateMask.fieldPaths=competitorRequest.status`;
+          await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: {
+                competitorResponse: toFirestoreValue({
+                  requestId,
+                  success: true,
+                  data: profileData,
+                  timestamp: new Date().toISOString()
+                }),
+                competitorRequest: {
+                  mapValue: {
+                    fields: {
+                      ...reqField,
+                      status: { stringValue: 'done' }
+                    }
+                  }
+                }
+              }
+            })
+          });
+        } catch (scrapeErr) {
+          console.warn(`[Competitor Worker] ⚠️ Erreur analyse @${username}:`, scrapeErr.message);
+          const patchUrl = `${REST_URL}&updateMask.fieldPaths=competitorResponse&updateMask.fieldPaths=competitorRequest.status`;
+          await fetch(patchUrl, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              fields: {
+                competitorResponse: toFirestoreValue({
+                  requestId,
+                  success: false,
+                  error: scrapeErr.message,
+                  timestamp: new Date().toISOString()
+                }),
+                competitorRequest: {
+                  mapValue: {
+                    fields: {
+                      ...reqField,
+                      status: { stringValue: 'error' }
+                    }
+                  }
+                }
+              }
+            })
+          });
+        } finally {
+          isProcessingCompetitor = false;
+        }
+      }
+    }
+  } catch (err) {
+    isProcessingCompetitor = false;
+  }
+}
+
+// Vérifier les demandes de concurrents chaque seconde
+setInterval(checkCompetitorRequests, 1000);
+
 connectToLive();
+
