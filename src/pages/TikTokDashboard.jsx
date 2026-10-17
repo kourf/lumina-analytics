@@ -174,16 +174,25 @@ export const TikTokDashboard = ({ data, auth, liveData }) => {
   }
   const resolvedLikes = Math.max(rawLikes, lastPositiveMetrics.current.likes, 0);
 
-  const rawShares = Math.max(
-    Number(liveData?.shares ?? 0),
-    Number(liveData?.totalShares ?? 0),
-    Number(liveData?.shareCount ?? 0),
-    Number(liveChecker.shares ?? 0)
-  );
-  if (rawShares > 0) {
+  const firestoreShares = (liveData?.shares !== undefined || liveData?.totalShares !== undefined)
+    ? Number(liveData?.shares ?? liveData?.totalShares)
+    : null;
+
+  const rawShares = firestoreShares !== null
+    ? firestoreShares
+    : Math.max(
+        Number(liveData?.shareCount ?? 0),
+        Number(liveChecker.shares ?? 0),
+        lastPositiveMetrics.current.shares,
+        0
+      );
+
+  if (firestoreShares !== null) {
+    lastPositiveMetrics.current.shares = firestoreShares;
+  } else if (rawShares > 0) {
     lastPositiveMetrics.current.shares = Math.max(lastPositiveMetrics.current.shares, rawShares);
   }
-  const resolvedShares = Math.max(rawShares, lastPositiveMetrics.current.shares, 0);
+  const resolvedShares = firestoreShares !== null ? firestoreShares : Math.max(rawShares, lastPositiveMetrics.current.shares, 0);
 
   const rawComments = Math.max(
     Number(liveData?.comments ?? 0),

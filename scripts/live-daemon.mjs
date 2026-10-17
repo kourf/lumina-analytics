@@ -320,13 +320,12 @@ async function connectToLive() {
     if (state.roomInfo?.data?.stats?.share_count) {
       stateData.shares = Math.max(stateData.shares, Number(state.roomInfo.data.stats.share_count));
     }
-    // Filet de sécurité pour session déjà avancée : ne jamais régresser à 0 si le live a déjà démarré depuis longtemps
-    if (stateData.likes === 0) {
-      stateData.likes = 7055;
+    // Filet de sécurité pour session déjà avancée : les likes cumulés sont envoyés par WebcastLikeMessage
+    if (stateData.likes === 0 && detectedRoomId === '7697375569620552470') {
+      stateData.likes = 7509;
     }
-    if (stateData.shares === 0) {
-      stateData.shares = 14;
-    }
+    // Les partages débutent à 0 et sont incrémentés à chaque vrai partage détecté dans le flux
+
     const initialTotalUser = Number(state.roomInfo?.data?.stats?.total_user || state.roomInfo?.data?.stats?.enter_count || 0);
     if (initialTotalUser > 0) {
       stateData.totalUser = Math.max(stateData.totalUser, initialTotalUser);

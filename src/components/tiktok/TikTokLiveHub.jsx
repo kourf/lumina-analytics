@@ -344,19 +344,22 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   }
   const newFollowers = Math.max(rawNewFollowers, lastKnownMetricsRef.current.followers, 0);
 
-  const rawShares = Number(
-    (socket.isSocketConnected && Number(socket.metrics?.shares || 0) > 0 ? Number(socket.metrics.shares) : 0) ||
-    propLiveData?.shares ?? 
-    propLiveData?.totalShares ?? 
-    propLiveData?.shareCount ?? 
-    socket.metrics?.shares ?? 
-    initialStored?.shares ??
-    0
-  );
-  if (rawShares > 0) {
+  const firestoreOrPropShares = (propLiveData?.shares !== undefined || propLiveData?.totalShares !== undefined)
+    ? Number(propLiveData?.shares ?? propLiveData?.totalShares)
+    : null;
+
+  const rawShares = (socket.isSocketConnected && Number(socket.metrics?.shares || 0) > 0)
+    ? Number(socket.metrics.shares)
+    : (firestoreOrPropShares !== null
+        ? firestoreOrPropShares
+        : Number(propLiveData?.shareCount ?? socket.metrics?.shares ?? initialStored?.shares ?? 0));
+
+  if (firestoreOrPropShares !== null) {
+    lastKnownMetricsRef.current.shares = firestoreOrPropShares;
+  } else if (rawShares > 0) {
     lastKnownMetricsRef.current.shares = Math.max(lastKnownMetricsRef.current.shares, rawShares);
   }
-  const shares = Math.max(rawShares, lastKnownMetricsRef.current.shares, 0);
+  const shares = firestoreOrPropShares !== null ? firestoreOrPropShares : Math.max(rawShares, lastKnownMetricsRef.current.shares, 0);
 
   // Persistance continue dans localStorage des métriques positives du Live Hub
   useEffect(() => {
