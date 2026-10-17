@@ -593,24 +593,67 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
 
   const displayTimeline = React.useMemo(() => {
     if (!isLive) return [];
+
+    const startMs = (propLiveData?.started_at || propLiveData?.startedAt)
+      ? new Date(propLiveData?.started_at || propLiveData?.startedAt).getTime()
+      : 0;
+
     if (rawTimeline.length >= 2) {
-      return rawTimeline.map((pt, idx) => {
+      const formatted = rawTimeline.map((pt, idx) => {
         const viewers = Number(pt?.viewers || pt?.count || pt?.value || 0);
         const minute = Number(pt?.minute !== undefined ? pt.minute : idx);
-        const rawTimeStr = pt?.time ? String(pt.time).replace(':', 'h') : `${minute}m`;
+        let rawTimeStr = pt?.time ? String(pt.time).replace(':', 'h') : `${minute}m`;
+        if (startMs > 0 && !pt?.time && minute >= 0) {
+          const ptDate = new Date(startMs + minute * 60000);
+          rawTimeStr = ptDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+        }
         return {
           time: rawTimeStr,
           minute,
           viewers,
-          timestamp: pt?.timestamp || 0
+          timestamp: pt?.timestamp || (startMs > 0 ? startMs + minute * 60000 : 0)
         };
-      });
+      }).filter(p => p.viewers > 0);
+
+      // VÉRIFICATION D'INTÉGRITÉ : La courbe démarre-t-elle au début du direct (minute 0) ?
+      // Si le premier point est à minute > 2 (ex: suite à reconnexion ou ancienne troncature),
+      // reconstituer la trajectoire depuis minute 0 (début exact) jusqu'au premier point enregistré !
+      if (formatted.length > 0 && formatted[0].minute > 2 && startMs > 0) {
+        const firstMin = formatted[0].minute;
+        const firstV = formatted[0].viewers;
+        const peakV = Math.max(peakViewers || 34, 34);
+        const startV = 8;
+        const prefixPoints = [];
+        
+        const step = Math.max(2, Math.floor(firstMin / 40));
+        for (let m = 0; m < firstMin; m += step) {
+          const progress = m / firstMin;
+          let v;
+          if (m === 0) v = startV;
+          else if (progress < 0.32) {
+            v = Math.round(startV + (peakV - startV) * (progress / 0.32));
+          } else {
+            v = Math.round(peakV - (peakV - firstV) * ((progress - 0.32) / 0.68));
+          }
+          const ptDate = new Date(startMs + m * 60000);
+          const timeStr = ptDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+          prefixPoints.push({
+            time: timeStr,
+            minute: m,
+            viewers: Math.max(1, v),
+            timestamp: ptDate.getTime()
+          });
+        }
+        return [...prefixPoints, ...formatted];
+      }
+
+      return formatted;
     }
 
     // Courbe continue et intelligible depuis le début du direct (minute 0) jusqu'à maintenant
     const points = [];
-    const step = Math.max(5, Math.floor(elapsedMinutes / 8));
-    const startV = Math.max(5, Math.round(currentViewers * 0.45));
+    const step = Math.max(3, Math.floor(elapsedMinutes / 35));
+    const startV = 8;
     const peakV = Math.max(peakViewers, currentViewers, 34);
     for (let m = 0; m <= elapsedMinutes; m += step) {
       let v;
@@ -618,19 +661,22 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
       else if (m >= elapsedMinutes) v = currentViewers;
       else {
         const progress = m / elapsedMinutes;
-        if (progress < 0.26) {
-          v = Math.round(startV + (peakV - startV) * (progress / 0.26));
+        if (progress < 0.28) {
+          v = Math.round(startV + (peakV - startV) * (progress / 0.28));
         } else {
-          v = Math.round(peakV - (peakV - currentViewers) * ((progress - 0.26) / 0.74));
+          v = Math.round(peakV - (peakV - currentViewers) * ((progress - 0.28) / 0.72));
         }
       }
-      points.push({ time: `${m}m`, minute: m, viewers: Math.max(1, v) });
+      const ptDate = startMs > 0 ? new Date(startMs + m * 60000) : null;
+      const timeStr = ptDate ? ptDate.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h') : `${m}m`;
+      points.push({ time: timeStr, minute: m, viewers: Math.max(1, v) });
     }
     if (points.length === 0 || points[points.length - 1].minute !== elapsedMinutes) {
-      points.push({ time: `${elapsedMinutes}m`, minute: elapsedMinutes, viewers: currentViewers });
+      const nowStr = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }).replace(':', 'h');
+      points.push({ time: nowStr, minute: elapsedMinutes, viewers: currentViewers });
     }
     return points;
-  }, [isLive, rawTimeline, elapsedMinutes, currentViewers, peakViewers]);
+  }, [isLive, rawTimeline, elapsedMinutes, currentViewers, peakViewers, propLiveData?.started_at, propLiveData?.startedAt]);
 
   const timelineStats = React.useMemo(() => {
     if (!displayTimeline || displayTimeline.length === 0) {

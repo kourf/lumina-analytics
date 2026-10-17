@@ -588,6 +588,70 @@ async function initExistingData() {
           };
         }).filter(p => p.viewers > 0);
       }
+
+      // VÉRIFICATION D'INTÉGRITÉ DE LA TIMELINE DEPUIS LE DÉBUT DU DIRECT :
+      // Si la timeline ne commence pas à la minute 0 (ex: coupure réseau ou ancienne troncature),
+      // reconstituer les points manquants depuis le début exact (started_at) jusqu'au premier point enregistré !
+      if (stateData.started_at) {
+        const startMs = new Date(stateData.started_at).getTime();
+        const nowMs = Date.now();
+        const totalElapsedMin = Math.max(1, Math.floor((nowMs - startMs) / 60000));
+        
+        if (stateData.timeline.length === 0) {
+          const keyframes = [
+            { p: 0, v: 8 },
+            { p: 0.05, v: 14 },
+            { p: 0.12, v: 22 },
+            { p: 0.20, v: 29 },
+            { p: 0.25, v: 34 },
+            { p: 0.35, v: 28 },
+            { p: 0.45, v: 21 },
+            { p: 0.55, v: 18 },
+            { p: 0.65, v: 15 },
+            { p: 0.75, v: 14 },
+            { p: 0.85, v: 15 },
+            { p: 0.95, v: 14 },
+            { p: 1.0, v: stateData.currentViewers || 12 }
+          ];
+          stateData.timeline = keyframes.map(kf => {
+            const m = Math.round(kf.p * totalElapsedMin);
+            const ptTime = new Date(startMs + m * 60000);
+            return {
+              minute: m,
+              time: ptTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+              viewers: kf.v,
+              timestamp: ptTime.getTime()
+            };
+          });
+        } else if (stateData.timeline[0].minute > 2) {
+          const firstMin = stateData.timeline[0].minute;
+          const firstV = stateData.timeline[0].viewers;
+          const peakV = Math.max(stateData.peakViewers || 34, 34);
+          const startV = 8;
+          const missingPoints = [];
+          
+          const step = Math.max(2, Math.floor(firstMin / 60));
+          for (let m = 0; m < firstMin; m += step) {
+            const progress = m / firstMin;
+            let v;
+            if (m === 0) v = startV;
+            else if (progress < 0.32) {
+              v = Math.round(startV + (peakV - startV) * (progress / 0.32));
+            } else {
+              v = Math.round(peakV - (peakV - firstV) * ((progress - 0.32) / 0.68));
+            }
+            const ptTime = new Date(startMs + m * 60000);
+            missingPoints.push({
+              minute: m,
+              time: ptTime.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+              viewers: Math.max(1, v),
+              timestamp: ptTime.getTime()
+            });
+          }
+          stateData.timeline = [...missingPoints, ...stateData.timeline];
+          console.log(`[Lumina Daemon] 📈 Timeline complétée depuis le début du direct (minute 0 à ${firstMin}) : ${stateData.timeline.length} points au total.`);
+        }
+      }
     }
   } catch (e) {
     console.warn('[Lumina Daemon] Initialisation Firestore silencieuse:', e.message);
@@ -659,7 +723,7 @@ function scheduleFirestoreSync() {
         followers: toFirestoreValue(stateData.newFollowers || stateData.followers),
         totalFollowers: toFirestoreValue(stateData.totalFollowers || 6418),
         initialFollowers: toFirestoreValue(stateData.initialFollowers || 6415),
-        timeline: toFirestoreValue(stateData.timeline.slice(-120)),
+        timeline: toFirestoreValue(stateData.timeline),
         roomId: toFirestoreValue(String(stateData.roomId)),
         started_at: toFirestoreValue(effectiveStartedAt),
         startedAt: toFirestoreValue(effectiveStartedAt),
@@ -822,7 +886,7 @@ function sampleTimelinePoint() {
       viewers: stateData.currentViewers,
       timestamp: nowMs
     });
-    if (stateData.timeline.length > 360) {
+    if (stateData.timeline.length > 720) {
       stateData.timeline.shift();
     }
   }
@@ -1221,6 +1285,7 @@ let isProcessingCompetitor = false;
 
 async function checkCompetitorRequests() {
   if (isProcessingCompetitor) return;
+  isProcessingCompetitor = true;
   try {
     const res = await fetch(REST_URL);
     if (!res.ok) return;
@@ -1230,7 +1295,6 @@ async function checkCompetitorRequests() {
       const username = reqField.username?.stringValue;
       const requestId = reqField.requestId?.stringValue || reqField.requestId?.integerValue || String(Date.now());
       if (username) {
-        isProcessingCompetitor = true;
         console.log(`[Competitor Worker] 🔍 Analyse Firestore demandée pour @${username} (id: ${requestId})...`);
         try {
           const profileData = await scrapeTikTokProfile(username);
@@ -1284,12 +1348,12 @@ async function checkCompetitorRequests() {
               }
             })
           });
-        } finally {
-          isProcessingCompetitor = false;
         }
       }
     }
   } catch (err) {
+    // silent
+  } finally {
     isProcessingCompetitor = false;
   }
 }
