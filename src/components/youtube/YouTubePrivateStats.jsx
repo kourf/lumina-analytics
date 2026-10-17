@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  DollarSign, Clock, Users, Loader2, AlertCircle, MapPin, Activity, 
+  Euro, DollarSign, Clock, Users, Loader2, AlertCircle, MapPin, Activity, 
   PieChart, TrendingUp, Filter, Share2, UserPlus, UserMinus, 
   Smartphone, Monitor, Tablet, Tv, ShieldCheck, Sparkles, Eye, 
   CheckCircle2, PlayCircle, Trophy, HelpCircle, Laptop, Info, X 
@@ -450,14 +450,14 @@ export const YouTubePrivateStats = ({
           <div className="bg-black/40 border border-emerald-500/20 rounded-2xl p-5 relative overflow-visible group hover:border-emerald-500/40 transition-all">
             <div className="absolute inset-0 overflow-hidden rounded-2xl pointer-events-none">
               <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
-                <DollarSign size={64} className="text-emerald-400" />
+                <Euro size={64} className="text-emerald-400" />
               </div>
             </div>
             
             <div className="flex items-center justify-between mb-3 relative z-10">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 bg-emerald-500/20 rounded-xl text-emerald-400">
-                  <DollarSign size={18} />
+                  <Euro size={18} />
                 </div>
                 <span className="text-gray-300 font-medium text-xs">Revenus Estimés Totaux</span>
               </div>
@@ -477,11 +477,13 @@ export const YouTubePrivateStats = ({
                 />
               </div>
             </div>
-            <p className="text-3xl font-display-kpi font-bold text-white tracking-tight relative z-10 mb-1">
-              {stats.lifetime?.estimatedRevenue ? `$${stats.lifetime.estimatedRevenue.toFixed(2)}` : '0.00$'}
+            <p translate="no" className="notranslate text-3xl font-display-kpi font-bold text-white tracking-tight relative z-10 mb-1 font-mono">
+              {stats.lifetime?.estimatedRevenue 
+                ? `${(Number(stats.lifetime.estimatedRevenue) * 0.92).toFixed(2).replace('.', ',')} €` 
+                : '0,00 €'}
             </p>
             <p className="text-[11px] text-gray-500 relative z-10">
-              Gains bruts estimés (AdSense, annonces & abonnements YouTube Premium).
+              Gains bruts estimés (AdSense, annonces &amp; abonnements YouTube Premium).
             </p>
           </div>
 

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { DollarSign, Info, Sparkles, TrendingUp } from 'lucide-react';
+import { Euro, Info, Sparkles, TrendingUp } from 'lucide-react';
 
 export const SponsorshipCalculator = ({ videos, channel }) => {
   const [showInfo, setShowInfo] = useState(false);
@@ -31,7 +31,7 @@ export const SponsorshipCalculator = ({ videos, channel }) => {
       <div className="flex justify-between items-start mb-4">
         <div className="flex items-center gap-3">
           <div className="p-2.5 rounded-xl bg-green-50 dark:bg-green-500/10">
-            <DollarSign size={20} className="text-green-500" />
+            <Euro size={20} className="text-green-500" />
           </div>
           <div>
             <h3 className="text-gray-900 dark:text-white font-bold text-lg">Opportunité Sponsoring</h3>
@@ -54,13 +54,13 @@ export const SponsorshipCalculator = ({ videos, channel }) => {
           <Sparkles size={16} className="text-yellow-500" />
         </div>
         
-        <div className="flex items-baseline gap-2">
-          <span className="text-4xl font-display-kpi font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-600">
-            {minValue.toLocaleString('fr-FR')}€
+        <div className="flex items-baseline gap-2" translate="no">
+          <span className="notranslate text-4xl font-display-kpi font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-500 to-emerald-600 font-mono">
+            {minValue.toLocaleString('fr-FR')} €
           </span>
           <span className="text-xl font-medium text-gray-400">-</span>
-          <span className="text-4xl font-display-kpi font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-green-600">
-            {maxValue.toLocaleString('fr-FR')}€
+          <span className="notranslate text-4xl font-display-kpi font-bold text-transparent bg-clip-text bg-gradient-to-r from-emerald-500 to-green-600 font-mono">
+            {maxValue.toLocaleString('fr-FR')} €
           </span>
         </div>
       </div>

@@ -56,13 +56,12 @@ function App() {
   });
 
   // Détection TikTok Live globale :
-  // Si le checker Edge confirme formellement OFFLINE (status === 'OFFLINE'), c'est OFFLINE.
-  // Si le checker Edge confirme LIVE (status === 'LIVE' && isLive === true), c'est LIVE.
-  // Sinon, s'aligner sur Firestore.
+  // 1. Si Firestore (alimenté par le daemon backend) confirme isLive === true, c'est LIVE en temps réel sur PC et Mobile.
+  // 2. Si le checker Edge confirme LIVE, c'est LIVE.
+  // 3. Ne jamais bloquer le live sur mobile à cause d'un proxy CORS tiers défaillant.
   const isGlobalTikTokLive = Boolean(
-    globalLiveChecker.status === 'OFFLINE'
-      ? false
-      : ((globalLiveChecker.status === 'LIVE' && globalLiveChecker.isLive) || Boolean(appData?.tiktokLiveAPI?.isLive))
+    appData?.tiktokLiveAPI?.isLive === true ||
+    (globalLiveChecker.status === 'LIVE' && globalLiveChecker.isLive)
   );
 
   useEffect(() => {
@@ -145,6 +144,8 @@ function App() {
               recentComments: liveRaw.recentComments || [],
               thematicTopics: Array.isArray(liveRaw.thematicTopics) ? liveRaw.thematicTopics : [],
               allTimeTopCommenters: Array.isArray(liveRaw.allTimeTopCommenters) ? liveRaw.allTimeTopCommenters : [],
+              topLikers: Array.isArray(liveRaw.topLikers) ? liveRaw.topLikers : [],
+              allTimeTopLikers: Array.isArray(liveRaw.allTimeTopLikers) ? liveRaw.allTimeTopLikers : [],
               lastDetected: liveRaw.lastDetected || null,
               workerLastHeartbeat: liveRaw.workerLastHeartbeat || null
             };
@@ -224,7 +225,7 @@ function App() {
                 liveData={{
                   ...(appData.tiktokLiveAPI || {}),
                   isLive: isGlobalTikTokLive,
-                  roomId: globalLiveChecker.roomId || appData?.tiktokLiveAPI?.roomId || '',
+                  roomId: appData?.tiktokLiveAPI?.roomId || globalLiveChecker.roomId || '',
                   currentViewers: isGlobalTikTokLive
                     ? (appData?.tiktokLiveAPI?.currentViewers !== undefined && Number(appData?.tiktokLiveAPI?.currentViewers) > 0
                         ? Number(appData.tiktokLiveAPI.currentViewers)
@@ -249,7 +250,7 @@ function App() {
                   tiktokLiveAPI: {
                     ...(appData.tiktokLiveAPI || {}),
                     isLive: isGlobalTikTokLive,
-                    roomId: globalLiveChecker.roomId || appData?.tiktokLiveAPI?.roomId || '',
+                    roomId: appData?.tiktokLiveAPI?.roomId || globalLiveChecker.roomId || '',
                     currentViewers: isGlobalTikTokLive
                       ? (Number(appData?.tiktokLiveAPI?.currentViewers || 0) || Number(globalLiveChecker.viewerCount || 0))
                       : 0

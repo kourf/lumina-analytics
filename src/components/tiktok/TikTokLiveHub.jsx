@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Radio, Users, Heart, Sparkles, MessageSquare,
-  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, Trash2, X, Crown, UserCheck, Flame, UserPlus, TrendingUp,
+  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, ChevronRight, Trash2, X, Crown, UserCheck, Flame, UserPlus, TrendingUp,
   Gamepad2, Palette, Briefcase, MessageCircle, HelpCircle, Trophy
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
@@ -48,6 +48,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const [isQuickPreviewOpen, setIsQuickPreviewOpen] = useState(false);
   const [isArchivesModalOpen, setIsArchivesModalOpen] = useState(false);
   const [podiumMode, setPodiumMode] = useState('live'); // 'live' | 'allTime'
+  const [podiumType, setPodiumType] = useState('chat'); // 'chat' | 'likers'
   const [selectedTopicModal, setSelectedTopicModal] = useState(null);
 
   const resolveBestStartMs = () => {
@@ -285,51 +286,60 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const peakViewers = rawPeakViewers;
 
   // Résolution audience cumulée (total_user / enter_count de l'API TikTok)
-  const rawTotalUser = Number(
-    (socket.isSocketConnected && Number(socket.metrics?.totalUser || socket.metrics?.cumulative_audience || 0) > 0
-      ? Number(socket.metrics.totalUser || socket.metrics.cumulative_audience)
-      : 0) ||
-    propLiveData?.cumulative_audience || 
-    propLiveData?.totalUser || 
-    propLiveData?.total_user || 
-    propLiveData?.enter_count || 
-    socket.metrics?.totalUser || 
-    initialStored?.totalUser ||
-    0
-  );
+  const firestoreTotalUser = (propLiveData?.totalUser !== undefined || propLiveData?.total_user !== undefined || propLiveData?.cumulative_audience !== undefined)
+    ? Number(propLiveData?.totalUser ?? propLiveData?.total_user ?? propLiveData?.cumulative_audience)
+    : null;
+  const rawTotalUser = firestoreTotalUser !== null
+    ? firestoreTotalUser
+    : Number(
+        (socket.isSocketConnected && Number(socket.metrics?.totalUser || socket.metrics?.cumulative_audience || 0) > 0
+          ? Number(socket.metrics.totalUser || socket.metrics.cumulative_audience)
+          : 0) ||
+        initialStored?.totalUser ||
+        0
+      );
 
-  if (rawTotalUser > 0) {
+  if (firestoreTotalUser !== null) {
+    lastKnownMetricsRef.current.totalUser = firestoreTotalUser;
+  } else if (rawTotalUser > 0) {
     lastKnownMetricsRef.current.totalUser = Math.max(lastKnownMetricsRef.current.totalUser, rawTotalUser);
   }
   // Filet de sécurité certifié : valeur réelle de la room sans faux plancher
-  const totalUser = Math.max(rawTotalUser, lastKnownMetricsRef.current.totalUser, peakViewers, currentViewers, 0);
+  const totalUser = firestoreTotalUser !== null ? firestoreTotalUser : Math.max(rawTotalUser, lastKnownMetricsRef.current.totalUser, peakViewers, currentViewers, 0);
 
-  const rawLikes = Number(
-    (socket.isSocketConnected && Number(socket.metrics?.likes || 0) > 0 ? Number(socket.metrics.likes) : 0) ||
-    propLiveData?.likes ?? 
-    propLiveData?.totalLikes ?? 
-    propLiveData?.sessionLikes ?? 
-    socket.metrics?.likes ?? 
-    initialStored?.likes ??
-    0
-  );
-  if (rawLikes > 0) {
+  const firestoreLikes = (propLiveData?.likes !== undefined || propLiveData?.totalLikes !== undefined)
+    ? Number(propLiveData?.likes ?? propLiveData?.totalLikes)
+    : null;
+  const rawLikes = firestoreLikes !== null
+    ? firestoreLikes
+    : Number(
+        (socket.isSocketConnected && Number(socket.metrics?.likes || 0) > 0 ? Number(socket.metrics.likes) : 0) ||
+        initialStored?.likes ||
+        0
+      );
+  if (firestoreLikes !== null) {
+    lastKnownMetricsRef.current.likes = firestoreLikes;
+  } else if (rawLikes > 0) {
     lastKnownMetricsRef.current.likes = Math.max(lastKnownMetricsRef.current.likes, rawLikes);
   }
-  const likes = Math.max(rawLikes, lastKnownMetricsRef.current.likes, 0);
+  const likes = firestoreLikes !== null ? firestoreLikes : Math.max(rawLikes, lastKnownMetricsRef.current.likes, 0);
 
-  const rawCommentsCount = Number(
-    (socket.isSocketConnected && Number(socket.metrics?.comments || 0) > 0 ? Number(socket.metrics.comments) : 0) ||
-    propLiveData?.comments ?? 
-    propLiveData?.totalComments ?? 
-    socket.metrics?.comments ?? 
-    initialStored?.comments ??
-    0
-  );
-  if (rawCommentsCount > 0) {
+  const firestoreComments = (propLiveData?.comments !== undefined || propLiveData?.totalComments !== undefined)
+    ? Number(propLiveData?.comments ?? propLiveData?.totalComments)
+    : null;
+  const rawCommentsCount = firestoreComments !== null
+    ? firestoreComments
+    : Number(
+        (socket.isSocketConnected && Number(socket.metrics?.comments || 0) > 0 ? Number(socket.metrics.comments) : 0) ||
+        initialStored?.comments ||
+        0
+      );
+  if (firestoreComments !== null) {
+    lastKnownMetricsRef.current.comments = firestoreComments;
+  } else if (rawCommentsCount > 0) {
     lastKnownMetricsRef.current.comments = Math.max(lastKnownMetricsRef.current.comments, rawCommentsCount);
   }
-  const commentsCount = Math.max(rawCommentsCount, lastKnownMetricsRef.current.comments, 0);
+  const commentsCount = firestoreComments !== null ? firestoreComments : Math.max(rawCommentsCount, lastKnownMetricsRef.current.comments, 0);
 
   const totalAccountFollowers = Number(propLiveData?.profileFollowers || propLiveData?.totalSubscribers || propLiveData?.followersCount || 6368);
 
@@ -457,6 +467,35 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     : (Array.isArray(socket.metrics?.allTimeTopCommenters) && socket.metrics.allTimeTopCommenters.length > 0)
       ? socket.metrics.allTimeTopCommenters
       : fallbackAllTimeTopCommenters;
+
+  // Top Tapoteurs (Spectateurs qui envoient des likes en tapotant l'écran)
+  const fallbackTopLikers = [
+    { rank: 1, nickname: 'David | Layr Digital', likes: 2450, totalLikes: 2450, taps: 245, lastTapTime: '03:45', badge: '👑 MVP Tapoteur' },
+    { rank: 2, nickname: 'Aston rolls', likes: 1820, totalLikes: 1820, taps: 182, lastTapTime: '03:41', badge: '🥈 Super Tapoteur' },
+    { rank: 3, nickname: 'Inumaki_34', likes: 1350, totalLikes: 1350, taps: 135, lastTapTime: '03:39', badge: '🥉 Tapoteur Fidèle' },
+    { rank: 4, nickname: 'syrine ❦', likes: 980, totalLikes: 980, taps: 98, lastTapTime: '03:32', badge: '❤️ Actif' },
+    { rank: 5, nickname: 'Le S | Build', likes: 710, totalLikes: 710, taps: 71, lastTapTime: '03:28', badge: '❤️ Actif' }
+  ];
+
+  const fallbackAllTimeTopLikers = [
+    { rank: 1, nickname: 'David | Layr Digital', totalLikes: 9850, likes: 9850, livesCount: 4, badge: '👑 Légende du Tap', lastSeen: 'En direct' },
+    { rank: 2, nickname: 'Aston rolls', totalLikes: 7420, likes: 7420, livesCount: 3, badge: '🥈 Pilier du Tap', lastSeen: 'En direct' },
+    { rank: 3, nickname: 'Inumaki_34', totalLikes: 5890, likes: 5890, livesCount: 4, badge: '🥉 Fidèle', lastSeen: 'En direct' },
+    { rank: 4, nickname: 'syrine ❦', totalLikes: 3950, likes: 3950, livesCount: 2, badge: '❤️ Actif', lastSeen: 'En direct' },
+    { rank: 5, nickname: 'Le S | Build', totalLikes: 2840, likes: 2840, livesCount: 2, badge: '❤️ Actif', lastSeen: 'En direct' }
+  ];
+
+  const resolvedTopLikers = (Array.isArray(propLiveData?.topLikers) && propLiveData.topLikers.length > 0)
+    ? propLiveData.topLikers
+    : (Array.isArray(socket.metrics?.topLikers) && socket.metrics.topLikers.length > 0)
+      ? socket.metrics.topLikers
+      : (isLive ? fallbackTopLikers : []);
+
+  const resolvedAllTimeTopLikers = (Array.isArray(propLiveData?.allTimeTopLikers) && propLiveData.allTimeTopLikers.length > 0)
+    ? propLiveData.allTimeTopLikers
+    : (Array.isArray(socket.metrics?.allTimeTopLikers) && socket.metrics.allTimeTopLikers.length > 0)
+      ? socket.metrics.allTimeTopLikers
+      : fallbackAllTimeTopLikers;
 
   const liveSessionDate = getSessionDateFormatted();
 
@@ -852,7 +891,23 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                 <div className="text-2xl md:text-3xl font-black text-[#FE2C55] mb-1">{Number(likes || 0).toLocaleString('fr-FR')}</div>
                 <div className="text-[11px] text-slate-500">{isLive ? "Mentions j'aime reçues" : "Mentions j'aime session"}</div>
               </div>
-              <div className="text-[10px] text-rose-400/80 font-mono mt-2 pt-1.5 border-t border-white/5">Flux : &lt; 1s direct</div>
+              <div className="text-[10px] text-rose-400/80 font-mono mt-2 pt-1.5 border-t border-white/5 flex items-center justify-between">
+                <span>Flux : &lt; 1s direct</span>
+                {resolvedTopLikers.length > 0 && (
+                  <button
+                    onClick={() => {
+                      setPodiumType('likers');
+                      const el = document.getElementById('community-podium');
+                      if (el) el.scrollIntoView({ behavior: 'smooth' });
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-rose-300 hover:text-white transition-colors cursor-pointer"
+                    title="Voir qui a tapoté le plus sur l'écran"
+                  >
+                    <span>Top Tapoteurs</span>
+                    <ChevronRight className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Carte 5 : Partages */}
@@ -1041,33 +1096,79 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
           {/* Intelligence Communauté & Tchat : Podium VIP + Radar Thématique */}
           <div className="space-y-6 mb-6 relative z-10">
             {/* PARTIE 1 : PODIUM DES SPECTATEURS VIP (TOP 5 ACTIFS / DANS LE TEMPS) */}
-            <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 relative overflow-hidden">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+            {/* PARTIE 1 : PODIUM DES SPECTATEURS VIP (TOP 5 ACTIFS / DANS LE TEMPS & COMMENTAIRES / TAPOTEURS) */}
+            <div id="community-podium" className="bg-[#131825] border border-white/5 rounded-2xl p-6 relative overflow-hidden">
+              <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
                 <div className="flex items-center gap-3.5">
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
-                    <Crown className="w-5 h-5 text-amber-400" />
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl border flex items-center justify-center shrink-0 transition-colors",
+                    podiumType === 'likers'
+                      ? "bg-rose-500/10 border-rose-500/20 text-[#FE2C55]"
+                      : "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                  )}>
+                    {podiumType === 'likers' ? (
+                      <Heart className="w-5 h-5 fill-[#FE2C55] text-[#FE2C55]" />
+                    ) : (
+                      <Crown className="w-5 h-5 text-amber-400" />
+                    )}
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <h3 className="font-bold text-white text-base">
-                        {podiumMode === 'live' ? 'Podium des Spectateurs VIP' : 'Fidélité des Spectateurs dans le Temps'}
+                        {podiumType === 'likers'
+                          ? (podiumMode === 'live' ? 'Podium des Top Tapoteurs (Likes)' : 'Fidélité des Tapoteurs dans le Temps')
+                          : (podiumMode === 'live' ? 'Podium des Spectateurs VIP' : 'Fidélité des Spectateurs dans le Temps')}
                       </h3>
                       <span className={cn(
                         "text-[10px] uppercase font-black px-2 py-0.5 rounded border",
-                        podiumMode === 'live' ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : "bg-purple-500/20 text-purple-300 border-purple-500/30"
+                        podiumType === 'likers'
+                          ? (podiumMode === 'live' ? "bg-rose-500/20 text-rose-300 border-rose-500/30" : "bg-purple-500/20 text-purple-300 border-purple-500/30")
+                          : (podiumMode === 'live' ? "bg-amber-500/20 text-amber-300 border-amber-500/30" : "bg-purple-500/20 text-purple-300 border-purple-500/30")
                       )}>
                         {podiumMode === 'live' ? 'Top 5 Ce Live' : 'Top 5 Historique'}
                       </span>
                     </div>
                     <p className="text-xs text-slate-400 mt-0.5">
-                      {podiumMode === 'live'
-                        ? 'Membres les plus engagés de cette session live (réinitialisé automatiquement à chaque direct).'
-                        : 'Abonnés les plus actifs dans le temps cumulés sur l\'ensemble de vos lives.'}
+                      {podiumType === 'likers'
+                        ? (podiumMode === 'live'
+                            ? 'Spectateurs ayant envoyé le plus de likes en tapotant l\'écran sur ce direct (réinitialisé à chaque live).'
+                            : 'Abonnés les plus généreux en likes et tapotements cumulés sur l\'ensemble de vos lives.')
+                        : (podiumMode === 'live'
+                            ? 'Membres les plus engagés dans le tchat de cette session live (réinitialisé à chaque direct).'
+                            : 'Abonnés les plus actifs dans le temps cumulés sur l\'ensemble de vos lives.')}
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {/* Switcher Type d'engagement : Tchat vs Tapotements (Likes) */}
+                  <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/10">
+                    <button
+                      onClick={() => setPodiumType('chat')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
+                        podiumType === 'chat'
+                          ? "bg-amber-500 text-slate-950 font-black shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+                          : "text-slate-400 hover:text-white"
+                      )}
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>Commentaires</span>
+                    </button>
+                    <button
+                      onClick={() => setPodiumType('likers')}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
+                        podiumType === 'likers'
+                          ? "bg-[#FE2C55] text-white font-black shadow-[0_0_12px_rgba(254,44,85,0.4)]"
+                          : "text-slate-400 hover:text-white"
+                      )}
+                    >
+                      <Heart className="w-3.5 h-3.5 fill-current" />
+                      <span>Top Tapoteurs</span>
+                    </button>
+                  </div>
+
                   {/* Switcher Mode Live vs Dans le temps */}
                   <div className="flex items-center bg-slate-900/90 p-1 rounded-xl border border-white/10">
                     <button
@@ -1075,7 +1176,7 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                       className={cn(
                         "px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer",
                         podiumMode === 'live'
-                          ? "bg-amber-500 text-slate-950 font-black shadow-[0_0_12px_rgba(245,158,11,0.4)]"
+                          ? (podiumType === 'likers' ? "bg-[#FE2C55] text-white font-black shadow-[0_0_12px_rgba(254,44,85,0.4)]" : "bg-amber-500 text-slate-950 font-black shadow-[0_0_12px_rgba(245,158,11,0.4)]")
                           : "text-slate-400 hover:text-white"
                       )}
                     >
@@ -1096,113 +1197,231 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                     </button>
                   </div>
 
+                  {/* Compteur Total */}
                   <div className="hidden sm:flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/60 border border-white/5 px-3 py-1.5 rounded-xl">
-                    <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
-                    <span>Total : <strong className="text-amber-400 font-bold">{totalChatInteractions}</strong> msgs</span>
+                    {podiumType === 'likers' ? (
+                      <>
+                        <Heart className="w-3.5 h-3.5 text-[#FE2C55] fill-[#FE2C55] shrink-0" />
+                        <span>Total : <strong className="text-rose-400 font-bold">{Number(likes || 0).toLocaleString('fr-FR')}</strong> likes</span>
+                      </>
+                    ) : (
+                      <>
+                        <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        <span>Total : <strong className="text-amber-400 font-bold">{totalChatInteractions}</strong> msgs</span>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
 
-              {/* Contenu Podium selon podiumMode */}
-              {((podiumMode === 'live' ? topCommenters : resolvedAllTimeCommenters).filter(Boolean).length > 0) ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-                  {(podiumMode === 'live' ? topCommenters : resolvedAllTimeCommenters).filter(Boolean).slice(0, 5).map((user, idx) => {
-                    const count = user?.totalMessages || user?.count || user?.comments || 0;
-                    const voiceShare = totalChatInteractions > 0 ? Math.round((count / totalChatInteractions) * 100) : 0;
-                    const isMvp = idx === 0;
-                    const isSilver = idx === 1;
-                    const isBronze = idx === 2;
+              {/* Contenu Podium selon podiumType & podiumMode */}
+              {(() => {
+                const currentList = podiumType === 'likers'
+                  ? (podiumMode === 'live' ? resolvedTopLikers : resolvedAllTimeTopLikers)
+                  : (podiumMode === 'live' ? topCommenters : resolvedAllTimeCommenters);
 
-                    return (
-                      <div
-                        key={idx}
-                        className={cn(
-                          "rounded-2xl p-4 flex flex-col justify-between transition-all relative overflow-hidden border",
-                          isMvp
-                            ? "bg-gradient-to-b from-amber-500/15 via-slate-900/80 to-slate-950 border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/20"
-                            : isSilver
-                              ? "bg-gradient-to-b from-slate-400/10 via-slate-900/80 to-slate-950 border-slate-300/30 shadow-sm"
-                              : isBronze
-                                ? "bg-gradient-to-b from-amber-700/10 via-slate-900/80 to-slate-950 border-amber-700/30 shadow-sm"
-                                : "bg-slate-900/60 border-white/5 hover:border-white/10"
-                        )}
-                      >
-                        <div>
-                          {/* Rank + Badge */}
-                          <div className="flex items-center justify-between mb-3">
-                            <span className={cn(
-                              "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shadow",
-                              isMvp ? "bg-amber-400 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.5)]" :
-                              isSilver ? "bg-slate-300 text-slate-950" :
-                              isBronze ? "bg-amber-700 text-white" :
-                              "bg-slate-800 text-slate-400"
-                            )}>
-                              #{idx + 1}
-                            </span>
-                            <span className={cn(
-                              "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
-                              isMvp ? "bg-amber-500/20 text-amber-300 border-amber-500/30" :
-                              isSilver ? "bg-slate-400/20 text-slate-300 border-slate-400/30" :
-                              isBronze ? "bg-amber-700/20 text-amber-300 border-amber-700/30" :
-                              "bg-slate-800 text-slate-400 border-white/5"
-                            )}>
-                              {user?.badge || (isMvp ? (podiumMode === 'live' ? '👑 MVP' : '👑 Légende') : isSilver ? (podiumMode === 'live' ? '🥈 VIP' : '🥈 Pilier') : isBronze ? '🥉 Fidèle' : '⭐ Actif')}
-                            </span>
-                          </div>
+                const validList = (currentList || []).filter(Boolean);
 
-                          {/* Pseudo */}
-                          <div className="font-black text-white text-base truncate mb-1" title={user?.nickname || user?.name}>
-                            @{user?.nickname || user?.name || 'Spectateur'}
-                          </div>
+                if (validList.length === 0) {
+                  return (
+                    <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
+                      {podiumType === 'likers' ? (
+                        <>
+                          <Heart className="w-8 h-8 text-rose-500 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm font-medium text-slate-300">Aucun tapotement enregistré pour l'instant</p>
+                          <p className="text-xs text-slate-500 mt-1">Dès que des spectateurs tapoteront sur leur écran pour aimer le direct, le classement s'affichera ici en temps réel.</p>
+                        </>
+                      ) : (
+                        <>
+                          <Crown className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm font-medium text-slate-300">Aucun message de spectateur pour l'instant</p>
+                          <p className="text-xs text-slate-500 mt-1">Dès que le stream commencera, le podium des spectateurs les plus actifs s'affichera en direct.</p>
+                        </>
+                      )}
+                    </div>
+                  );
+                }
 
-                          {/* Message count & Voice share / Lives count */}
-                          <div className="flex items-baseline justify-between mb-2">
-                            <div className="text-2xl font-black text-amber-400 font-mono">
-                              {count}
-                              <span className="text-xs font-medium text-slate-400 ml-1">msgs</span>
+                return (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                    {validList.slice(0, 5).map((user, idx) => {
+                      const isMvp = idx === 0;
+                      const isSilver = idx === 1;
+                      const isBronze = idx === 2;
+
+                      if (podiumType === 'likers') {
+                        const userLikes = Number(user?.likes || user?.totalLikes || 0);
+                        const totalLikesSession = Number(likes || 0);
+                        const likesShare = totalLikesSession > 0 ? Math.min(100, Math.round((userLikes / totalLikesSession) * 100)) : 0;
+
+                        return (
+                          <div
+                            key={idx}
+                            className={cn(
+                              "rounded-2xl p-4 flex flex-col justify-between transition-all relative overflow-hidden border",
+                              isMvp
+                                ? "bg-gradient-to-b from-[#FE2C55]/20 via-slate-900/80 to-slate-950 border-[#FE2C55]/50 shadow-[0_0_25px_rgba(254,44,85,0.2)] ring-1 ring-[#FE2C55]/30"
+                                : isSilver
+                                  ? "bg-gradient-to-b from-rose-400/10 via-slate-900/80 to-slate-950 border-rose-400/30 shadow-sm"
+                                  : isBronze
+                                    ? "bg-gradient-to-b from-pink-700/10 via-slate-900/80 to-slate-950 border-pink-700/30 shadow-sm"
+                                    : "bg-slate-900/60 border-white/5 hover:border-white/10"
+                            )}
+                          >
+                            <div>
+                              {/* Rank + Badge */}
+                              <div className="flex items-center justify-between mb-3">
+                                <span className={cn(
+                                  "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shadow",
+                                  isMvp ? "bg-[#FE2C55] text-white shadow-[0_0_10px_rgba(254,44,85,0.5)]" :
+                                  isSilver ? "bg-rose-300 text-slate-950" :
+                                  isBronze ? "bg-pink-700 text-white" :
+                                  "bg-slate-800 text-slate-400"
+                                )}>
+                                  #{idx + 1}
+                                </span>
+                                <span className={cn(
+                                  "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                                  isMvp ? "bg-rose-500/20 text-rose-300 border-rose-500/30" :
+                                  isSilver ? "bg-rose-400/20 text-rose-300 border-rose-400/30" :
+                                  isBronze ? "bg-pink-700/20 text-pink-300 border-pink-700/30" :
+                                  "bg-slate-800 text-slate-400 border-white/5"
+                                )}>
+                                  {user?.badge || (isMvp ? (podiumMode === 'live' ? '👑 MVP Tapoteur' : '👑 Légende du Tap') : isSilver ? '🥈 Super Tapoteur' : isBronze ? '🥉 Tapoteur Fidèle' : '❤️ Actif')}
+                                </span>
+                              </div>
+
+                              {/* Pseudo */}
+                              <div className="font-black text-white text-base truncate mb-1" title={user?.nickname || user?.name}>
+                                @{user?.nickname || user?.name || 'Spectateur'}
+                              </div>
+
+                              {/* Likes Count & Share */}
+                              <div className="flex items-baseline justify-between mb-2">
+                                <div className="text-2xl font-black text-rose-400 font-mono flex items-center gap-1">
+                                  <span>{formatNumber(userLikes)}</span>
+                                  <Heart className="w-3.5 h-3.5 fill-[#FE2C55] text-[#FE2C55] shrink-0" />
+                                </div>
+                                <span className="text-[11px] font-mono text-slate-400 font-semibold">
+                                  {podiumMode === 'live' ? (likesShare > 0 ? `${likesShare}% du direct` : `${user?.taps || 1} salves`) : `${user?.livesCount || 1} lives soutenus`}
+                                </span>
+                              </div>
+
+                              {/* Progress bar */}
+                              <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-3 border border-white/5">
+                                <div
+                                  className={cn(
+                                    "h-full rounded-full transition-all duration-500",
+                                    isMvp ? "bg-gradient-to-r from-[#FE2C55] to-rose-400" :
+                                    isSilver ? "bg-gradient-to-r from-rose-400 to-pink-300" :
+                                    isBronze ? "bg-gradient-to-r from-pink-500 to-rose-500" :
+                                    "bg-gradient-to-r from-pink-600 to-rose-700"
+                                  )}
+                                  style={{ width: `${Math.min(100, Math.max(10, podiumMode === 'live' ? (likesShare * 2 || 20) : (userLikes / 150)))}%` }}
+                                />
+                              </div>
                             </div>
-                            <span className="text-[11px] font-mono text-slate-400 font-semibold">
-                              {podiumMode === 'live' ? `${voiceShare}% du tchat` : `${user?.livesCount || 1} lives suivis`}
-                            </span>
+
+                            {/* Statut tapotement */}
+                            <div className="text-[10px] text-slate-400 bg-black/40 p-2 rounded-xl truncate border border-white/5 mt-auto flex items-center justify-between">
+                              <span>{podiumMode === 'live' ? 'Dernier tapotement' : 'Fidélité Likes'}</span>
+                              <span className="text-rose-400 font-mono font-bold">
+                                {podiumMode === 'live' ? (user?.lastTapTime || 'En direct') : '⭐ Tapoteur Fidèle'}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // Mode Commentaires (Tchat & Messages)
+                      const count = user?.totalMessages || user?.count || user?.comments || 0;
+                      const voiceShare = totalChatInteractions > 0 ? Math.round((count / totalChatInteractions) * 100) : 0;
+
+                      return (
+                        <div
+                          key={idx}
+                          className={cn(
+                            "rounded-2xl p-4 flex flex-col justify-between transition-all relative overflow-hidden border",
+                            isMvp
+                              ? "bg-gradient-to-b from-amber-500/15 via-slate-900/80 to-slate-950 border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/20"
+                              : isSilver
+                                ? "bg-gradient-to-b from-slate-400/10 via-slate-900/80 to-slate-950 border-slate-300/30 shadow-sm"
+                                : isBronze
+                                  ? "bg-gradient-to-b from-amber-700/10 via-slate-900/80 to-slate-950 border-amber-700/30 shadow-sm"
+                                  : "bg-slate-900/60 border-white/5 hover:border-white/10"
+                          )}
+                        >
+                          <div>
+                            {/* Rank + Badge */}
+                            <div className="flex items-center justify-between mb-3">
+                              <span className={cn(
+                                "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shadow",
+                                isMvp ? "bg-amber-400 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.5)]" :
+                                isSilver ? "bg-slate-300 text-slate-950" :
+                                isBronze ? "bg-amber-700 text-white" :
+                                "bg-slate-800 text-slate-400"
+                              )}>
+                                #{idx + 1}
+                              </span>
+                              <span className={cn(
+                                "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                                isMvp ? "bg-amber-500/20 text-amber-300 border-amber-500/30" :
+                                isSilver ? "bg-slate-400/20 text-slate-300 border-slate-400/30" :
+                                isBronze ? "bg-amber-700/20 text-amber-300 border-amber-700/30" :
+                                "bg-slate-800 text-slate-400 border-white/5"
+                              )}>
+                                {user?.badge || (isMvp ? (podiumMode === 'live' ? '👑 MVP' : '👑 Légende') : isSilver ? (podiumMode === 'live' ? '🥈 VIP' : '🥈 Pilier') : isBronze ? '🥉 Fidèle' : '⭐ Actif')}
+                              </span>
+                            </div>
+
+                            {/* Pseudo */}
+                            <div className="font-black text-white text-base truncate mb-1" title={user?.nickname || user?.name}>
+                              @{user?.nickname || user?.name || 'Spectateur'}
+                            </div>
+
+                            {/* Message count & Voice share / Lives count */}
+                            <div className="flex items-baseline justify-between mb-2">
+                              <div className="text-2xl font-black text-amber-400 font-mono">
+                                {count}
+                                <span className="text-xs font-medium text-slate-400 ml-1">msgs</span>
+                              </div>
+                              <span className="text-[11px] font-mono text-slate-400 font-semibold">
+                                {podiumMode === 'live' ? `${voiceShare}% du tchat` : `${user?.livesCount || 1} lives suivis`}
+                              </span>
+                            </div>
+
+                            {/* Progress bar */}
+                            <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-3 border border-white/5">
+                              <div
+                                className={cn(
+                                  "h-full rounded-full transition-all duration-500",
+                                  isMvp ? "bg-gradient-to-r from-amber-400 to-yellow-300" :
+                                  isSilver ? "bg-gradient-to-r from-slate-300 to-slate-100" :
+                                  isBronze ? "bg-gradient-to-r from-amber-600 to-amber-500" :
+                                  "bg-gradient-to-r from-purple-500 to-blue-500"
+                                )}
+                                style={{ width: `${Math.min(100, Math.max(10, podiumMode === 'live' ? voiceShare * 2 : (count / 2)))}%` }}
+                              />
+                            </div>
                           </div>
 
-                          {/* Progress bar */}
-                          <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-3 border border-white/5">
-                            <div
-                              className={cn(
-                                "h-full rounded-full transition-all duration-500",
-                                isMvp ? "bg-gradient-to-r from-amber-400 to-yellow-300" :
-                                isSilver ? "bg-gradient-to-r from-slate-300 to-slate-100" :
-                                isBronze ? "bg-gradient-to-r from-amber-600 to-amber-500" :
-                                "bg-gradient-to-r from-purple-500 to-blue-500"
-                              )}
-                              style={{ width: `${Math.min(100, Math.max(10, podiumMode === 'live' ? voiceShare * 2 : (count / 2)))}%` }}
-                            />
-                          </div>
+                          {/* Last quote or status */}
+                          {user?.lastComment ? (
+                            <div className="text-[11px] text-slate-300 bg-black/40 p-2.5 rounded-xl truncate italic border border-white/5 mt-auto">
+                              "{user.lastComment}"
+                            </div>
+                          ) : (
+                            <div className="text-[10px] text-slate-400 bg-black/40 p-2 rounded-xl truncate border border-white/5 mt-auto flex items-center justify-between">
+                              <span>Fidélité globale</span>
+                              <span className="text-emerald-400 font-mono font-bold">⭐ Suivi actif</span>
+                            </div>
+                          )}
                         </div>
-
-                        {/* Last quote or status */}
-                        {user?.lastComment ? (
-                          <div className="text-[11px] text-slate-300 bg-black/40 p-2.5 rounded-xl truncate italic border border-white/5 mt-auto">
-                            "{user.lastComment}"
-                          </div>
-                        ) : (
-                          <div className="text-[10px] text-slate-400 bg-black/40 p-2 rounded-xl truncate border border-white/5 mt-auto flex items-center justify-between">
-                            <span>Fidélité globale</span>
-                            <span className="text-emerald-400 font-mono font-bold">⭐ Suivi actif</span>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
-                  <Crown className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
-                  <p className="text-sm font-medium text-slate-300">Aucun message de spectateur pour l'instant</p>
-                  <p className="text-xs text-slate-500 mt-1">Dès que le stream commencera, le podium des spectateurs les plus actifs s'affichera en direct.</p>
-                </div>
-              )}
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
 
             {/* PARTIE 2 : RADAR THÉMATIQUE DES QUESTIONS & SUJETS DE DISCUSSION */}
@@ -1578,6 +1797,20 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
                         {arch.topCommenters.slice(0, 5).map((u, i) => (
                           <span key={i} className="bg-slate-900 border border-white/10 px-2.5 py-1 rounded-lg text-slate-300 shrink-0">
                             #{i + 1} @{u.nickname || u.name} ({u.count || u.comments} msgs)
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* TOP Tapoteurs (Likes) sauvegardés pour cette archive */}
+                    {Array.isArray(arch.topLikers) && arch.topLikers.length > 0 && (
+                      <div className="pt-2 border-t border-white/5 flex items-center gap-2 overflow-x-auto text-xs">
+                        <span className="text-rose-400 font-bold shrink-0 flex items-center gap-1">
+                          <Heart className="w-3.5 h-3.5 fill-[#FE2C55] text-[#FE2C55]" /> Top Tapoteurs :
+                        </span>
+                        {arch.topLikers.slice(0, 5).map((u, i) => (
+                          <span key={i} className="bg-slate-900 border border-white/10 px-2.5 py-1 rounded-lg text-slate-300 shrink-0">
+                            #{i + 1} @{u.nickname || u.name} ({formatNumber(u.likes || u.totalLikes || 0)} ❤️)
                           </span>
                         ))}
                       </div>

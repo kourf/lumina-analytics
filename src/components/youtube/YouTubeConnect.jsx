@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Lock, Unlock, DollarSign, Clock, Users, ShieldAlert, Key, 
+  Lock, Unlock, Euro, Clock, Users, ShieldAlert, Key, 
   RefreshCw, Smartphone, Share2, UserMinus, CheckCircle2, Cloud 
 } from 'lucide-react';
 import { auth } from '../../config/firebase';
@@ -112,7 +112,7 @@ export const YouTubeConnect = ({
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 mb-6">
             <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-black/40 border border-gray-800">
-              <DollarSign size={18} className="text-green-400 mb-1" />
+              <Euro size={18} className="text-green-400 mb-1" />
               <span className="text-[10px] uppercase font-bold text-gray-400 text-center">Revenus RPM</span>
             </div>
             <div className="flex flex-col items-center justify-center p-2.5 rounded-xl bg-black/40 border border-gray-800">
