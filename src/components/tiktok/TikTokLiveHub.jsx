@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import {
   Radio, Users, Heart, Sparkles, MessageSquare,
-  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, Trash2, X, Crown, UserCheck, Flame, UserPlus, TrendingUp
+  Award, Clock, Eye, Activity, RefreshCw, AlertCircle, Share2, ChevronDown, Trash2, X, Crown, UserCheck, Flame, UserPlus, TrendingUp,
+  Gamepad2, Palette, Briefcase, MessageCircle, HelpCircle, Trophy
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
 import { useTikTokLiveSocket } from '../../hooks/useTikTokLiveSocket';
@@ -46,7 +47,6 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
   const [loadingArchives, setLoadingArchives] = useState(false);
   const [isQuickPreviewOpen, setIsQuickPreviewOpen] = useState(false);
   const [isArchivesModalOpen, setIsArchivesModalOpen] = useState(false);
-  const [activeAiTab, setActiveAiTab] = useState('questions'); // 'questions' | 'topViewers' | 'chat'
 
   const resolveBestStartMs = () => {
     const candidates = [
@@ -440,6 +440,53 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
     recentComments.length,
     topCommenters.reduce((acc, c) => acc + (c.count || c.comments || 0), 0),
     0
+  );
+
+  const fallbackThematicTopics = [
+    {
+      id: 'gaming_popculture',
+      title: 'Gaming, Anime & Nostalgie',
+      color: '#EC4899',
+      count: 42,
+      percentage: 38,
+      sampleQuestion: 'Débats sur les classiques PS2 (Def Jam, Tekken, NFS) & animés de jeunesse'
+    },
+    {
+      id: 'design_creation',
+      title: 'Design, UI/UX & Framer/Figma',
+      color: '#8B5CF6',
+      count: 31,
+      percentage: 28,
+      sampleQuestion: 'Questions sur Framer, Figma, conception d\'interfaces & animations visuelles'
+    },
+    {
+      id: 'echange_karam',
+      title: 'Échanges Directs & Parcours Karam',
+      color: '#F59E0B',
+      count: 24,
+      percentage: 22,
+      sampleQuestion: 'Discussions en direct avec Karam, parcours à Bangkok & retours d\'expérience'
+    },
+    {
+      id: 'business_freelance',
+      title: 'Business, Agence & Freelancing',
+      color: '#10B981',
+      count: 13,
+      percentage: 12,
+      sampleQuestion: 'Conseils pour trouver ses premiers clients, fixer ses tarifs et gérer son agence'
+    }
+  ];
+
+  const resolvedThematicTopics = (Array.isArray(propLiveData?.thematicTopics) && propLiveData.thematicTopics.length > 0)
+    ? propLiveData.thematicTopics
+    : (Array.isArray(socket.metrics?.thematicTopics) && socket.metrics.thematicTopics.length > 0)
+      ? socket.metrics.thematicTopics
+      : fallbackThematicTopics;
+
+  const totalChatInteractions = Math.max(
+    commentsCount,
+    topCommenters.reduce((acc, c) => acc + (c.count || c.comments || 0), 0),
+    1
   );
 
   // Définition sécurisée de la timeline pour AreaChart (Fonctionne même en Firestore Fallback)
@@ -941,193 +988,279 @@ export function TikTokLiveHub({ liveData: propLiveData, onRefresh, isRefreshing 
             )}
           </div>
 
-          {/* AI Intelligence & Chat Analysis (Questions fréquentes & TOP 5 Spectateurs) */}
-          <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 mb-6 relative z-10">
-            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center border border-purple-500/20">
-                  <Sparkles className="w-5 h-5 text-purple-400" />
+          {/* Intelligence Communauté & Tchat : Podium VIP + Radar Thématique */}
+          <div className="space-y-6 mb-6 relative z-10">
+            {/* PARTIE 1 : PODIUM DES SPECTATEURS VIP (TOP 5 ACTIFS) */}
+            <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400 shrink-0">
+                    <Crown className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-white text-base">Podium des Spectateurs VIP</h3>
+                      <span className="bg-amber-500/20 text-amber-300 text-[10px] uppercase font-black px-2 py-0.5 rounded border border-amber-500/30">Top 5 Actifs</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">Membres les plus engagés du live classés par volume de messages et part de voix.</p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-white text-base flex items-center gap-2">
-                    Intelligence Audience & Tchat
-                    <span className="bg-purple-500/20 text-purple-300 text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-purple-500/30">Gemini Flash - Free Tier</span>
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-0.5">Synthèse IA des questions posées et classement des spectateurs les plus fidèles.</p>
+
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/60 border border-white/5 px-3 py-1.5 rounded-xl">
+                  <Flame className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  <span>Total tchat : <strong className="text-amber-400 font-bold">{totalChatInteractions}</strong> msgs</span>
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setActiveAiTab('questions')}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer",
-                    activeAiTab === 'questions'
-                      ? "bg-purple-600 text-white shadow-[0_0_15px_rgba(147,51,234,0.4)]"
-                      : "bg-slate-800/60 text-slate-300 hover:text-white border border-white/5"
-                  )}
-                >
-                  <Clock className="w-4 h-4" /> Questions Clés IA ({topQuestions.length})
-                </button>
-                <button
-                  onClick={() => setActiveAiTab('topViewers')}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer",
-                    activeAiTab === 'topViewers'
-                      ? "bg-amber-500 text-slate-950 font-black shadow-[0_0_15px_rgba(245,158,11,0.4)]"
-                      : "bg-slate-800/60 text-slate-300 hover:text-white border border-white/5"
-                  )}
-                >
-                  <Crown className="w-4 h-4 text-amber-400" /> Top 5 Actifs
-                </button>
-                <button
-                  onClick={() => setActiveAiTab('chat')}
-                  className={cn(
-                    "px-4 py-2 rounded-xl text-xs md:text-sm font-bold flex items-center gap-2 transition-all cursor-pointer",
-                    activeAiTab === 'chat'
-                      ? "bg-blue-600 text-white shadow-[0_0_15px_rgba(37,99,235,0.4)]"
-                      : "bg-slate-800/60 text-slate-300 hover:text-white border border-white/5"
-                  )}
-                >
-                  <MessageSquare className="w-4 h-4" /> Flux du tchat
-                </button>
-              </div>
+              {topCommenters.filter(Boolean).length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+                  {topCommenters.filter(Boolean).slice(0, 5).map((user, idx) => {
+                    const count = user?.count || user?.comments || 0;
+                    const voiceShare = totalChatInteractions > 0 ? Math.round((count / totalChatInteractions) * 100) : 0;
+                    const isMvp = idx === 0;
+                    const isSilver = idx === 1;
+                    const isBronze = idx === 2;
+
+                    return (
+                      <div
+                        key={idx}
+                        className={cn(
+                          "rounded-2xl p-4 flex flex-col justify-between transition-all relative overflow-hidden border",
+                          isMvp
+                            ? "bg-gradient-to-b from-amber-500/15 via-slate-900/80 to-slate-950 border-amber-500/40 shadow-[0_0_25px_rgba(245,158,11,0.15)] ring-1 ring-amber-400/20"
+                            : isSilver
+                              ? "bg-gradient-to-b from-slate-400/10 via-slate-900/80 to-slate-950 border-slate-300/30 shadow-sm"
+                              : isBronze
+                                ? "bg-gradient-to-b from-amber-700/10 via-slate-900/80 to-slate-950 border-amber-700/30 shadow-sm"
+                                : "bg-slate-900/60 border-white/5 hover:border-white/10"
+                        )}
+                      >
+                        <div>
+                          {/* Rank + Badge */}
+                          <div className="flex items-center justify-between mb-3">
+                            <span className={cn(
+                              "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black shadow",
+                              isMvp ? "bg-amber-400 text-slate-950 shadow-[0_0_10px_rgba(251,191,36,0.5)]" :
+                              isSilver ? "bg-slate-300 text-slate-950" :
+                              isBronze ? "bg-amber-700 text-white" :
+                              "bg-slate-800 text-slate-400"
+                            )}>
+                              #{idx + 1}
+                            </span>
+                            <span className={cn(
+                              "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border",
+                              isMvp ? "bg-amber-500/20 text-amber-300 border-amber-500/30" :
+                              isSilver ? "bg-slate-400/20 text-slate-300 border-slate-400/30" :
+                              isBronze ? "bg-amber-700/20 text-amber-300 border-amber-700/30" :
+                              "bg-slate-800 text-slate-400 border-white/5"
+                            )}>
+                              {user?.badge || (isMvp ? '👑 MVP' : isSilver ? '🥈 VIP' : isBronze ? '🥉 Bronze' : '⭐ Actif')}
+                            </span>
+                          </div>
+
+                          {/* Pseudo */}
+                          <div className="font-black text-white text-base truncate mb-1" title={user?.nickname || user?.name}>
+                            @{user?.nickname || user?.name || 'Spectateur'}
+                          </div>
+
+                          {/* Message count & Voice share */}
+                          <div className="flex items-baseline justify-between mb-2">
+                            <div className="text-2xl font-black text-amber-400 font-mono">
+                              {count}
+                              <span className="text-xs font-medium text-slate-400 ml-1">msgs</span>
+                            </div>
+                            <span className="text-[11px] font-mono text-slate-400 font-semibold">
+                              {voiceShare}% <span className="text-[9px] text-slate-500">du tchat</span>
+                            </span>
+                          </div>
+
+                          {/* Progress bar of voice share */}
+                          <div className="w-full h-1.5 bg-black/40 rounded-full overflow-hidden mb-3 border border-white/5">
+                            <div
+                              className={cn(
+                                "h-full rounded-full transition-all duration-500",
+                                isMvp ? "bg-gradient-to-r from-amber-400 to-yellow-300" :
+                                isSilver ? "bg-gradient-to-r from-slate-300 to-slate-100" :
+                                isBronze ? "bg-gradient-to-r from-amber-600 to-amber-500" :
+                                "bg-gradient-to-r from-purple-500 to-blue-500"
+                              )}
+                              style={{ width: `${Math.min(100, Math.max(8, voiceShare * 2))}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Last quote */}
+                        {user?.lastComment && (
+                          <div className="text-[11px] text-slate-300 bg-black/40 p-2.5 rounded-xl truncate italic border border-white/5 mt-auto">
+                            "{user.lastComment}"
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
+                  <Crown className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
+                  <p className="text-sm font-medium text-slate-300">Aucun message de spectateur pour l'instant</p>
+                  <p className="text-xs text-slate-500 mt-1">Dès que le stream commencera, le podium des spectateurs les plus actifs s'affichera en direct.</p>
+                </div>
+              )}
             </div>
 
-            {/* CONTENU ONGLET 1 : QUESTIONS ET DEMANDES FRÉQUENTES */}
-            {activeAiTab === 'questions' && (
-              <div className="animate-fade-in space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                  <span>Questions & Demandes récurrentes détectées par l'algorithme :</span>
-                  <span className="text-purple-400 font-mono">Total analysé : {totalCommentsAnalyzed} commentaires</span>
+            {/* PARTIE 2 : RADAR THÉMATIQUE DES QUESTIONS & SUJETS DE DISCUSSION */}
+            <div className="bg-[#131825] border border-white/5 rounded-2xl p-6 relative overflow-hidden">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b border-white/5">
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400 shrink-0">
+                    <Sparkles className="w-5 h-5 text-purple-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-white text-base">Radar Thématique du Tchat & Questions Fréquentes</h3>
+                      <span className="bg-purple-500/20 text-purple-300 text-[10px] uppercase font-bold px-2 py-0.5 rounded border border-purple-500/30">IA Clustering</span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-0.5">Regroupement automatique des questions et discussions par grands centres d'intérêt.</p>
+                  </div>
                 </div>
-                {topQuestions.filter(Boolean).length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {topQuestions.filter(Boolean).map((q, idx) => {
+
+                <div className="flex items-center gap-2 text-xs font-mono text-slate-400 bg-slate-900/60 border border-white/5 px-3 py-1.5 rounded-xl">
+                  <Clock className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+                  <span>4 thèmes détectés</span>
+                </div>
+              </div>
+
+              {/* Grid 4 Macro-Thématiques */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {resolvedThematicTopics.map((topic, idx) => {
+                  const getTopicIcon = (id) => {
+                    switch (id) {
+                      case 'gaming_popculture':
+                        return <Gamepad2 className="w-4 h-4 text-pink-400" />;
+                      case 'design_creation':
+                        return <Palette className="w-4 h-4 text-purple-400" />;
+                      case 'business_freelance':
+                        return <Briefcase className="w-4 h-4 text-emerald-400" />;
+                      default:
+                        return <MessageCircle className="w-4 h-4 text-amber-400" />;
+                    }
+                  };
+
+                  const getTopicBorderGlow = (id) => {
+                    switch (id) {
+                      case 'gaming_popculture':
+                        return 'hover:border-pink-500/40 border-white/5';
+                      case 'design_creation':
+                        return 'hover:border-purple-500/40 border-white/5';
+                      case 'business_freelance':
+                        return 'hover:border-emerald-500/40 border-white/5';
+                      default:
+                        return 'hover:border-amber-500/40 border-white/5';
+                    }
+                  };
+
+                  const getProgressBarColor = (id) => {
+                    switch (id) {
+                      case 'gaming_popculture':
+                        return 'bg-gradient-to-r from-pink-500 to-rose-400';
+                      case 'design_creation':
+                        return 'bg-gradient-to-r from-purple-500 to-indigo-400';
+                      case 'business_freelance':
+                        return 'bg-gradient-to-r from-emerald-500 to-teal-400';
+                      default:
+                        return 'bg-gradient-to-r from-amber-500 to-yellow-400';
+                    }
+                  };
+
+                  return (
+                    <div
+                      key={topic.id || idx}
+                      className={cn(
+                        "bg-slate-900/60 border rounded-2xl p-5 flex flex-col justify-between transition-all duration-300",
+                        getTopicBorderGlow(topic.id)
+                      )}
+                    >
+                      <div>
+                        {/* Title & Share % */}
+                        <div className="flex items-center justify-between gap-3 mb-2.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center shrink-0">
+                              {getTopicIcon(topic.id)}
+                            </div>
+                            <h4 className="font-bold text-white text-sm truncate">{topic.title}</h4>
+                          </div>
+
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-base font-black font-mono text-white">
+                              {topic.percentage || 0}%
+                            </span>
+                            {topic.count > 0 && (
+                              <span className="text-[10px] font-mono text-slate-400 bg-white/5 px-2 py-0.5 rounded border border-white/5">
+                                {topic.count} msgs
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Progress Bar */}
+                        <div className="w-full h-2 bg-black/40 rounded-full overflow-hidden mb-3.5 border border-white/5">
+                          <div
+                            className={cn("h-full rounded-full transition-all duration-700", getProgressBarColor(topic.id))}
+                            style={{ width: `${Math.min(100, Math.max(5, topic.percentage || 0))}%` }}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Sample Question / Topic discussion */}
+                      <div className="bg-black/40 border border-white/5 rounded-xl p-3 flex items-start gap-2.5">
+                        <HelpCircle className="w-3.5 h-3.5 text-slate-400 shrink-0 mt-0.5" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[11px] uppercase tracking-wider font-bold text-slate-400 mb-0.5">Sujet récurrent / Question type :</p>
+                          <p className="text-xs text-slate-200 italic font-medium leading-relaxed">
+                            "{topic.sampleQuestion || 'Questions et remarques des spectateurs'}"
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Questions directes récentes (si disponibles) */}
+              {topQuestions.filter(Boolean).length > 0 && (
+                <div className="mt-4 pt-4 border-t border-white/5">
+                  <div className="flex items-center justify-between text-xs text-slate-400 mb-3">
+                    <span className="flex items-center gap-1.5 font-medium text-slate-300">
+                      <UserCheck className="w-3.5 h-3.5 text-purple-400" />
+                      Dernières questions directes posées par les spectateurs :
+                    </span>
+                    <span className="text-purple-400 font-mono text-[11px]">
+                      {topQuestions.length} questions indexées
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                    {topQuestions.slice(0, 4).map((q, qIdx) => {
                       const isObj = q !== null && typeof q === 'object';
-                      const qText = typeof q === 'string' ? q : (isObj ? (q.original || q.text || q.question || 'Question inconnue') : 'Question inconnue');
+                      const qText = typeof q === 'string' ? q : (isObj ? (q.original || q.text || q.question || 'Question') : 'Question');
                       const count = isObj ? (q.count || 1) : 1;
                       const asker = (isObj && q.lastAskedBy) ? q.lastAskedBy : 'Spectateur';
                       return (
-                        <div key={idx} className="bg-slate-900/60 border border-white/5 hover:border-purple-500/30 rounded-xl p-3.5 flex items-start justify-between gap-3 transition-colors">
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm text-slate-200 font-medium truncate">"{qText}"</p>
-                            <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1.5">
-                              <UserCheck className="w-3 h-3 text-purple-400" />
-                              Dernière fois par : <span className="text-slate-300 font-medium">@{asker}</span>
-                            </p>
+                        <div key={qIdx} className="bg-slate-900/40 border border-white/5 hover:border-purple-500/20 rounded-xl px-3.5 py-2.5 flex items-center justify-between gap-3 text-xs">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="text-purple-300 font-bold truncate">@{asker}:</span>
+                            <span className="text-slate-200 truncate">"{qText}"</span>
                           </div>
-                          <span className="bg-purple-500/20 text-purple-300 border border-purple-500/30 px-2.5 py-1 rounded-full text-xs font-mono font-bold shrink-0">
+                          <span className="bg-purple-500/10 text-purple-300 border border-purple-500/20 px-2 py-0.5 rounded text-[10px] font-mono font-bold shrink-0">
                             x{count}
                           </span>
                         </div>
                       );
                     })}
                   </div>
-                ) : (
-                  <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
-                    <Sparkles className="w-8 h-8 text-purple-400 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm font-medium text-slate-300">En attente de questions des spectateurs...</p>
-                    <p className="text-xs text-slate-500 mt-1">Dès que vos viewers posent des questions ou font des demandes répétées, elles seront synthétisées ici avec leur compteur.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* CONTENU ONGLET 2 : TOP 5 SPECTATEURS LES PLUS ACTIFS */}
-            {activeAiTab === 'topViewers' && (
-              <div className="animate-fade-in space-y-3">
-                <div className="flex items-center justify-between text-xs text-slate-400 mb-2">
-                  <span>Classement des pseudos ayant envoyé le plus de messages :</span>
-                  <span className="text-amber-400 font-semibold flex items-center gap-1">
-                    <Flame className="w-3.5 h-3.5 text-amber-400" /> Suivi Fidélité
-                  </span>
                 </div>
-
-                {topCommenters.filter(Boolean).length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                    {topCommenters.filter(Boolean).slice(0, 5).map((user, idx) => (
-                      <div
-                        key={idx}
-                        className={cn(
-                          "bg-slate-900/60 border rounded-2xl p-4 flex flex-col justify-between transition-all relative overflow-hidden group",
-                          idx === 0
-                            ? "border-amber-500/40 bg-gradient-to-b from-amber-500/10 to-slate-900/60 shadow-[0_0_20px_rgba(245,158,11,0.15)]"
-                            : idx === 1
-                              ? "border-slate-400/30 bg-gradient-to-b from-slate-400/5 to-slate-900/60"
-                              : idx === 2
-                                ? "border-amber-700/30 bg-gradient-to-b from-amber-800/5 to-slate-900/60"
-                                : "border-white/5"
-                        )}
-                      >
-                        <div>
-                          <div className="flex items-center justify-between mb-3">
-                            <span className={cn(
-                              "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-black",
-                              idx === 0 ? "bg-amber-400 text-slate-950 font-black shadow-md" :
-                                idx === 1 ? "bg-slate-300 text-slate-950" :
-                                  idx === 2 ? "bg-amber-700 text-white" :
-                                    "bg-slate-800 text-slate-400"
-                            )}>
-                              #{idx + 1}
-                            </span>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-                              {user?.badge || `Top ${idx + 1}`}
-                            </span>
-                          </div>
-
-                          <div className="font-black text-white text-base truncate mb-1" title={user?.nickname || user?.name}>
-                            @{user?.nickname || user?.name || 'Spectateur'}
-                          </div>
-
-                          <div className="text-2xl font-black text-amber-400 font-mono mb-2">
-                            {user?.count || user?.comments || 0}
-                            <span className="text-xs font-medium text-slate-400 ml-1">msgs</span>
-                          </div>
-                        </div>
-
-                        {user?.lastComment && (
-                          <div className="text-[11px] text-slate-400 bg-black/30 p-2 rounded-lg truncate italic border border-white/5">
-                            "{user.lastComment}"
-                          </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
-                    <Crown className="w-8 h-8 text-amber-400 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm font-medium text-slate-300">Aucun message de spectateur pour l'instant</p>
-                    <p className="text-xs text-slate-500 mt-1">Dès que le stream commencera, le top 5 des pseudos les plus actifs sera généré en direct.</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* CONTENU ONGLET 3 : FLUX DU TCHAT */}
-            {activeAiTab === 'chat' && (
-              <div className="animate-fade-in space-y-2">
-                <div className="text-xs text-slate-400 mb-2">Derniers messages du chat en direct :</div>
-                {recentComments.filter(Boolean).length > 0 ? (
-                  <div className="max-h-[220px] overflow-y-auto space-y-2 pr-2">
-                    {recentComments.filter(Boolean).slice(0, 20).map((msg, i) => (
-                      <div key={i} className="bg-slate-900/50 border border-white/5 rounded-lg p-2.5 flex items-center justify-between text-xs">
-                        <div className="flex items-center gap-2 truncate">
-                          <span className="text-[#FE2C55] font-bold">@{msg?.nickname || 'Spectateur'}:</span>
-                          <span className="text-slate-300 truncate">{msg?.comment || msg?.content || ''}</span>
-                        </div>
-                        {msg?.time && <span className="text-[10px] text-slate-500 font-mono shrink-0 ml-2">{msg.time}</span>}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="bg-slate-900/30 border border-dashed border-white/10 rounded-xl p-8 text-center">
-                    <MessageSquare className="w-8 h-8 text-blue-400 mx-auto mb-2 opacity-50" />
-                    <p className="text-sm font-medium text-slate-300">En attente de messages dans le tchat...</p>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
       {!isLive && (

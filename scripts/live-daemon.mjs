@@ -69,6 +69,86 @@ let connection = null;
 let isConnected = false;
 let updateTimeout = null;
 
+const THEMATIC_CATEGORIES = [
+  {
+    id: 'gaming_popculture',
+    title: 'Gaming, Anime & Nostalgie',
+    color: '#EC4899',
+    keywords: [
+      'tekken', 'def jam', 'ps2', 'ps1', 'ps3', 'ps4', 'ps5', 'jeu', 'jeux', 'game', 'gaming',
+      'dofus', 'nfs', 'dbz', 'dragon ball', 'yujiro', 'manga', 'anime', 'ranma', 'hamtaro',
+      'marsupilami', 'pepin', 'tfou', 'my little poney', 'dessin anime', 'nostalgie', 'époque',
+      'enfance', 'console', 'nintendo', 'playstation', 'gta', 'pokemon', 'naruto', 'one piece'
+    ],
+    sampleQuestion: 'Débats sur les classiques gaming PS2 (Def Jam, Tekken, NFS) & animés de jeunesse'
+  },
+  {
+    id: 'design_creation',
+    title: 'Design, UI/UX & Framer/Figma',
+    color: '#8B5CF6',
+    keywords: [
+      'design', 'figma', 'framer', 'ui', 'ux', 'maquette', 'mockup', 'graphis', 'graphisme',
+      'photoshop', 'illustrator', 'capcut', 'after effect', 'premiere', 'video', 'visuel',
+      'bouton', 'logo', 'charte', 'typo', 'police', 'couleur', 'palette', 'animation', 'flow'
+    ],
+    sampleQuestion: 'Questions sur Framer, Figma, conception d\'interfaces & animations visuelles'
+  },
+  {
+    id: 'echange_karam',
+    title: 'Échanges Directs & Parcours Karam',
+    color: '#F59E0B',
+    keywords: [
+      'karam', 'age', 'âge', 'habite', 'paris', 'bangkok', 'thailande', 'parcours', 'histoire',
+      'reuf', 'frère', 'frere', 'mon gars', 'force', 'avis', 'tu penses', 'tu fais', 'comment tu',
+      'pourquoi', 'bien ou quoi', 'salut', 'bonjour', 'wesh', 'mdr', 'lol', 'ptdr'
+    ],
+    sampleQuestion: 'Discussions en direct avec Karam, parcours à Bangkok & retours d\'expérience'
+  },
+  {
+    id: 'business_freelance',
+    title: 'Business, Agence & Freelancing',
+    color: '#10B981',
+    keywords: [
+      'client', 'clients', 'agence', 'freelance', 'business', 'argent', 'prix', 'tarif', 'facture',
+      'facturation', 'presta', 'prestation', 'contrat', 'devis', 'débuter', 'debuter', 'lancer',
+      'conseil', 'conseils', 'formation', 'salaire', 'revenu', 'boite', 'boîte'
+    ],
+    sampleQuestion: 'Conseils pour trouver ses premiers clients, fixer ses tarifs et gérer son agence'
+  }
+];
+
+function classifyComment(text) {
+  if (!text) return null;
+  const lower = text.toLowerCase();
+  for (const cat of THEMATIC_CATEGORIES) {
+    if (cat.keywords.some(kw => lower.includes(kw))) {
+      return cat;
+    }
+  }
+  if (lower.includes('?') || text.length > 5) {
+    return THEMATIC_CATEGORIES.find(c => c.id === 'echange_karam');
+  }
+  return null;
+}
+
+function updateThematicTopics() {
+  const totalThematic = Object.values(stateData.thematicCounts).reduce((sum, v) => sum + v, 0);
+  stateData.thematicTopics = THEMATIC_CATEGORIES.map(cat => {
+    const count = stateData.thematicCounts[cat.id] || 0;
+    const percentage = totalThematic > 0 
+      ? Math.round((count / totalThematic) * 100) 
+      : 25;
+    return {
+      id: cat.id,
+      title: cat.title,
+      color: cat.color,
+      count: count,
+      percentage: percentage,
+      sampleQuestion: cat.lastSample || cat.sampleQuestion
+    };
+  });
+}
+
 function getInitialState() {
   return {
     isLive: false,
@@ -87,6 +167,15 @@ function getInitialState() {
     roomId: '',
     topQuestions: [],
     topCommenters: [],
+    thematicTopics: THEMATIC_CATEGORIES.map(cat => ({
+      id: cat.id,
+      title: cat.title,
+      color: cat.color,
+      count: 0,
+      percentage: 25,
+      sampleQuestion: cat.sampleQuestion
+    })),
+    thematicCounts: {},
     userMessageCounts: {},
     topComments: [],
     recentComments: []
@@ -118,6 +207,63 @@ async function initExistingData() {
       if (f.cumulative_audience?.integerValue) stateData.totalUser = Math.max(stateData.totalUser, parseInt(f.cumulative_audience.integerValue));
       if (f.started_at?.stringValue) stateData.started_at = f.started_at.stringValue;
       if (f.roomId?.stringValue) stateData.roomId = f.roomId.stringValue;
+      if (f.topCommenters?.arrayValue?.values) {
+        stateData.topCommenters = f.topCommenters.arrayValue.values.map(v => {
+          const m = v.mapValue?.fields;
+          const u = {
+            rank: parseInt(m?.rank?.integerValue || '1'),
+            nickname: m?.nickname?.stringValue || '',
+            count: parseInt(m?.count?.integerValue || '0'),
+            lastComment: m?.lastComment?.stringValue || '',
+            badge: m?.badge?.stringValue || '⭐ Actif'
+          };
+          if (u.nickname) {
+            stateData.userMessageCounts[u.nickname] = {
+              nickname: u.nickname,
+              uniqueId: u.nickname,
+              count: u.count,
+              lastComment: u.lastComment,
+              lastSeen: 'En cours'
+            };
+          }
+          return u;
+        });
+      }
+      if (f.topQuestions?.arrayValue?.values) {
+        stateData.topQuestions = f.topQuestions.arrayValue.values.map(v => {
+          const m = v.mapValue?.fields;
+          return {
+            original: m?.original?.stringValue || '',
+            count: parseInt(m?.count?.integerValue || '1'),
+            lastAskedBy: m?.lastAskedBy?.stringValue || '',
+            time: m?.time?.stringValue || ''
+          };
+        });
+      }
+      if (f.recentComments?.arrayValue?.values) {
+        stateData.recentComments = f.recentComments.arrayValue.values.map(v => {
+          const m = v.mapValue?.fields;
+          return {
+            id: m?.id?.stringValue || `${Date.now()}`,
+            nickname: m?.nickname?.stringValue || 'Spectateur',
+            comment: m?.comment?.stringValue || '',
+            time: m?.time?.stringValue || ''
+          };
+        });
+        // Seed thematic analysis from recent comments
+        for (const rc of stateData.recentComments) {
+          if (rc.comment) {
+            const cat = classifyComment(rc.comment);
+            if (cat) {
+              stateData.thematicCounts[cat.id] = (stateData.thematicCounts[cat.id] || 0) + 1;
+              if (rc.comment.includes('?') || rc.comment.length > 12) {
+                cat.lastSample = rc.comment;
+              }
+            }
+          }
+        }
+      }
+      updateThematicTopics();
       if (f.timeline?.arrayValue?.values) {
         stateData.timeline = f.timeline.arrayValue.values.map(v => {
           const m = v.mapValue?.fields;
@@ -169,6 +315,7 @@ function scheduleFirestoreSync() {
         'updateMask.fieldPaths=tiktokLiveAPI.startedAt',
         'updateMask.fieldPaths=tiktokLiveAPI.topQuestions',
         'updateMask.fieldPaths=tiktokLiveAPI.topCommenters',
+        'updateMask.fieldPaths=tiktokLiveAPI.thematicTopics',
         'updateMask.fieldPaths=tiktokLiveAPI.recentComments',
         'updateMask.fieldPaths=tiktokLiveAPI.lastDetected'
       ].join('&');
@@ -202,6 +349,7 @@ function scheduleFirestoreSync() {
         startedAt: toFirestoreValue(effectiveStartedAt),
         topQuestions: toFirestoreValue(stateData.topQuestions.slice(0, 15)),
         topCommenters: toFirestoreValue(stateData.topCommenters.slice(0, 5)),
+        thematicTopics: toFirestoreValue(stateData.thematicTopics),
         recentComments: toFirestoreValue(stateData.recentComments.slice(0, 50)),
         lastDetected: toFirestoreValue(new Date().toISOString())
       };
@@ -268,6 +416,16 @@ function processIncomingMessage(commentText, nickname, uniqueId) {
   if (stateData.recentComments.length > 50) {
     stateData.recentComments = stateData.recentComments.slice(0, 50);
   }
+
+  // Classification thématique temps réel
+  const matchedCat = classifyComment(text);
+  if (matchedCat) {
+    stateData.thematicCounts[matchedCat.id] = (stateData.thematicCounts[matchedCat.id] || 0) + 1;
+    if (lower.includes('?') || text.length > 12) {
+      matchedCat.lastSample = text;
+    }
+  }
+  updateThematicTopics();
 
   const questionKeywords = [
     'comment', 'pourquoi', 'combien', 'est ce', 'est-ce', 'c quoi', "c'est quoi",

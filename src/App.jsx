@@ -143,6 +143,7 @@ function App() {
               topContributor: liveRaw.topContributor || null,
               topDonator: liveRaw.topDonator || null,
               recentComments: liveRaw.recentComments || [],
+              thematicTopics: Array.isArray(liveRaw.thematicTopics) ? liveRaw.thematicTopics : [],
               lastDetected: liveRaw.lastDetected || null,
               workerLastHeartbeat: liveRaw.workerLastHeartbeat || null
             };
